@@ -5,6 +5,7 @@ import {
   Scissors,
   Settings,
   ShieldCheck,
+  Shirt,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -15,67 +16,51 @@ export type NavItem = {
   description: string
 }
 
-export type NavSection = {
-  label: string
-  items: NavItem[]
-}
-
-export const navigation: NavSection[] = [
+export const navigation: NavItem[] = [
   {
-    label: 'Operação',
-    items: [
-      {
-        title: 'Visão geral',
-        href: '/',
-        icon: LayoutDashboard,
-        description: 'KPIs 2026, funil de pedido e alertas de WIP.',
-      },
-      {
-        title: 'Corte',
-        href: '/corte',
-        icon: Scissors,
-        description: 'Peças, canal, responsável e pedidos parados.',
-      },
-      {
-        title: 'Apontamento',
-        href: '/apontamento',
-        icon: ClipboardCheck,
-        description: 'Costura e revisão do dia, com Origem obrigatória.',
-      },
-      {
-        title: 'Oficinas',
-        href: '/oficinas',
-        icon: Factory,
-        description: 'Pendentes, SLA, Lilica e lotes sem retorno.',
-      },
-    ],
+    title: 'Visão Geral',
+    href: '/',
+    icon: LayoutDashboard,
+    description: 'KPIs 2026, funil de pedido e alertas de WIP.',
   },
   {
-    label: 'Controle',
-    items: [
-      {
-        title: 'Qualidade',
-        href: '/qualidade',
-        icon: ShieldCheck,
-        description: 'Órfãos, totais, serial de corte e cadastro quebrado.',
-      },
-    ],
+    title: 'Corte',
+    href: '/corte',
+    icon: Scissors,
+    description: 'Peças, canal, responsável e pedidos parados.',
   },
   {
-    label: 'Sistema',
-    items: [
-      {
-        title: 'Configurações',
-        href: '/configuracoes',
-        icon: Settings,
-        description: 'Caminhos OneDrive, última carga e atualizar dados.',
-      },
-    ],
+    title: 'Costuras',
+    href: '/costuras',
+    icon: Shirt,
+    description: 'Origem, mix Produção/serviço e lançamentos do dia.',
+  },
+  {
+    title: 'Revisão',
+    href: '/revisao',
+    icon: ClipboardCheck,
+    description: 'Peças revisadas, responsável e lançamentos do dia.',
+  },
+  {
+    title: 'Oficinas',
+    href: '/oficinas',
+    icon: Factory,
+    description: 'Pendentes, SLA, Lilica e lotes sem retorno.',
+  },
+  {
+    title: 'Qualidade',
+    href: '/qualidade',
+    icon: ShieldCheck,
+    description: 'Órfãos, totais, serial de Corte e cadastro quebrado.',
+  },
+  {
+    title: 'Configurações',
+    href: '/configuracoes',
+    icon: Settings,
+    description: 'Caminhos OneDrive, última carga e atualizar dados.',
   },
 ]
 
-export const allNavItems: NavItem[] = navigation.flatMap((section) => section.items)
-
 export function findNavItem(href: string): NavItem | undefined {
-  return allNavItems.find((item) => item.href === href)
+  return navigation.find((item) => item.href === href)
 }

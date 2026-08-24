@@ -4,12 +4,12 @@ import type { FunilKpis } from '@/lib/etl/types'
 export function FunnelCard({ funil }: { funil: FunilKpis }) {
   const rows = [
     { label: 'Corte 2026', value: funil.corte },
-    { label: 'Com costura Produção', value: funil.comCostura },
-    { label: 'Sem costura Produção', value: funil.semCostura },
-    { label: 'Com revisão', value: funil.comRevisao },
-    { label: 'Sem revisão', value: funil.semRevisao },
-    { label: 'Costura sem corte', value: funil.costuraSemCorte },
-    { label: 'Revisão sem corte', value: funil.revisaoSemCorte },
+    { label: 'Com Costura Produção', value: funil.comCostura },
+    { label: 'Sem Costura Produção', value: funil.semCostura },
+    { label: 'Com Revisão', value: funil.comRevisao },
+    { label: 'Sem Revisão', value: funil.semRevisao },
+    { label: 'Costura sem Corte', value: funil.costuraSemCorte },
+    { label: 'Revisão sem Corte', value: funil.revisaoSemCorte },
     { label: 'Oficinas (órfãos)', value: `${funil.oficinas} (${funil.oficinasOrfas})` },
   ]
   const max = funil.corte || 1

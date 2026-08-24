@@ -18,7 +18,7 @@ import { formatDateTime, formatInt } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
-export const metadata: Metadata = { title: 'Visão geral' }
+export const metadata: Metadata = { title: 'Visão Geral' }
 
 export default async function Page() {
   const [header, funil, serie, alertas, carga] = await Promise.all([
@@ -32,8 +32,8 @@ export default async function Page() {
   if (!header || !funil) {
     return (
       <PageShell
-        title="Visão geral"
-        description="Dashboard 2026 de corte, costura, revisão e oficinas."
+        title="Visão Geral"
+        description="Dashboard de produção 2026."
         actions={<RefreshForm />}
       >
         <SectionPlaceholder
@@ -47,7 +47,7 @@ export default async function Page() {
 
   return (
     <PageShell
-      title="Visão geral"
+      title="Visão Geral"
       description={`Somente 2026. Última leitura ${formatDateTime(carga?.lidaEm)}.`}
       actions={<RefreshForm />}
     >
@@ -68,7 +68,7 @@ export default async function Page() {
           hint="SUM da quantidade, não contagem de linha"
         />
         <KpiCard
-          label="Pedidos no corte"
+          label="Pedidos no Corte"
           value={formatInt(header.pedidosCorte)}
           hint="Nº pedido distinto; * herda o cabeçalho"
         />
@@ -83,7 +83,7 @@ export default async function Page() {
           hint="Sem total da tabela e sem Qtd = pedido"
         />
         <KpiCard
-          label="WIP corte"
+          label="WIP Corte"
           value={`${formatInt(header.wipPedidos)} / ${formatInt(header.wipPecas)}`}
           hint="Pedidos vigentes / peças no status EM PRODUÇÃO"
           alert={header.wipPedidos > 0}
@@ -103,7 +103,7 @@ export default async function Page() {
         <KpiCard
           label="Hoje"
           value={`${formatInt(alertas.costuraHoje)} / ${formatInt(alertas.revisaoHoje)}`}
-          hint="Costura Produção / revisão do dia"
+          hint="Costura Produção / Revisão do dia"
         />
       </div>
 

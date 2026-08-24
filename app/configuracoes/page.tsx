@@ -31,15 +31,15 @@ export default async function ConfiguracoesPage() {
           <dd>{formatDateTime(carga?.lidaEm)}</dd>
         </div>
         <div className="flex flex-col gap-1">
-          <dt className="text-xs text-muted-foreground">Pedidos no corte</dt>
+          <dt className="text-xs text-muted-foreground">Pedidos no Corte</dt>
           <dd className="font-mono">{carga?.pedidosCorte ?? '—'}</dd>
         </div>
         <div className="flex flex-col gap-1 sm:col-span-2">
-          <dt className="text-xs text-muted-foreground">LastWriteTime corte</dt>
+          <dt className="text-xs text-muted-foreground">LastWriteTime Corte</dt>
           <dd>{formatDateTime(carga?.corteLastWrite)}</dd>
         </div>
         <div className="flex flex-col gap-1 sm:col-span-2">
-          <dt className="text-xs text-muted-foreground">LastWriteTime oficinas</dt>
+          <dt className="text-xs text-muted-foreground">LastWriteTime Oficinas</dt>
           <dd>{formatDateTime(carga?.oficinasLastWrite)}</dd>
         </div>
       </dl>

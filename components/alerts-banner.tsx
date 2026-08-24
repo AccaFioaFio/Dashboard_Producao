@@ -20,7 +20,7 @@ export function AlertsBanner({
 }) {
   const items = [
     wipPedidos
-      ? `WIP corte: ${formatInt(wipPedidos)} pedidos / ${formatInt(wipPecas)} pçs`
+      ? `WIP Corte: ${formatInt(wipPedidos)} pedidos / ${formatInt(wipPecas)} pçs`
       : null,
     tecidoPedidos
       ? `Aguardando tecido: ${formatInt(tecidoPedidos)} pedidos / ${formatInt(tecidoPecas)} pçs`
@@ -29,7 +29,7 @@ export function AlertsBanner({
       ? `Oficinas pendentes: ${formatInt(oficinasPendentes)} pçs`
       : null,
     ultimaRevisao
-      ? `Última revisão apontada: ${formatDate(ultimaRevisao)}`
+      ? `Última Revisão apontada: ${formatDate(ultimaRevisao)}`
       : 'Revisão sem data',
     ultimoEnvio
       ? `Último envio a oficina: ${formatDate(ultimoEnvio)}`

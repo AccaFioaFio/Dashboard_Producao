@@ -15,11 +15,11 @@ const _ibmPlexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Apontamento 2026',
-    template: '%s · Apontamento 2026',
+    default: 'Produção 2026',
+    template: '%s · Produção 2026',
   },
   description:
-    'Dashboard de apontamento da produção: corte, costura, revisão e oficinas, somente 2026.',
+    'Dashboard de produção 2026.',
   generator: 'v0.app',
   icons: {
     icon: [

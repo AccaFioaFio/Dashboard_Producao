@@ -9,15 +9,15 @@ export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Qualidade' }
 
 const TIPO_LABEL: Record<string, string> = {
-  revisao_total: 'Total da revisão (sem pedido)',
+  revisao_total: 'Total da Revisão (sem pedido)',
   revisao_qtd_eq_pedido: 'Qtd = número do pedido',
   dias_corte_serial: 'DIAS DE CORTE serial',
-  status_duplo: 'Status duplo no corte',
+  status_duplo: 'Status duplo no Corte',
   oficina_vazia: 'Linha 2026 sem oficina',
   lilica: 'Lilica sem retorno/pendente',
-  orfao_costura: 'Costura Produção sem corte 2026',
-  orfao_revisao: 'Revisão 2026 sem corte 2026',
-  orfao_oficina: 'Oficina 2026 sem corte 2026',
+  orfao_costura: 'Costura Produção sem Corte 2026',
+  orfao_revisao: 'Revisão 2026 sem Corte 2026',
+  orfao_oficina: 'Oficina 2026 sem Corte 2026',
 }
 
 export default async function QualidadePage() {
@@ -26,7 +26,7 @@ export default async function QualidadePage() {
   return (
     <PageShell
       title="Qualidade"
-      description="Órfãos de 2026, limpeza da revisão, serial de DIAS DE CORTE, status duplo e oficina vazia."
+      description="Órfãos de 2026, limpeza da Revisão, serial de DIAS DE CORTE, status duplo e oficina vazia."
       actions={<RefreshForm />}
     >
       <SimpleTable

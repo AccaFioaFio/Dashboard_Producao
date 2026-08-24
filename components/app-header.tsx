@@ -30,10 +30,10 @@ export function AppHeader() {
         <BreadcrumbList>
           <BreadcrumbItem>
             {isRoot ? (
-              <BreadcrumbPage>Visão geral</BreadcrumbPage>
+              <BreadcrumbPage>Visão Geral</BreadcrumbPage>
             ) : (
               <BreadcrumbLink render={<Link href="/" />}>
-                Visão geral
+                Visão Geral
               </BreadcrumbLink>
             )}
           </BreadcrumbItem>

@@ -302,7 +302,12 @@ export const getCorteBreakdown = cache(async (filters: { mes?: number; canal?: s
   return { porMes, porCanal, porResponsavel, porCliente, wip, tecido, canais: canais.map((row) => row.canal) }
 })
 
-export const getApontamento = cache(async () => {
+function todayIso() {
+  const db = sqlite()
+  return (db.prepare(`SELECT date('now', 'localtime') as v`).get() as { v: string }).v
+}
+
+export const getCosturas = cache(async () => {
   const db = sqlite()
   const mix = db
     .prepare(
@@ -317,23 +322,15 @@ export const getApontamento = cache(async () => {
     pecas: number
     pedidos: number
   }[]
-  const costuraResp = db
+  const porResponsavel = db
     .prepare(
       `SELECT COALESCE(responsavel, '(sem)') as nome, COALESCE(SUM(qtd_pecas), 0) as pecas, COUNT(*) as pedidos
        FROM fato_costura WHERE origem_norm = 'Producao'
        GROUP BY responsavel ORDER BY pecas DESC`,
     )
     .all() as NamedTotal[]
-  const revisaoResp = db
-    .prepare(
-      `SELECT COALESCE(responsavel, '(sem)') as nome, COALESCE(SUM(qtd_pecas), 0) as pecas, COUNT(*) as pedidos
-       FROM fato_revisao GROUP BY responsavel ORDER BY pecas DESC`,
-    )
-    .all() as NamedTotal[]
-  const hoje = (
-    db.prepare(`SELECT date('now', 'localtime') as v`).get() as { v: string }
-  ).v
-  const costuraHoje = db
+  const hoje = todayIso()
+  const doDia = db
     .prepare(
       `SELECT pedido_norm as pedido, qtd_pecas as pecas, responsavel, produto, origem
        FROM fato_costura WHERE data_producao = ? AND origem_norm = 'Producao'
@@ -346,7 +343,19 @@ export const getApontamento = cache(async () => {
     produto: string | null
     origem: string
   }[]
-  const revisaoHoje = db
+  return { mix, porResponsavel, doDia, hoje }
+})
+
+export const getRevisao = cache(async () => {
+  const db = sqlite()
+  const porResponsavel = db
+    .prepare(
+      `SELECT COALESCE(responsavel, '(sem)') as nome, COALESCE(SUM(qtd_pecas), 0) as pecas, COUNT(*) as pedidos
+       FROM fato_revisao GROUP BY responsavel ORDER BY pecas DESC`,
+    )
+    .all() as NamedTotal[]
+  const hoje = todayIso()
+  const doDia = db
     .prepare(
       `SELECT pedido_norm as pedido, qtd_pecas as pecas, responsavel, produto
        FROM fato_revisao WHERE data_producao = ? ORDER BY excel_row DESC`,
@@ -357,7 +366,7 @@ export const getApontamento = cache(async () => {
     responsavel: string | null
     produto: string | null
   }[]
-  return { mix, costuraResp, revisaoResp, costuraHoje, revisaoHoje, hoje }
+  return { porResponsavel, doDia, hoje }
 })
 
 export const getOficinas = cache(async () => {
