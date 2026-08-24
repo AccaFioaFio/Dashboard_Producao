@@ -10,6 +10,27 @@ export type AreaSeries = {
   values: number[]
 }
 
+type Point = { x: number; y: number; value: number }
+
+function toSmoothPath(points: Point[]) {
+  if (points.length === 0) return ''
+  if (points.length === 1) return `M${points[0].x} ${points[0].y}`
+  if (points.length === 2) {
+    return `M${points[0].x} ${points[0].y} L${points[1].x} ${points[1].y}`
+  }
+
+  const smoothing = 0.32
+  let d = `M${points[0].x} ${points[0].y}`
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i === 0 ? i : i - 1]
+    const p1 = points[i]
+    const p2 = points[i + 1]
+    const p3 = points[i + 2] ?? p2
+    d += ` C${p1.x + (p2.x - p0.x) * smoothing} ${p1.y + (p2.y - p0.y) * smoothing} ${p2.x - (p3.x - p1.x) * smoothing} ${p2.y - (p3.y - p1.y) * smoothing} ${p2.x} ${p2.y}`
+  }
+  return d
+}
+
 export function MonthlyAreaChart({
   title,
   description,
@@ -24,23 +45,16 @@ export function MonthlyAreaChart({
   const gradientId = useId().replace(/:/g, '')
   const [active, setActive] = useState<number | null>(null)
 
-  const width = 640
-  const height = 220
-  const pad = { top: 16, right: 12, bottom: 28, left: 44 }
+  const width = 960
+  const height = 190
+  const pad = { top: 26, right: 24, bottom: 26, left: 20 }
   const innerW = width - pad.left - pad.right
   const innerH = height - pad.top - pad.bottom
+  const baseline = pad.top + innerH
 
-  const max = Math.max(
-    1,
-    ...series.flatMap((item) => item.values),
-  )
+  const max = Math.max(1, ...series.flatMap((item) => item.values))
   const count = Math.max(labels.length, 1)
   const step = count > 1 ? innerW / (count - 1) : 0
-
-  const yTicks = [0, 0.5, 1].map((ratio) => ({
-    y: pad.top + innerH * (1 - ratio),
-    value: max * ratio,
-  }))
 
   const built = useMemo(
     () =>
@@ -50,17 +64,43 @@ export function MonthlyAreaChart({
           const y = pad.top + innerH - (value / max) * innerH
           return { x, y, value }
         })
-        const line = points
-          .map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x} ${point.y}`)
-          .join(' ')
+        const line = toSmoothPath(points)
         const area =
           points.length > 0
-            ? `${line} L${points[points.length - 1].x} ${pad.top + innerH} L${points[0].x} ${pad.top + innerH} Z`
+            ? `${line} L${points[points.length - 1].x} ${baseline} L${points[0].x} ${baseline} Z`
             : ''
         return { ...item, points, line, area }
       }),
-    [series, innerH, max, pad.left, pad.top, step],
+    [baseline, innerH, max, pad.left, pad.top, series, step],
   )
+
+  const labelPlacements = useMemo(() => {
+    const gap = 14
+    return labels.map((_, index) => {
+      const items = built
+        .map((item) => {
+          const point = item.points[index]
+          if (!point) return null
+          return {
+            key: item.key,
+            color: item.color,
+            value: point.value,
+            x: point.x,
+            y: point.y,
+          }
+        })
+        .filter((item): item is NonNullable<typeof item> => item != null)
+        .sort((a, b) => b.y - a.y)
+
+      let lastY = Infinity
+      return items.map((item) => {
+        let labelY = item.y - 12
+        if (lastY - labelY < gap) labelY = lastY - gap
+        lastY = labelY
+        return { ...item, labelY }
+      })
+    })
+  }, [built, labels])
 
   if (!labels.length) {
     return (
@@ -78,32 +118,37 @@ export function MonthlyAreaChart({
     <section className="card-surface min-w-0 p-5">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold">{title}</h2>
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold">
+            {series.length === 1 ? (
+              <span
+                className="size-2.5 rounded-sm"
+                style={{ background: series[0].color }}
+              />
+            ) : null}
+            {title}
+          </h2>
           {description ? (
             <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
           ) : null}
         </div>
-        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-          {series.map((item) => (
-            <span key={item.key} className="inline-flex items-center gap-1.5">
-              <span
-                className="size-2 rounded-sm"
-                style={{ background: item.color }}
-              />
-              {item.label}
-              {active != null ? (
-                <span className="font-mono text-foreground">
-                  {formatInt(item.values[active] ?? 0)}
-                </span>
-              ) : null}
-            </span>
-          ))}
-        </div>
+        {series.length > 1 ? (
+          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+            {series.map((item) => (
+              <span key={item.key} className="inline-flex items-center gap-1.5">
+                <span
+                  className="size-2 rounded-sm"
+                  style={{ background: item.color }}
+                />
+                {item.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="h-60 w-full"
+        className="h-[5cm] w-full overflow-visible"
         role="img"
         aria-label={title}
         onMouseLeave={() => setActive(null)}
@@ -124,28 +169,6 @@ export function MonthlyAreaChart({
           ))}
         </defs>
 
-        {yTicks.map((tick) => (
-          <g key={tick.value}>
-            <line
-              x1={pad.left}
-              x2={width - pad.right}
-              y1={tick.y}
-              y2={tick.y}
-              className="stroke-border"
-              strokeWidth="1"
-            />
-            <text
-              x={pad.left - 8}
-              y={tick.y + 3}
-              textAnchor="end"
-              className="fill-muted-foreground"
-              fontSize="10"
-            >
-              {formatInt(tick.value)}
-            </text>
-          </g>
-        ))}
-
         {built.map((item) => (
           <g key={item.key}>
             <path d={item.area} fill={`url(#${gradientId}-${item.key})`} />
@@ -153,7 +176,7 @@ export function MonthlyAreaChart({
               d={item.line}
               fill="none"
               stroke={item.color}
-              strokeWidth="2"
+              strokeWidth="2.25"
               strokeLinejoin="round"
               strokeLinecap="round"
             />
@@ -166,10 +189,10 @@ export function MonthlyAreaChart({
             <g key={label}>
               <text
                 x={x}
-                y={height - 8}
+                y={height - 6}
                 textAnchor="middle"
                 className="fill-muted-foreground"
-                fontSize="10"
+                fontSize="11"
               >
                 {label}
               </text>
@@ -186,8 +209,8 @@ export function MonthlyAreaChart({
                   x1={x}
                   x2={x}
                   y1={pad.top}
-                  y2={pad.top + innerH}
-                  className="stroke-foreground/30"
+                  y2={baseline}
+                  className="stroke-foreground/25"
                   strokeDasharray="3 3"
                 />
               ) : null}
@@ -195,23 +218,39 @@ export function MonthlyAreaChart({
           )
         })}
 
-        {active != null
-          ? built.map((item) => {
-              const point = item.points[active]
-              if (!point) return null
-              return (
-                <circle
-                  key={item.key}
-                  cx={point.x}
-                  cy={point.y}
-                  r="3.5"
-                  fill="var(--card)"
-                  stroke={item.color}
-                  strokeWidth="2"
-                />
-              )
-            })
-          : null}
+        {built.map((item) =>
+          item.points.map((point, index) => (
+            <circle
+              key={`${item.key}-${index}`}
+              cx={point.x}
+              cy={point.y}
+              r={active === index ? 4 : 3}
+              fill="var(--card)"
+              stroke={item.color}
+              strokeWidth="2"
+            />
+          )),
+        )}
+
+        {labelPlacements.flatMap((group, index) =>
+          group.map((item) => (
+            <text
+              key={`${item.key}-label-${index}`}
+              x={item.x}
+              y={item.labelY}
+              textAnchor="middle"
+              fontSize="11"
+              fontWeight="600"
+              fill={item.color}
+              stroke="var(--card)"
+              strokeWidth="4"
+              paintOrder="stroke"
+              style={{ fontVariantNumeric: 'tabular-nums' }}
+            >
+              {formatInt(item.value)}
+            </text>
+          )),
+        )}
       </svg>
     </section>
   )

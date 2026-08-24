@@ -128,10 +128,10 @@ export default async function Page() {
         />
       </div>
 
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(16rem,2fr)]">
+      <div className="grid min-w-0 gap-4">
         <MonthlyAreaChart
-          title="Série mensal 2026"
-          description="Acompanhamento, não fechamento. Costura só Origem = Produção."
+          title="Corte"
+          description="Peças cortadas em 2026, mês a mês."
           labels={serie.map((row) => MONTH_LABELS[row.mes - 1])}
           series={[
             {
@@ -140,12 +140,26 @@ export default async function Page() {
               color: 'var(--chart-1)',
               values: serie.map((row) => row.cortadas),
             },
+          ]}
+        />
+        <MonthlyAreaChart
+          title="Costuras"
+          description="Origem = Produção. Acompanhamento, não fechamento."
+          labels={serie.map((row) => MONTH_LABELS[row.mes - 1])}
+          series={[
             {
               key: 'costura',
-              label: 'Costuras',
+              label: 'Produção',
               color: 'var(--chart-2)',
               values: serie.map((row) => row.costura),
             },
+          ]}
+        />
+        <MonthlyAreaChart
+          title="Revisão"
+          description="Revisão limpa, mês a mês."
+          labels={serie.map((row) => MONTH_LABELS[row.mes - 1])}
+          series={[
             {
               key: 'revisao',
               label: 'Revisão',
@@ -154,8 +168,9 @@ export default async function Page() {
             },
           ]}
         />
-        <FunnelCard funil={funil} />
       </div>
+
+      <FunnelCard funil={funil} />
     </PageShell>
   )
 }
