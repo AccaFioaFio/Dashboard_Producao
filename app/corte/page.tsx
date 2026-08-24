@@ -22,19 +22,29 @@ export default async function CortePage() {
       description="Volume em peça e pedido. Agosto explode linha de tecido: não use contagem de linha. Consumo e baixa de tecido ficam na aba Tecidos."
       actions={<RefreshForm />}
     >
-      <div className="grid gap-3 sm:grid-cols-3">
-        <KpiCard
-          label="Peças cortadas"
-          value={formatInt(header?.pecasCortadas ?? 0)}
-        />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Pedidos"
           value={formatInt(header?.pedidosCorte ?? 0)}
+          hint="Nº pedido distinto, sem duplicata"
+          tone="indigo"
+        />
+        <KpiCard
+          label="Ordens de corte"
+          value={formatInt(header?.ocsCorte ?? 0)}
+          hint={`${formatInt(header?.pedidosCorte ?? 0)} pedidos geraram estas OCs`}
+          tone="teal"
+        />
+        <KpiCard
+          label="Peças cortadas"
+          value={formatInt(header?.pecasCortadas ?? 0)}
+          tone="amber"
         />
         <KpiCard
           label="WIP"
           value={`${formatInt(header?.wipPedidos ?? 0)} / ${formatInt(header?.wipPecas ?? 0)}`}
           hint="Pedidos vigentes / peças EM PRODUÇÃO"
+          alert={(header?.wipPedidos ?? 0) > 0}
         />
       </div>
 

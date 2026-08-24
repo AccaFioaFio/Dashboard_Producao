@@ -142,6 +142,7 @@ export type Snapshot = {
 export type HeaderKpis = {
   pecasCortadas: number
   pedidosCorte: number
+  ocsCorte: number
   pecasCosturaProd: number
   pecasRevisao: number
   wipPedidos: number

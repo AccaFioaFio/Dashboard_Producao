@@ -29,6 +29,7 @@ export function computeHeaderKpis(snapshot: Snapshot): HeaderKpis {
   return {
     pecasCortadas: round1(pecasCortadas),
     pedidosCorte: snapshot.cortePedidos.length,
+    ocsCorte: snapshot.corteLinhas.filter((row) => row.isHeader).length,
     pecasCosturaProd: round1(
       costuraProd.reduce((sum, row) => sum + row.qtdPecas, 0),
     ),

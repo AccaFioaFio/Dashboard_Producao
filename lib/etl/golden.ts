@@ -9,6 +9,7 @@ import type { FunilKpis, HeaderKpis, SerieMensal } from '@/lib/etl/types'
 export const GOLDEN_HEADER: HeaderKpis = {
   pecasCortadas: 71887,
   pedidosCorte: 625,
+  ocsCorte: 755,
   pecasCosturaProd: 25162,
   pecasRevisao: 75834,
   wipPedidos: 10,

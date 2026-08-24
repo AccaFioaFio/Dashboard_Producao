@@ -99,6 +99,8 @@ export const getHeaderKpis = cache(async (): Promise<HeaderKpis | null> => {
     (db.prepare('SELECT COALESCE(SUM(pecas), 0) as v FROM fato_corte_pedido').get() as { v: number }).v
   const pedidosCorte =
     (db.prepare('SELECT COUNT(*) as v FROM fato_corte_pedido').get() as { v: number }).v
+  const ocsCorte =
+    (db.prepare('SELECT COUNT(*) as v FROM fato_corte_linha WHERE is_header = 1').get() as { v: number }).v
   const pecasCosturaProd = (
     db
       .prepare(
@@ -153,6 +155,7 @@ export const getHeaderKpis = cache(async (): Promise<HeaderKpis | null> => {
   return {
     pecasCortadas,
     pedidosCorte,
+    ocsCorte,
     pecasCosturaProd,
     pecasRevisao,
     wipPedidos,
