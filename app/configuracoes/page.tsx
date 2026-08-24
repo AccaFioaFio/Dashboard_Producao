@@ -17,7 +17,7 @@ export default async function ConfiguracoesPage() {
       description="Fontes OneDrive e última carga 2026. O refresh copia os .xlsx para cache; se a cópia falhar, a carga anterior permanece."
       actions={<RefreshForm />}
     >
-      <dl className="grid gap-4 rounded-xl bg-card p-4 text-sm ring-1 ring-foreground/10 sm:grid-cols-2">
+      <dl className="card-surface grid gap-4 p-5 text-sm sm:grid-cols-2">
         <div className="flex flex-col gap-1 sm:col-span-2">
           <dt className="text-xs text-muted-foreground">CORTE_XLSX</dt>
           <dd className="break-all font-mono text-xs">{corteXlsxPath()}</dd>

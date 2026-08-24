@@ -7,7 +7,7 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { AppHeader } from '@/components/app-header'
 import './globals.css'
 
-const _inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ['latin'] })
 const _ibmPlexMono = IBM_Plex_Mono({
   subsets: ['latin'],
   weight: ['400', '500'],
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: 'light',
-  themeColor: '#ffffff',
+  themeColor: '#3d2e8a',
 }
 
 export default function RootLayout({
@@ -51,8 +51,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="pt-BR" className="bg-background">
-      <body className="font-sans antialiased">
+    <html lang="pt-BR" className={`${inter.className} bg-background`}>
+      <body className="antialiased">
         <TooltipProvider>
           <SidebarProvider>
             <AppSidebar />

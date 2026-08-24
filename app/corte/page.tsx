@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
 import { KpiCard } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
+import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
 import { getCorteBreakdown, getHeaderKpis } from '@/data/dashboard'
 import { MONTH_LABELS, formatDate, formatInt } from '@/lib/format'
@@ -37,8 +38,22 @@ export default async function CortePage() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="flex flex-col gap-2">
+      <MonthlyAreaChart
+        title="Peças por mês"
+        description="Volume do Corte em 2026, mês a mês."
+        labels={corte.porMes.map((row) => MONTH_LABELS[row.nome - 1])}
+        series={[
+          {
+            key: 'pecas',
+            label: 'Peças',
+            color: 'var(--chart-1)',
+            values: corte.porMes.map((row) => row.pecas),
+          },
+        ]}
+      />
+
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+        <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Por mês</h2>
           <SimpleTable
             columns={[
@@ -53,7 +68,7 @@ export default async function CortePage() {
             }))}
           />
         </section>
-        <section className="flex flex-col gap-2">
+        <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Canal (FATURAMENTO)</h2>
           <SimpleTable
             columns={[
@@ -68,7 +83,7 @@ export default async function CortePage() {
             }))}
           />
         </section>
-        <section className="flex flex-col gap-2">
+        <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Responsável</h2>
           <SimpleTable
             columns={[
@@ -83,7 +98,7 @@ export default async function CortePage() {
             }))}
           />
         </section>
-        <section className="flex flex-col gap-2">
+        <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Maiores clientes</h2>
           <SimpleTable
             columns={[
@@ -100,7 +115,7 @@ export default async function CortePage() {
         </section>
       </div>
 
-      <section className="flex flex-col gap-2">
+      <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">EM PRODUÇÃO</h2>
         <SimpleTable
           columns={[
@@ -121,7 +136,7 @@ export default async function CortePage() {
         />
       </section>
 
-      <section className="flex flex-col gap-2">
+      <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">AGUARDANDO TECIDO</h2>
         <SimpleTable
           columns={[

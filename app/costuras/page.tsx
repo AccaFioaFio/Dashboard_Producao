@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
 import { KpiCard } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
+import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
 import {
   getCosturas,
@@ -55,7 +56,21 @@ export default async function CosturasPage() {
         />
       </div>
 
-      <section className="flex flex-col gap-2">
+      <MonthlyAreaChart
+        title="Peças por mês"
+        description="Costura Produção, mês a mês."
+        labels={serie.map((row) => MONTH_LABELS[row.mes - 1])}
+        series={[
+          {
+            key: 'costura',
+            label: 'Produção',
+            color: 'var(--chart-2)',
+            values: serie.map((row) => row.costura),
+          },
+        ]}
+      />
+
+      <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Mix de origem</h2>
         <SimpleTable
           columns={[
@@ -80,8 +95,8 @@ export default async function CosturasPage() {
         />
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="flex flex-col gap-2">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+        <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Por mês</h2>
           <SimpleTable
             columns={[
@@ -94,7 +109,7 @@ export default async function CosturasPage() {
             }))}
           />
         </section>
-        <section className="flex flex-col gap-2">
+        <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Por responsável</h2>
           <SimpleTable
             columns={[
@@ -111,7 +126,7 @@ export default async function CosturasPage() {
         </section>
       </div>
 
-      <section className="flex flex-col gap-2">
+      <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Produção do dia</h2>
         <SimpleTable
           columns={[

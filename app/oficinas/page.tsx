@@ -2,9 +2,10 @@ import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
 import { KpiCard } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
+import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
 import { getHeaderKpis, getOficinas } from '@/data/dashboard'
-import { formatDate, formatInt, formatNumber } from '@/lib/format'
+import { MONTH_LABELS, formatDate, formatInt, formatNumber } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Oficinas' }
@@ -38,7 +39,27 @@ export default async function OficinasPage() {
         />
       </div>
 
-      <section className="flex flex-col gap-2">
+      <MonthlyAreaChart
+        title="Envios por mês"
+        description="Peças enviadas e pendentes, mês a mês."
+        labels={oficinas.porMes.map((row) => MONTH_LABELS[row.mes - 1])}
+        series={[
+          {
+            key: 'enviadas',
+            label: 'Enviadas',
+            color: 'var(--chart-1)',
+            values: oficinas.porMes.map((row) => row.enviadas),
+          },
+          {
+            key: 'pendentes',
+            label: 'Pendentes',
+            color: 'var(--chart-4)',
+            values: oficinas.porMes.map((row) => row.pendentes),
+          },
+        ]}
+      />
+
+      <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Pendente por oficina</h2>
         <SimpleTable
           columns={[
@@ -58,7 +79,7 @@ export default async function OficinasPage() {
         />
       </section>
 
-      <section className="flex flex-col gap-2">
+      <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Enviadas sem retorno e sem pendente</h2>
         <SimpleTable
           columns={[

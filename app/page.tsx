@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
 import { KpiCard } from '@/components/kpi-card'
 import { FunnelCard } from '@/components/funnel-card'
-import { MonthlyBars } from '@/components/monthly-bars'
+import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { AlertsBanner } from '@/components/alerts-banner'
 import { RefreshForm } from '@/components/refresh-form'
 import { SectionPlaceholder } from '@/components/section-placeholder'
@@ -14,7 +14,7 @@ import {
   getLatestCarga,
   getSerieMensal,
 } from '@/data/dashboard'
-import { formatDateTime, formatInt } from '@/lib/format'
+import { formatDateTime, formatInt, MONTH_LABELS } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,54 +61,99 @@ export default async function Page() {
         ultimoEnvio={alertas.ultimoEnvio}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Peças cortadas"
           value={formatInt(header.pecasCortadas)}
           hint="SUM da quantidade, não contagem de linha"
+          tone="indigo"
+          progress={100}
         />
         <KpiCard
           label="Pedidos no Corte"
           value={formatInt(header.pedidosCorte)}
           hint="Nº pedido distinto; * herda o cabeçalho"
+          tone="teal"
+          progress={Math.min(100, (header.pedidosCorte / Math.max(header.pedidosCorte, 1)) * 72)}
         />
         <KpiCard
           label="Costura Produção"
           value={formatInt(header.pecasCosturaProd)}
           hint="Origem = Produção (funil)"
+          tone="amber"
+          progress={
+            (header.pecasCosturaProd / Math.max(header.pecasCortadas, header.pecasCosturaProd, 1)) *
+            100
+          }
         />
         <KpiCard
           label="Revisão limpa"
           value={formatInt(header.pecasRevisao)}
           hint="Sem total da tabela e sem Qtd = pedido"
+          tone="magenta"
+          progress={
+            (header.pecasRevisao / Math.max(header.pecasCortadas, header.pecasRevisao, 1)) * 100
+          }
         />
         <KpiCard
           label="WIP Corte"
           value={`${formatInt(header.wipPedidos)} / ${formatInt(header.wipPecas)}`}
           hint="Pedidos vigentes / peças no status EM PRODUÇÃO"
           alert={header.wipPedidos > 0}
+          tone="indigo"
+          progress={header.wipPedidos > 0 ? 55 : 12}
         />
         <KpiCard
           label="Aguardando tecido"
           value={`${formatInt(header.tecidoPedidos)} / ${formatInt(header.tecidoPecas)}`}
           hint="Status vigente / peças no bloco"
           alert={header.tecidoPedidos > 0}
+          tone="amber"
+          progress={header.tecidoPedidos > 0 ? 48 : 10}
         />
         <KpiCard
           label="Oficinas pendentes"
           value={formatInt(header.oficinasPendentes)}
           hint={`Defeitos ${formatInt(header.oficinasDefeitos)}`}
           alert={header.oficinasPendentes > 0}
+          tone="magenta"
+          progress={Math.min(100, header.oficinasPendentes > 0 ? 64 : 8)}
         />
         <KpiCard
           label="Hoje"
           value={`${formatInt(alertas.costuraHoje)} / ${formatInt(alertas.revisaoHoje)}`}
           hint="Costura Produção / Revisão do dia"
+          tone="teal"
+          progress={alertas.costuraHoje + alertas.revisaoHoje > 0 ? 70 : 15}
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(16rem,2fr)]">
-        <MonthlyBars serie={serie} />
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(16rem,2fr)]">
+        <MonthlyAreaChart
+          title="Série mensal 2026"
+          description="Acompanhamento, não fechamento. Costura só Origem = Produção."
+          labels={serie.map((row) => MONTH_LABELS[row.mes - 1])}
+          series={[
+            {
+              key: 'corte',
+              label: 'Corte',
+              color: 'var(--chart-1)',
+              values: serie.map((row) => row.cortadas),
+            },
+            {
+              key: 'costura',
+              label: 'Costuras',
+              color: 'var(--chart-2)',
+              values: serie.map((row) => row.costura),
+            },
+            {
+              key: 'revisao',
+              label: 'Revisão',
+              color: 'var(--chart-3)',
+              values: serie.map((row) => row.revisao),
+            },
+          ]}
+        />
         <FunnelCard funil={funil} />
       </div>
     </PageShell>

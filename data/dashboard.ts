@@ -418,7 +418,15 @@ export const getOficinas = cache(async () => {
        ORDER BY qtd_enviadas DESC LIMIT 20`,
     )
     .all() as { oficina: string; pedido: string | null; enviadas: number; data: string }[]
-  return { ranking, sla, enviadas, retornadas, semRetorno }
+  const porMes = db
+    .prepare(
+      `SELECT CAST(substr(data_envio, 6, 2) as INTEGER) as mes,
+              COALESCE(SUM(qtd_enviadas), 0) as enviadas,
+              COALESCE(SUM(qtd_pendentes), 0) as pendentes
+       FROM fato_oficinas GROUP BY mes ORDER BY mes`,
+    )
+    .all() as { mes: number; enviadas: number; pendentes: number }[]
+  return { ranking, sla, enviadas, retornadas, semRetorno, porMes }
 })
 
 export const getQualidade = cache(async () => {

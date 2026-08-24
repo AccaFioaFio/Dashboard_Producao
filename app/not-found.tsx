@@ -17,7 +17,7 @@ export default function NotFound() {
       title="Página não encontrada"
       description="O endereço acessado não existe neste painel."
     >
-      <Empty className="flex-1 rounded-lg border border-dashed border-border bg-card/40">
+      <Empty className="card-surface flex-1">
         <EmptyHeader>
           <EmptyMedia variant="icon">
             <FileQuestion />

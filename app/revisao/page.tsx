@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
 import { KpiCard } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
+import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
 import {
   getFunil,
@@ -50,8 +51,22 @@ export default async function RevisaoPage() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="flex flex-col gap-2">
+      <MonthlyAreaChart
+        title="Peças por mês"
+        description="Revisão limpa, mês a mês."
+        labels={serie.map((row) => MONTH_LABELS[row.mes - 1])}
+        series={[
+          {
+            key: 'revisao',
+            label: 'Revisão',
+            color: 'var(--chart-3)',
+            values: serie.map((row) => row.revisao),
+          },
+        ]}
+      />
+
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+        <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Por mês</h2>
           <SimpleTable
             columns={[
@@ -64,7 +79,7 @@ export default async function RevisaoPage() {
             }))}
           />
         </section>
-        <section className="flex flex-col gap-2">
+        <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Por responsável</h2>
           <SimpleTable
             columns={[
@@ -81,7 +96,7 @@ export default async function RevisaoPage() {
         </section>
       </div>
 
-      <section className="flex flex-col gap-2">
+      <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Lançamentos do dia</h2>
         <SimpleTable
           columns={[

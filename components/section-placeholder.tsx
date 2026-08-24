@@ -19,7 +19,7 @@ export function SectionPlaceholder({
   description,
 }: SectionPlaceholderProps) {
   return (
-    <Empty className="flex-1 rounded-lg border border-dashed border-border bg-card/40">
+    <Empty className="card-surface flex-1">
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <Icon />
