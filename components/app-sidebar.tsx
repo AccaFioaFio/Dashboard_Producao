@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Factory } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -22,26 +21,20 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b border-sidebar-border/80 px-2 py-3">
+      <SidebarHeader className="border-b border-sidebar-border/80 px-2 py-2.5">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
-              tooltip="Produção 2026"
-              className="h-12 rounded-xl px-2 hover:bg-sidebar-accent"
+              tooltip="Fio a Fio"
+              className="h-auto min-h-12 justify-center overflow-visible py-2 hover:bg-transparent group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-1!"
               render={<Link href="/" />}
             >
-              <span className="flex aspect-square size-9 shrink-0 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
-                <Factory className="size-4" />
-              </span>
-              <span className="flex min-w-0 flex-col text-left leading-tight">
-                <span className="truncate text-sm font-semibold tracking-wide">
-                  Produção
-                </span>
-                <span className="truncate text-[11px] text-sidebar-foreground/60">
-                  Recorte 2026
-                </span>
-              </span>
+              <img
+                src="/logo-fio-a-fio.png?v=3"
+                alt="Fio a Fio"
+                className="h-16 w-auto max-w-full object-contain group-data-[collapsible=icon]:h-6"
+              />
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

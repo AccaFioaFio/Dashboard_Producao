@@ -21,7 +21,7 @@ export function PageShell({
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="flex flex-col gap-1">
           <p className="text-[11px] font-semibold tracking-[0.22em] text-primary uppercase">
-            Produção · recorte 2026
+            Produção · 2026
           </p>
           <h1 className="text-balance text-2xl font-bold tracking-tight md:text-3xl">
             {title}
