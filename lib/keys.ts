@@ -9,6 +9,24 @@ export function fold(value: string) {
     .toUpperCase()
 }
 
+export function foldSignus(value: string) {
+  return fold(value)
+    .replace(/\uFFFD+/g, '')
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function parsePedidoOrigemSignus(value: unknown): string | null {
+  const folded = foldSignus(asText(value) ?? '')
+  if (!folded) return null
+  const ped = folded.match(/\bPEDZ?\s*0*(\d{4,6})\b/)
+  if (ped?.[1]) return ped[1]
+  const compact = folded.match(/^0*(\d{4,6})[A-Z]?$/)
+  if (compact?.[1]) return compact[1]
+  return null
+}
+
 export function asText(value: unknown): string | null {
   if (value == null) return null
   if (typeof value === 'number' && Number.isFinite(value)) {

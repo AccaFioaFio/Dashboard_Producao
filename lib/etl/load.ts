@@ -13,8 +13,10 @@ export function replaceSnapshot(
   meta: {
     cortePath: string
     oficinasPath: string
+    signusPath: string
     corteLastWrite: string
     oficinasLastWrite: string
+    signusLastWrite: string
     header: HeaderKpis
   },
 ) {
@@ -22,6 +24,7 @@ export function replaceSnapshot(
   const insertMany = sqlite.transaction(() => {
     sqlite.exec(`
       DELETE FROM qualidade_evento;
+      DELETE FROM fato_tecido_signus;
       DELETE FROM fato_oficinas;
       DELETE FROM fato_revisao;
       DELETE FROM fato_costura;
@@ -46,6 +49,7 @@ export function replaceSnapshot(
         noCosturaProd: boolean
         noRevisao: boolean
         noOficinas: boolean
+        noSignus: boolean
       }
     >()
 
@@ -62,6 +66,7 @@ export function replaceSnapshot(
         noCosturaProd: false,
         noRevisao: false,
         noOficinas: false,
+        noSignus: false,
       }
       current.cliente = current.cliente ?? extra.cliente ?? null
       current.canal = current.canal ?? extra.canal ?? null
@@ -87,6 +92,11 @@ export function replaceSnapshot(
       if (!row.pedidoNorm) continue
       upsertPedido(row.pedidoNorm, {})
       pedidos.get(row.pedidoNorm)!.noOficinas = true
+    }
+    for (const row of snapshot.tecidosSignus) {
+      if (!row.pedidoNorm) continue
+      upsertPedido(row.pedidoNorm, {})
+      pedidos.get(row.pedidoNorm)!.noSignus = true
     }
 
     const dates = new Set<string>()
@@ -121,12 +131,13 @@ export function replaceSnapshot(
       oficinas.add(row.oficina)
       if (row.produto) produtos.add(row.produto)
     }
+    for (const row of snapshot.tecidosSignus) addDate(row.data)
 
     const insertDimPedido = sqlite.prepare(`
       INSERT INTO dim_pedido (
         pedido_norm, pedido_raw, cliente, canal,
-        no_corte, no_costura_prod, no_revisao, no_oficinas
-      ) VALUES (@pedidoNorm, @pedidoRaw, @cliente, @canal, @noCorte, @noCosturaProd, @noRevisao, @noOficinas)
+        no_corte, no_costura_prod, no_revisao, no_oficinas, no_signus
+      ) VALUES (@pedidoNorm, @pedidoRaw, @cliente, @canal, @noCorte, @noCosturaProd, @noRevisao, @noOficinas, @noSignus)
     `)
     for (const row of pedidos.values()) {
       insertDimPedido.run({
@@ -135,6 +146,7 @@ export function replaceSnapshot(
         noCosturaProd: row.noCosturaProd ? 1 : 0,
         noRevisao: row.noRevisao ? 1 : 0,
         noOficinas: row.noOficinas ? 1 : 0,
+        noSignus: row.noSignus ? 1 : 0,
       })
     }
 
@@ -231,6 +243,26 @@ export function replaceSnapshot(
     `)
     for (const row of snapshot.oficinas) insertFatoOficina.run(row)
 
+    const insertSignus = sqlite.prepare(`
+      INSERT INTO fato_tecido_signus (
+        movimento_id, data, es, qtd, metros, cod_produto, nome_produto,
+        almox, categoria, linha, unidade, tipo_movimento, tipo_norm,
+        canal_norm, pedido_norm, origem_mov, is_baixa, excel_row
+      ) VALUES (
+        @movimentoId, @data, @es, @qtd, @metros, @codProduto, @nomeProduto,
+        @almox, @categoria, @linha, @unidade, @tipoMovimento, @tipoNorm,
+        @canalNorm, @pedidoNorm, @origemMov, @isBaixa, @excelRow
+      )
+    `)
+    for (const group of chunk(snapshot.tecidosSignus)) {
+      for (const row of group) {
+        insertSignus.run({
+          ...row,
+          isBaixa: row.isBaixa ? 1 : 0,
+        })
+      }
+    }
+
     const insertQualidade = sqlite.prepare(`
       INSERT INTO qualidade_evento (tipo, pedido_norm, detalhe, excel_row, valor)
       VALUES (@tipo, @pedidoNorm, @detalhe, @excelRow, @valor)
@@ -240,18 +272,21 @@ export function replaceSnapshot(
     sqlite
       .prepare(
         `INSERT INTO carga (
-          lida_em, corte_path, oficinas_path, corte_last_write, oficinas_last_write,
+          lida_em, corte_path, oficinas_path, signus_path,
+          corte_last_write, oficinas_last_write, signus_last_write,
           pecas_cortadas, pedidos_corte, pecas_costura_prod, pecas_revisao,
           wip_pedidos, wip_pecas, tecido_pedidos, tecido_pecas, oficinas_pendentes,
           ok, erro
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL)`,
       )
       .run(
         new Date().toISOString(),
         meta.cortePath,
         meta.oficinasPath,
+        meta.signusPath,
         meta.corteLastWrite,
         meta.oficinasLastWrite,
+        meta.signusLastWrite,
         meta.header.pecasCortadas,
         meta.header.pedidosCorte,
         meta.header.pecasCosturaProd,

@@ -1,4 +1,4 @@
-import { corteXlsxPath, oficinasXlsxPath } from '@/lib/paths'
+import { corteXlsxPath, oficinasXlsxPath, signusXlsPath } from '@/lib/paths'
 import { checkInvariants, computeHeaderKpis } from '@/lib/etl/kpis'
 import { replaceSnapshot } from '@/lib/etl/load'
 import { copySources, parseWorkbookFiles } from '@/lib/etl/snapshot'
@@ -13,6 +13,7 @@ export type RefreshResult =
       serie: SerieMensal[]
       corteLastWrite: string
       oficinasLastWrite: string
+      signusLastWrite: string
       lidaEm: string
     }
   | {
@@ -23,10 +24,11 @@ export type RefreshResult =
 export async function refreshFromExcel(): Promise<RefreshResult> {
   const cortePath = corteXlsxPath()
   const oficinasPath = oficinasXlsxPath()
+  const signusPath = signusXlsPath()
 
   let copied: ReturnType<typeof copySources>
   try {
-    copied = copySources(cortePath, oficinasPath)
+    copied = copySources(cortePath, oficinasPath, signusPath)
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Falha ao copiar os arquivos Excel'
@@ -40,6 +42,7 @@ export async function refreshFromExcel(): Promise<RefreshResult> {
     const snapshot = await parseWorkbookFiles(
       copied.corteCache,
       copied.oficinasCache,
+      copied.signusCache,
     )
     const invariantErrors = checkInvariants(snapshot)
     if (invariantErrors.length) {
@@ -56,8 +59,10 @@ export async function refreshFromExcel(): Promise<RefreshResult> {
     replaceSnapshot(snapshot, {
       cortePath,
       oficinasPath,
+      signusPath,
       corteLastWrite: copied.corteLastWrite,
       oficinasLastWrite: copied.oficinasLastWrite,
+      signusLastWrite: copied.signusLastWrite,
       header,
     })
 
@@ -68,6 +73,7 @@ export async function refreshFromExcel(): Promise<RefreshResult> {
       serie,
       corteLastWrite: copied.corteLastWrite,
       oficinasLastWrite: copied.oficinasLastWrite,
+      signusLastWrite: copied.signusLastWrite,
       lidaEm: new Date().toISOString(),
     }
   } catch (error) {

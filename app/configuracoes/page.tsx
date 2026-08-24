@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
 import { RefreshForm } from '@/components/refresh-form'
 import { getLatestCarga } from '@/data/dashboard'
-import { corteXlsxPath, oficinasXlsxPath } from '@/lib/paths'
+import { corteXlsxPath, oficinasXlsxPath, signusXlsPath } from '@/lib/paths'
 import { formatDateTime } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +14,7 @@ export default async function ConfiguracoesPage() {
   return (
     <PageShell
       title="Configurações"
-      description="Fontes OneDrive e última carga 2026. O refresh copia os .xlsx para cache; se a cópia falhar, a carga anterior permanece."
+      description="Fontes OneDrive e última carga 2026. O refresh copia Corte, Oficinas e Signus para cache; se a cópia falhar, a carga anterior permanece."
       actions={<RefreshForm />}
     >
       <dl className="card-surface grid gap-4 p-5 text-sm sm:grid-cols-2">
@@ -25,6 +25,10 @@ export default async function ConfiguracoesPage() {
         <div className="flex flex-col gap-1 sm:col-span-2">
           <dt className="text-xs text-muted-foreground">OFICINAS_XLSX</dt>
           <dd className="break-all font-mono text-xs">{oficinasXlsxPath()}</dd>
+        </div>
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <dt className="text-xs text-muted-foreground">SIGNUS_XLS</dt>
+          <dd className="break-all font-mono text-xs">{signusXlsPath()}</dd>
         </div>
         <div className="flex flex-col gap-1">
           <dt className="text-xs text-muted-foreground">Última leitura</dt>
@@ -41,6 +45,10 @@ export default async function ConfiguracoesPage() {
         <div className="flex flex-col gap-1 sm:col-span-2">
           <dt className="text-xs text-muted-foreground">LastWriteTime Oficinas</dt>
           <dd>{formatDateTime(carga?.oficinasLastWrite)}</dd>
+        </div>
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <dt className="text-xs text-muted-foreground">LastWriteTime Signus</dt>
+          <dd>{formatDateTime(carga?.signusLastWrite)}</dd>
         </div>
       </dl>
     </PageShell>

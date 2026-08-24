@@ -107,21 +107,10 @@ export default async function Page() {
         <KpiCard
           label="Aguardando tecido"
           value={`${formatInt(header.tecidoPedidos)} / ${formatMeters(header.tecidoMetros)}`}
-          hint={`${formatInt(header.tecidoPecas)} pçs com status AGUARDANDO TECIDO`}
+          hint={`${formatInt(header.tecidoPecas)} pçs · detalhes na aba Tecidos`}
           alert={header.tecidoPedidos > 0}
           tone="amber"
           progress={header.tecidoPedidos > 0 ? 48 : 10}
-        />
-        <KpiCard
-          label="Consumo de tecido"
-          value={formatMeters(header.metrosConsumo)}
-          hint={`Economia ${formatMeters(header.metrosEconomia)}`}
-          tone="teal"
-          progress={
-            header.metrosConsumo > 0
-              ? Math.min(100, (header.metrosEconomia / header.metrosConsumo) * 400)
-              : 8
-          }
         />
         <KpiCard
           label="Oficinas pendentes"

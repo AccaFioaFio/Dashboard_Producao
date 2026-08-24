@@ -55,3 +55,17 @@ export const MONTH_LABELS = [
   'Nov',
   'Dez',
 ]
+
+export const TIPO_TECIDO_LABEL: Record<string, string> = {
+  baixa_producao: 'Produção (insumos)',
+  baixa_canal: 'Baixa canal (FF/AC/TC)',
+  retorno_corte: 'Retorno do corte',
+  compra: 'Compra / devolução',
+  inventario: 'Inventário',
+  ajuste: 'Ajuste auxiliar',
+  transferencia: 'Transferência de almox',
+  amostra: 'Amostra',
+  faturamento: 'Faturamento',
+  outras_saidas: 'Outras saídas',
+  outras_entradas: 'Outras entradas',
+}

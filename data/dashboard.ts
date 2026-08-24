@@ -11,8 +11,10 @@ export type CargaInfo = {
   lidaEm: string
   cortePath: string
   oficinasPath: string
+  signusPath: string | null
   corteLastWrite: string | null
   oficinasLastWrite: string | null
+  signusLastWrite: string | null
   pecasCortadas: number | null
   pedidosCorte: number | null
   pecasCosturaProd: number | null
@@ -76,7 +78,9 @@ export const getLatestCarga = cache(async (): Promise<CargaInfo | null> => {
   const row = sqlite()
     .prepare(
       `SELECT id, lida_em as lidaEm, corte_path as cortePath, oficinas_path as oficinasPath,
+              signus_path as signusPath,
               corte_last_write as corteLastWrite, oficinas_last_write as oficinasLastWrite,
+              signus_last_write as signusLastWrite,
               pecas_cortadas as pecasCortadas, pedidos_corte as pedidosCorte,
               pecas_costura_prod as pecasCosturaProd, pecas_revisao as pecasRevisao,
               wip_pedidos as wipPedidos, wip_pecas as wipPecas,
@@ -367,6 +371,271 @@ export const getCorteBreakdown = cache(async (filters: { mes?: number; canal?: s
     tecido,
     porTecido,
     canais: canais.map((row) => row.canal),
+  }
+})
+
+export type TecidoMesRow = {
+  mes: number
+  corte: number
+  signus: number
+}
+
+export type TecidoTipoRow = {
+  tipoNorm: string
+  movimentos: number
+  metros: number
+  pedidos: number
+}
+
+export type TecidoCruzadoRow = {
+  cod: string
+  nome: string | null
+  corteMetros: number
+  signusMetros: number
+  cortePedidos: number
+  signusPedidos: number
+}
+
+export const getTecidos = cache(async () => {
+  const db = sqlite()
+  const hasSignus = Boolean(
+    db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'fato_tecido_signus'`,
+      )
+      .get(),
+  )
+  const metrosCorte = (
+    db
+      .prepare('SELECT COALESCE(SUM(metros), 0) as v FROM fato_corte_pedido')
+      .get() as { v: number }
+  ).v
+  const metrosEconomia = (
+    db
+      .prepare('SELECT COALESCE(SUM(economia), 0) as v FROM fato_corte_pedido')
+      .get() as { v: number }
+  ).v
+  const metrosSignus = hasSignus
+    ? (
+        db
+          .prepare(
+            'SELECT COALESCE(SUM(metros), 0) as v FROM fato_tecido_signus WHERE is_baixa = 1',
+          )
+          .get() as { v: number }
+      ).v
+    : 0
+  const movimentosBaixa = hasSignus
+    ? (
+        db
+          .prepare('SELECT COUNT(*) as v FROM fato_tecido_signus WHERE is_baixa = 1')
+          .get() as { v: number }
+      ).v
+    : 0
+  const pedidosComBaixa = hasSignus
+    ? (
+        db
+          .prepare(
+            `SELECT COUNT(DISTINCT pedido_norm) as v FROM fato_tecido_signus
+             WHERE is_baixa = 1 AND pedido_norm IS NOT NULL`,
+          )
+          .get() as { v: number }
+      ).v
+    : 0
+  const baixasSemPedido = hasSignus
+    ? (
+        db
+          .prepare(
+            `SELECT COUNT(*) as v FROM fato_tecido_signus
+             WHERE is_baixa = 1 AND (pedido_norm IS NULL OR trim(pedido_norm) = '')`,
+          )
+          .get() as { v: number }
+      ).v
+    : 0
+  const retornoCorte = hasSignus
+    ? (
+        db
+          .prepare(
+            `SELECT COALESCE(SUM(metros), 0) as v FROM fato_tecido_signus
+             WHERE tipo_norm = 'retorno_corte'`,
+          )
+          .get() as { v: number }
+      ).v
+    : 0
+
+  const corteMes = db
+    .prepare(
+      `SELECT CAST(substr(data, 6, 2) as INTEGER) as mes, COALESCE(SUM(metros), 0) as metros
+       FROM fato_corte_linha WHERE data IS NOT NULL GROUP BY mes`,
+    )
+    .all() as { mes: number; metros: number }[]
+  const signusMes = hasSignus
+    ? (db
+        .prepare(
+          `SELECT CAST(substr(data, 6, 2) as INTEGER) as mes, COALESCE(SUM(metros), 0) as metros
+           FROM fato_tecido_signus WHERE is_baixa = 1 GROUP BY mes`,
+        )
+        .all() as { mes: number; metros: number }[])
+    : []
+
+  const months: TecidoMesRow[] = Array.from({ length: 12 }, (_, index) => ({
+    mes: index + 1,
+    corte: 0,
+    signus: 0,
+  }))
+  for (const row of corteMes) months[row.mes - 1].corte = row.metros
+  for (const row of signusMes) months[row.mes - 1].signus = row.metros
+  const porMes = months.filter((row) => row.corte || row.signus)
+
+  const porTecido = db
+    .prepare(
+      hasSignus
+        ? `SELECT COALESCE(NULLIF(trim(l.cod_tecido), ''), '(sem código)') as cod,
+              MAX(l.tecido) as nome,
+              COALESCE(SUM(l.metros), 0) as metros,
+              COALESCE(SUM(l.economia), 0) as economia,
+              COUNT(DISTINCT l.pedido_norm) as pedidos,
+              COALESCE((
+                SELECT SUM(s.metros) FROM fato_tecido_signus s
+                WHERE s.is_baixa = 1
+                  AND replace(trim(s.cod_produto), ' ', '') = replace(trim(COALESCE(l.cod_tecido, '')), ' ', '')
+              ), 0) as signusMetros
+       FROM fato_corte_linha l
+       WHERE l.tecido IS NOT NULL AND trim(l.tecido) != ''
+       GROUP BY COALESCE(NULLIF(trim(l.cod_tecido), ''), trim(l.tecido))
+       ORDER BY metros DESC
+       LIMIT 15`
+        : `SELECT COALESCE(NULLIF(trim(cod_tecido), ''), '(sem código)') as cod,
+              MAX(tecido) as nome,
+              COALESCE(SUM(metros), 0) as metros,
+              COALESCE(SUM(economia), 0) as economia,
+              COUNT(DISTINCT pedido_norm) as pedidos,
+              0 as signusMetros
+       FROM fato_corte_linha
+       WHERE tecido IS NOT NULL AND trim(tecido) != ''
+       GROUP BY COALESCE(NULLIF(trim(cod_tecido), ''), trim(tecido))
+       ORDER BY metros DESC
+       LIMIT 15`,
+    )
+    .all() as (TecidoUsoRow & { signusMetros: number })[]
+
+  const porTipo = hasSignus
+    ? (db
+        .prepare(
+          `SELECT tipo_norm as tipoNorm, COUNT(*) as movimentos,
+              COALESCE(SUM(metros), 0) as metros,
+              COUNT(DISTINCT pedido_norm) as pedidos
+       FROM fato_tecido_signus
+       GROUP BY tipo_norm
+       ORDER BY metros DESC`,
+        )
+        .all() as TecidoTipoRow[])
+    : []
+
+  const cruzados = db
+    .prepare(
+      hasSignus
+        ? `SELECT COALESCE(NULLIF(trim(l.cod_tecido), ''), '(sem código)') as cod,
+              MAX(l.tecido) as nome,
+              COALESCE(SUM(l.metros), 0) as corteMetros,
+              COUNT(DISTINCT l.pedido_norm) as cortePedidos,
+              COALESCE((
+                SELECT SUM(s.metros) FROM fato_tecido_signus s
+                WHERE s.is_baixa = 1
+                  AND replace(trim(s.cod_produto), ' ', '') = replace(trim(COALESCE(l.cod_tecido, '')), ' ', '')
+              ), 0) as signusMetros,
+              COALESCE((
+                SELECT COUNT(DISTINCT s.pedido_norm) FROM fato_tecido_signus s
+                WHERE s.is_baixa = 1
+                  AND replace(trim(s.cod_produto), ' ', '') = replace(trim(COALESCE(l.cod_tecido, '')), ' ', '')
+              ), 0) as signusPedidos
+       FROM fato_corte_linha l
+       WHERE l.tecido IS NOT NULL AND trim(l.tecido) != ''
+       GROUP BY COALESCE(NULLIF(trim(l.cod_tecido), ''), trim(l.tecido))
+       ORDER BY corteMetros DESC
+       LIMIT 20`
+        : `SELECT COALESCE(NULLIF(trim(cod_tecido), ''), '(sem código)') as cod,
+              MAX(tecido) as nome,
+              COALESCE(SUM(metros), 0) as corteMetros,
+              COUNT(DISTINCT pedido_norm) as cortePedidos,
+              0 as signusMetros,
+              0 as signusPedidos
+       FROM fato_corte_linha
+       WHERE tecido IS NOT NULL AND trim(tecido) != ''
+       GROUP BY COALESCE(NULLIF(trim(cod_tecido), ''), trim(tecido))
+       ORDER BY corteMetros DESC
+       LIMIT 20`,
+    )
+    .all() as TecidoCruzadoRow[]
+
+  const signusSemCorte = hasSignus
+    ? (db
+        .prepare(
+          `SELECT s.cod_produto as cod, MAX(s.nome_produto) as nome,
+              COALESCE(SUM(s.metros), 0) as signusMetros,
+              COUNT(DISTINCT s.pedido_norm) as signusPedidos
+       FROM fato_tecido_signus s
+       WHERE s.is_baixa = 1
+         AND NOT EXISTS (
+           SELECT 1 FROM fato_corte_linha l
+           WHERE replace(trim(l.cod_tecido), ' ', '') = replace(trim(s.cod_produto), ' ', '')
+         )
+       GROUP BY s.cod_produto
+       ORDER BY signusMetros DESC
+       LIMIT 12`,
+        )
+        .all() as {
+        cod: string
+        nome: string | null
+        signusMetros: number
+        signusPedidos: number
+      }[])
+    : []
+
+  const tecido = db
+    .prepare(
+      `SELECT l.pedido_norm as pedidoNorm, MAX(p.data) as data, MAX(p.cliente) as cliente,
+              l.status as statusVigente,
+              COALESCE(SUM(l.qtd_pecas), 0) as pecas,
+              COALESCE(SUM(l.metros), 0) as metros,
+              MAX(l.tecido) as tecido,
+              MAX(l.cod_tecido) as codTecido
+       FROM fato_corte_linha l
+       LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
+       WHERE l.status = 'AGUARDANDO TECIDO'
+       GROUP BY l.pedido_norm, l.status, COALESCE(l.cod_tecido, l.tecido)
+       ORDER BY metros DESC`,
+    )
+    .all() as TecidoPendenteRow[]
+
+  const porCanalSignus = hasSignus
+    ? (db
+        .prepare(
+          `SELECT COALESCE(canal_norm, '(sem canal)') as nome,
+              COALESCE(SUM(metros), 0) as metros,
+              COUNT(*) as movimentos
+       FROM fato_tecido_signus
+       WHERE is_baixa = 1
+       GROUP BY canal_norm
+       ORDER BY metros DESC`,
+        )
+        .all() as { nome: string; metros: number; movimentos: number }[])
+    : []
+
+  return {
+    metrosCorte,
+    metrosEconomia,
+    metrosSignus,
+    movimentosBaixa,
+    pedidosComBaixa,
+    baixasSemPedido,
+    retornoCorte,
+    porMes,
+    porTecido,
+    porTipo,
+    cruzados,
+    signusSemCorte,
+    tecido,
+    porCanalSignus,
   }
 })
 

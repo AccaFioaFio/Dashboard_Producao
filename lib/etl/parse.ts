@@ -20,7 +20,7 @@ import type {
   RevisaoLancamento,
 } from '@/lib/etl/types'
 
-function findSheet(workbook: XLSX.WorkBook, expected: string) {
+export function findSheet(workbook: XLSX.WorkBook, expected: string) {
   const target = sheetNameFold(expected)
   const name = workbook.SheetNames.find((sheet) => sheetNameFold(sheet) === target)
   if (!name) {
@@ -31,7 +31,7 @@ function findSheet(workbook: XLSX.WorkBook, expected: string) {
   return workbook.Sheets[name]
 }
 
-function sheetRows(workbook: XLSX.WorkBook, expected: string) {
+export function sheetRows(workbook: XLSX.WorkBook, expected: string) {
   const sheet = findSheet(workbook, expected)
   const ref = sheet['!ref']
   if (!ref) return []
@@ -67,7 +67,7 @@ function buildHeaderMap(row: unknown[]) {
   return map
 }
 
-function findHeaderRow(rows: unknown[][], required: string[]) {
+export function findHeaderRow(rows: unknown[][], required: string[]) {
   const scanUntil = Math.min(rows.length, 40)
   for (let i = 0; i < scanUntil; i += 1) {
     const map = buildHeaderMap(rows[i] ?? [])
@@ -78,7 +78,7 @@ function findHeaderRow(rows: unknown[][], required: string[]) {
   throw new Error(`Cabeçalho não encontrado (${required.join(', ')})`)
 }
 
-function cell(row: unknown[], col: number | null) {
+export function cell(row: unknown[], col: number | null) {
   return col == null ? null : row[col]
 }
 

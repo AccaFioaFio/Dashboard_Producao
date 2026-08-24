@@ -18,6 +18,7 @@ const TIPO_LABEL: Record<string, string> = {
   orfao_costura: 'Costura Produção sem Corte 2026',
   orfao_revisao: 'Revisão 2026 sem Corte 2026',
   orfao_oficina: 'Oficina 2026 sem Corte 2026',
+  orfao_signus: 'Baixa Signus sem Corte 2026',
 }
 
 export default async function QualidadePage() {
@@ -26,7 +27,7 @@ export default async function QualidadePage() {
   return (
     <PageShell
       title="Qualidade"
-      description="Órfãos de 2026, limpeza da Revisão, serial de DIAS DE CORTE, status duplo e oficina vazia."
+      description="Órfãos de 2026, limpeza da Revisão, serial de DIAS DE CORTE, status duplo, oficina vazia e baixa Signus sem Corte."
       actions={<RefreshForm />}
     >
       <SimpleTable

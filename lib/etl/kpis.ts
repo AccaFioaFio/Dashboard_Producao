@@ -150,6 +150,7 @@ export function checkInvariants(snapshot: Snapshot) {
   for (const row of snapshot.costura) years.add(row.dataProducao.slice(0, 4))
   for (const row of snapshot.revisao) years.add(row.dataProducao.slice(0, 4))
   for (const row of snapshot.oficinas) years.add(row.dataEnvio.slice(0, 4))
+  for (const row of snapshot.tecidosSignus) years.add(row.data.slice(0, 4))
   if ([...years].some((year) => year !== '2026')) {
     errors.push(`Fatos com ano fora de 2026: ${[...years].join(', ')}`)
   }

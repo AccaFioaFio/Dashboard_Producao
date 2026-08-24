@@ -8,6 +8,7 @@ export type QualidadeTipo =
   | 'orfao_costura'
   | 'orfao_revisao'
   | 'orfao_oficina'
+  | 'orfao_signus'
 
 export type QualidadeEvento = {
   tipo: QualidadeTipo
@@ -94,12 +95,47 @@ export type OficinaLote = {
   valorTotal: number | null
 }
 
+export type TipoTecidoNorm =
+  | 'baixa_producao'
+  | 'baixa_canal'
+  | 'retorno_corte'
+  | 'compra'
+  | 'inventario'
+  | 'ajuste'
+  | 'transferencia'
+  | 'amostra'
+  | 'faturamento'
+  | 'outras_saidas'
+  | 'outras_entradas'
+
+export type SignusTecidoMovimento = {
+  excelRow: number
+  movimentoId: string | null
+  data: string
+  es: string
+  qtd: number
+  metros: number
+  codProduto: string
+  nomeProduto: string | null
+  almox: string | null
+  categoria: string | null
+  linha: string | null
+  unidade: string | null
+  tipoMovimento: string
+  tipoNorm: TipoTecidoNorm
+  canalNorm: string | null
+  pedidoNorm: string | null
+  origemMov: string | null
+  isBaixa: boolean
+}
+
 export type Snapshot = {
   corteLinhas: CorteLinha[]
   cortePedidos: CortePedido[]
   costura: CosturaLancamento[]
   revisao: RevisaoLancamento[]
   oficinas: OficinaLote[]
+  tecidosSignus: SignusTecidoMovimento[]
   qualidade: QualidadeEvento[]
 }
 

@@ -1,6 +1,6 @@
-import { copyFileSync, existsSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { refreshFromExcel } from '../lib/etl/refresh'
-import { corteXlsxPath, oficinasXlsxPath } from '../lib/paths'
+import { corteXlsxPath, oficinasXlsxPath, signusXlsPath } from '../lib/paths'
 import { computeFunil, computeHeaderKpis, computeSerieMensal, checkInvariants } from '../lib/etl/kpis'
 import { diffGolden } from '../lib/etl/golden'
 import { parseWorkbookFiles } from '../lib/etl/snapshot'
@@ -10,11 +10,11 @@ async function main() {
   if (mode === 'golden') {
     const corte = corteXlsxPath()
     const oficinas = oficinasXlsxPath()
-    if (!existsSync(corte) || !existsSync(oficinas)) {
+    const signus = signusXlsPath()
+    if (!existsSync(corte) || !existsSync(oficinas) || !existsSync(signus)) {
       throw new Error('Arquivos Excel não encontrados')
     }
-    copyFileSync(corte, corte)
-    const snapshot = await parseWorkbookFiles(corte, oficinas)
+    const snapshot = await parseWorkbookFiles(corte, oficinas, signus)
     const header = computeHeaderKpis(snapshot)
     const funil = computeFunil(snapshot)
     const serie = computeSerieMensal(snapshot)

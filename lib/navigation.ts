@@ -2,6 +2,7 @@ import {
   ClipboardCheck,
   Factory,
   LayoutDashboard,
+  Layers,
   Scissors,
   Settings,
   ShieldCheck,
@@ -27,7 +28,13 @@ export const navigation: NavItem[] = [
     title: 'Corte',
     href: '/corte',
     icon: Scissors,
-    description: 'Peças, tecido, consumo, economia e pedidos parados.',
+    description: 'Peças, canal, responsável e pedidos parados.',
+  },
+  {
+    title: 'Tecidos',
+    href: '/tecidos',
+    icon: Layers,
+    description: 'Consumo do Corte, baixa Signus e tecidos mais usados.',
   },
   {
     title: 'Costuras',

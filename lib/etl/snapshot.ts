@@ -6,42 +6,56 @@ import {
   parseRevisao,
   readWorkbook,
 } from '@/lib/etl/parse'
+import { parseSignusTecidos } from '@/lib/etl/parse-signus'
 import type { QualidadeEvento, Snapshot } from '@/lib/etl/types'
 import { cachePath, ensureDataDirs } from '@/lib/paths'
 
 export type CopiedSources = {
   corteCache: string
   oficinasCache: string
+  signusCache: string
   corteLastWrite: string
   oficinasLastWrite: string
+  signusLastWrite: string
 }
 
-export function copySources(cortePath: string, oficinasPath: string): CopiedSources {
+export function copySources(
+  cortePath: string,
+  oficinasPath: string,
+  signusPath: string,
+): CopiedSources {
   ensureDataDirs()
   mkdirSync(cachePath('.'), { recursive: true })
   const corteCache = cachePath('corte.xlsx')
   const oficinasCache = cachePath('oficinas.xlsx')
+  const signusCache = cachePath('signus-tecidos.xls')
   copyFileSync(cortePath, corteCache)
   copyFileSync(oficinasPath, oficinasCache)
+  copyFileSync(signusPath, signusCache)
   return {
     corteCache,
     oficinasCache,
+    signusCache,
     corteLastWrite: statSync(cortePath).mtime.toISOString(),
     oficinasLastWrite: statSync(oficinasPath).mtime.toISOString(),
+    signusLastWrite: statSync(signusPath).mtime.toISOString(),
   }
 }
 
 export async function parseWorkbookFiles(
   corteFile: string,
   oficinasFile: string,
+  signusFile: string,
 ): Promise<Snapshot> {
   const corteWb = readWorkbook(corteFile)
   const oficinasWb = readWorkbook(oficinasFile)
+  const signusWb = readWorkbook(signusFile)
 
   const corte = parseCorte(corteWb)
   const costura = parseCostura(corteWb)
   const revisao = parseRevisao(corteWb)
   const oficinas = parseOficinas(oficinasWb)
+  const tecidosSignus = parseSignusTecidos(signusWb)
 
   const qualidade: QualidadeEvento[] = [
     ...corte.qualidade,
@@ -60,6 +74,11 @@ export async function parseWorkbookFiles(
     oficinas.lotes
       .map((row) => row.pedidoNorm)
       .filter((value): value is string => Boolean(value)),
+  )
+  const signusPedidos = new Set(
+    tecidosSignus
+      .filter((row) => row.isBaixa && row.pedidoNorm)
+      .map((row) => row.pedidoNorm as string),
   )
 
   for (const pedido of costuraProd) {
@@ -95,6 +114,20 @@ export async function parseWorkbookFiles(
       })
     }
   }
+  for (const pedido of signusPedidos) {
+    if (!corteSet.has(pedido)) {
+      const metros = tecidosSignus
+        .filter((row) => row.isBaixa && row.pedidoNorm === pedido)
+        .reduce((sum, row) => sum + row.metros, 0)
+      qualidade.push({
+        tipo: 'orfao_signus',
+        pedidoNorm: pedido,
+        detalhe: 'Baixa Signus 2026 sem corte 2026',
+        excelRow: null,
+        valor: metros,
+      })
+    }
+  }
 
   return {
     corteLinhas: corte.linhas,
@@ -102,6 +135,7 @@ export async function parseWorkbookFiles(
     costura,
     revisao: revisao.limpos,
     oficinas: oficinas.lotes,
+    tecidosSignus,
     qualidade,
   }
 }

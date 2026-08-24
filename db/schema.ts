@@ -9,6 +9,7 @@ export const dimPedido = sqliteTable('dim_pedido', {
   noCosturaProd: integer('no_costura_prod', { mode: 'boolean' }).notNull().default(false),
   noRevisao: integer('no_revisao', { mode: 'boolean' }).notNull().default(false),
   noOficinas: integer('no_oficinas', { mode: 'boolean' }).notNull().default(false),
+  noSignus: integer('no_signus', { mode: 'boolean' }).notNull().default(false),
 })
 
 export const dimData = sqliteTable('dim_data', {
@@ -153,6 +154,37 @@ export const fatoOficinas = sqliteTable(
   ],
 )
 
+export const fatoTecidoSignus = sqliteTable(
+  'fato_tecido_signus',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    movimentoId: text('movimento_id'),
+    data: text('data').notNull(),
+    es: text('es').notNull(),
+    qtd: real('qtd').notNull().default(0),
+    metros: real('metros').notNull().default(0),
+    codProduto: text('cod_produto').notNull(),
+    nomeProduto: text('nome_produto'),
+    almox: text('almox'),
+    categoria: text('categoria'),
+    linha: text('linha'),
+    unidade: text('unidade'),
+    tipoMovimento: text('tipo_movimento').notNull(),
+    tipoNorm: text('tipo_norm').notNull(),
+    canalNorm: text('canal_norm'),
+    pedidoNorm: text('pedido_norm'),
+    origemMov: text('origem_mov'),
+    isBaixa: integer('is_baixa', { mode: 'boolean' }).notNull().default(false),
+    excelRow: integer('excel_row').notNull(),
+  },
+  (table) => [
+    index('idx_signus_pedido').on(table.pedidoNorm),
+    index('idx_signus_cod').on(table.codProduto),
+    index('idx_signus_data').on(table.data),
+    index('idx_signus_tipo').on(table.tipoNorm),
+  ],
+)
+
 export const qualidadeEvento = sqliteTable('qualidade_evento', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   tipo: text('tipo').notNull(),
@@ -167,8 +199,10 @@ export const carga = sqliteTable('carga', {
   lidaEm: text('lida_em').notNull(),
   cortePath: text('corte_path').notNull(),
   oficinasPath: text('oficinas_path').notNull(),
+  signusPath: text('signus_path'),
   corteLastWrite: text('corte_last_write'),
   oficinasLastWrite: text('oficinas_last_write'),
+  signusLastWrite: text('signus_last_write'),
   pecasCortadas: real('pecas_cortadas'),
   pedidosCorte: integer('pedidos_corte'),
   pecasCosturaProd: real('pecas_costura_prod'),

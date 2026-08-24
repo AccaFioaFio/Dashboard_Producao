@@ -14,6 +14,8 @@ const DEFAULT_CORTE =
   'C:\\Users\\opera\\OneDrive\\FIO A FIO\\RELATORIO\\PRODUÇÃO CORTE E COSTURA\\PROGRAMAÇÃO CORTE E COSTURA .xlsx'
 const DEFAULT_OFICINAS =
   'C:\\Users\\opera\\OneDrive\\Produção Q\\00 - OFICINAS 2026\\Produção Oficinas.xlsx'
+const DEFAULT_SIGNUS =
+  'C:\\Users\\opera\\OneDrive\\Área de Trabalho\\1 - TABELA BASE PARA ATUALIZAÇÃO\\TABELAS  2 SEMESTRES 2026\\Relatorio Signus\\Movimentação Tecidos.xls'
 
 export function ensureDataDirs() {
   if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true })
@@ -26,6 +28,10 @@ export function corteXlsxPath() {
 
 export function oficinasXlsxPath() {
   return process.env.OFICINAS_XLSX?.trim() || DEFAULT_OFICINAS
+}
+
+export function signusXlsPath() {
+  return process.env.SIGNUS_XLS?.trim() || DEFAULT_SIGNUS
 }
 
 export function cachePath(filename: string) {

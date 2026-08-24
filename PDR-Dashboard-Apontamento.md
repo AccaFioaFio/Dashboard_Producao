@@ -10,8 +10,9 @@
 | Idem, aba oculta **RELATORIO COSTURA** | `RELATORIO_COSTURA` | `Data Produção` ∈ 2026 |
 | Idem, aba oculta **RELATORIO REVISÃO** | `RELATORIO_REVISÃO` | `Data Produção` ∈ 2026 |
 | `...\Produção Oficinas.xlsx` | `TAB_OFICINAS` | `Data Envio` ∈ 2026 |
+| `...\Relatorio Signus\Movimentação Tecidos.xls` | `FatoTecidoSignus` (aba Movimentação Tecidos) | `Data de movimentação` ∈ 2026 e Linha = TECIDO |
 
-Os dois arquivos estão no OneDrive e mudam o dia inteiro. O usuário entra e clica em **Atualizar dados** (reflash). Depois do refresh, o recorte continua sendo só 2026.
+Os arquivos estão no OneDrive e mudam o dia inteiro. O usuário entra e clica em **Atualizar dados** (reflash). Depois do refresh, o recorte continua sendo só 2026.
 
 ---
 
@@ -165,6 +166,27 @@ Filtro de ano na transformação, não só no visual. Linha 2024/2025 nem entra 
 | FatoCostura | peças/lançamentos com filtro Origem |
 | FatoRevisao | peças/lançamentos após limpeza |
 | FatoOficinas | enviadas, retornadas, pendentes, defeitos, atraso |
+| FatoTecidoSignus | metros baixados no ERP, tipo de movimento, canal FF/AC/TC, pedido em Orig. Mov. |
+
+### 3.1 Signus — baixa real de tecido
+
+O `.xls` mistura produto acabado, etiqueta e matéria-prima. **Só Linha = TECIDO entra no fato.** Inventário, transferência, compra e amostra ficam classificados, mas **não** somam o KPI de baixa.
+
+| Tipo no Signus | Papel no dashboard |
+|---|---|
+| `PRODUÇÃO: MATÉRIA-PRIMA/INSUMOS (SAÍDA)` | Baixa de produção (BOM) |
+| `SAIDA FF` / `SAIDA AC` / `SAIDA TC` | Baixa operacional por canal (FAF / ACCA / TC) |
+| `ENTRADA DE RETORNO DO CORTE` | Retorno de tecido, não é consumo |
+| Inventário, ajuste, transferência, compra | Apoio; fora do KPI de baixa |
+
+**Chaves de cruzamento com o Corte:**
+
+- `Código produto` (Signus) = `COD TECIDO` (programação).
+- `Orig. Mov.` no formato `PED 23456` / `PEDZ 23138` = Nº pedido. Textos soltos (`ESTOQUE`, `JLJLJ`, `PED 3`) não viram pedido.
+
+Unidade `MT`/`M` entra em metros. KG, fardo e peça não misturam no KPI.
+
+Na carga inspecionada, a baixa oficial (produção + canal) fica perto de **95 mil m** contra **104 mil m** apontados no Corte. O gap é esperado: o Signus não cobre janeiro–agosto inteiro no mesmo ritmo, e Orig. Mov. nem sempre traz o pedido.
 
 ---
 
@@ -205,10 +227,11 @@ Maiores clientes em peça: Copa Star, Vila Nova Star, DF Star, Maternidade São 
 ### 4.2 Telas da v1
 
 1. **Visão geral** — cabeçalho, funil de pedido 2026, série jan–ago, alertas (WIP, tecido, oficina, defasagem).
-2. **Corte** — mês, canal, responsável, cliente, lista EM PRODUÇÃO / AGUARDANDO TECIDO.
-3. **Apontamento** — costura vs revisão do dia; Origem obrigatória; mix produção/serviço.
-4. **Oficinas** — pendente, ranking, SLA, Lilica e lotes sem retorno.
-5. **Qualidade** — órfãos 2026, Qtd=Pedido, total da revisão, `DIAS DE CORTE` serial, status duplo, oficina vazia.
+2. **Corte** — mês, canal, responsável, cliente, lista EM PRODUÇÃO.
+3. **Tecidos** — consumo do Corte, baixa Signus, ranking, série mensal em metros, AGUARDANDO TECIDO, cruzamento código/pedido.
+4. **Apontamento** — costura vs revisão do dia; Origem obrigatória; mix produção/serviço.
+5. **Oficinas** — pendente, ranking, SLA, Lilica e lotes sem retorno.
+6. **Qualidade** — órfãos 2026 (inclui baixa Signus sem corte), Qtd=Pedido, total da revisão, `DIAS DE CORTE` serial, status duplo, oficina vazia.
 
 Filtros: mês 2026, canal, cliente, responsável, produto, oficina. Sem seletor de ano na v1.
 
@@ -217,13 +240,13 @@ Filtros: mês 2026, canal, cliente, responsável, produto, oficina. Sem seletor 
 ## 5. Botão Atualizar dados
 
 1. Abre a última carga 2026 (se não houver cache, carrega).
-2. Clique copia os dois `.xlsx` do OneDrive para cache (não lê in-place).
-3. Aplica recorte **ano = 2026** + regras do §2.
+2. Clique copia os três arquivos do OneDrive para cache (não lê in-place): Corte `.xlsx`, Oficinas `.xlsx` e Signus `.xls`.
+3. Aplica recorte **ano = 2026** + regras do §2 e §3.1.
 4. Mostra hora da leitura e `LastWriteTime` de cada arquivo.
 5. Falha de cópia: mantém a carga anterior.
-6. Lê as abas ocultas de costura e revisão.
+6. Lê as abas ocultas de costura e revisão, e a aba de movimentação de tecidos.
 
-Caminhos: `CORTE_XLSX`, `OFICINAS_XLSX`. Listas de clientes e estoque de tecido fora da v1.
+Caminhos: `CORTE_XLSX`, `OFICINAS_XLSX`, `SIGNUS_XLS`. Cadastro completo de clientes e **saldo atual** de estoque de tecido fora da v1.
 
 ---
 
@@ -233,17 +256,18 @@ Caminhos: `CORTE_XLSX`, `OFICINAS_XLSX`. Listas de clientes e estoque de tecido 
 2. Origem obrigatória na costura; separar produção de etiqueta/festonê/conserto.
 3. Tirar a linha de total da tabela de revisão; bloquear Qtd = número do pedido.
 4. Corrigir `DIAS DE CORTE`: `=SE(OU(INICIO="";FINAL="");"";FINAL-INICIO)`.
-5. Pedido único entre corte, costura, revisão e oficinas (47 + 169 + 26 órfãos em 2026).
+5. Pedido único entre corte, costura, revisão, oficinas e baixa Signus (47 + 169 + 26 órfãos em 2026; Signus adiciona baixa sem corte quando Orig. Mov. traz PED).
 6. Não usar `COUNTROWS` do corte (agosto: 7.311 linhas vs 1.393 peças).
 7. Banner se revisão parar (>18/08) ou envio a oficina parar (>09/07).
 8. Tratar Lilica (708 enviadas sem retorno e sem pendente) e 769 linhas sem oficina no Excel (linhas mortas, não entram no fato 2026).
+9. Não misturar produto acabado do Signus com metro de tecido. KPI de baixa = insumos de produção + SAIDA FF/AC/TC, só Linha = TECIDO.
 
 ---
 
 ## 7. Fora de escopo (v1)
 
 - Qualquer KPI ou gráfico de 2024/2025.
-- Estoque de tecido / tecido pendente.
+- Saldo atual de estoque de tecido (o Signus entra como **movimento/baixa**, não como inventário vigente).
 - Cadastro completo de clientes (só lookup).
 - Receita (não há valor de pedido no corte).
 - `CONTROLE OFICINAS 2026` (abas por oficina) — não é o fato.
@@ -260,3 +284,4 @@ Caminhos: `CORTE_XLSX`, `OFICINAS_XLSX`. Listas de clientes e estoque de tecido 
 - WIP = 10 pedidos / 2.262 pçs · tecido = 4 / 794 · oficinas pendentes = **4.060**.
 - Série mensal começa em janeiro/2026, não em 2025.
 - Fechar o Excel no refresh não apaga a última carga boa.
+- Aba Tecidos mostra consumo do Corte, baixa Signus (produção + canal) e o cruzamento por código de tecido.
