@@ -18,6 +18,13 @@ export function asText(value: unknown): string | null {
   return text ? text : null
 }
 
+export function asTecidoCode(value: unknown): string | null {
+  const text = asText(value)
+  if (!text) return null
+  const compact = text.replace(/\s+/g, '')
+  return compact || null
+}
+
 export function isStarPedido(value: unknown) {
   const text = asText(value)
   return text === STAR

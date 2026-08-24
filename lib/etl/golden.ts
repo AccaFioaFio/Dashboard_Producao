@@ -1,9 +1,9 @@
 import type { FunilKpis, HeaderKpis, SerieMensal } from '@/lib/etl/types'
 
 /** Snapshot dourado da carga atual em 24/08/2026.
- * Tecido vigente (2 pedidos / 768 pçs) e defeitos de oficina (524)
- * divergem do PDR escrito mais cedo no mesmo dia (4/794 e 479):
- * o Excel muda o dia inteiro. Corte, costura Produção, revisão e WIP fecham com o PDR.
+ * Tecido: 3 pedidos com bloco AGUARDANDO TECIDO (23526 também tem cabeçalho CORTADO).
+ * Defeitos de oficina (524) divergem do PDR escrito mais cedo (479): o Excel muda o dia inteiro.
+ * Corte, costura Produção, revisão e WIP fecham com o PDR.
  */
 
 export const GOLDEN_HEADER: HeaderKpis = {
@@ -13,8 +13,11 @@ export const GOLDEN_HEADER: HeaderKpis = {
   pecasRevisao: 75834,
   wipPedidos: 10,
   wipPecas: 2262,
-  tecidoPedidos: 2,
+  tecidoPedidos: 3,
   tecidoPecas: 768,
+  tecidoMetros: 2393,
+  metrosConsumo: 104086.78,
+  metrosEconomia: 3159.21,
   oficinasPendentes: 4060,
   oficinasDefeitos: 524,
 }

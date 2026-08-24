@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx'
 import { isSerialDiasDeCorte, isYear, leadTimeDays, toIsoDate } from '@/lib/dates'
 import {
   asText,
+  asTecidoCode,
   isStarPedido,
   normalizeHeader,
   normalizeOrigem,
@@ -105,7 +106,8 @@ export function parseCorte(workbook: XLSX.WorkBook) {
   const colInicio = headerIndex(map, ['INICIO CORTE'])
   const colFinal = headerIndex(map, ['FINAL CORTE'])
   const colDias = headerIndex(map, ['DIAS DE CORTE'])
-  const colTecido = headerIndex(map, ['TECIDOS', 'COD TECIDO'])
+  const colTecido = headerIndex(map, ['TECIDOS'])
+  const colCodTecido = headerIndex(map, ['COD TECIDO'])
   const colMetros = headerIndex(map, ['MTS TECIDOS'])
   const colEconomia = headerIndex(map, ['ECONOMIA DE TECIDO'])
 
@@ -172,6 +174,7 @@ export function parseCorte(workbook: XLSX.WorkBook) {
       metros: asNumber(cell(values, colMetros)),
       economia: asNumber(cell(values, colEconomia)),
       tecido: asText(cell(values, colTecido)),
+      codTecido: asTecidoCode(cell(values, colCodTecido)),
       responsavel: headerResp,
       canal: headerCanal,
       cliente: headerCliente,

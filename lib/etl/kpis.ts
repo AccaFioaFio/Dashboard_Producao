@@ -39,11 +39,18 @@ export function computeHeaderKpis(snapshot: Snapshot): HeaderKpis {
       (row) => row.statusVigente === 'EM PRODUÇÃO',
     ).length,
     wipPecas: round1(wipLinhas.reduce((sum, row) => sum + (row.qtdPecas ?? 0), 0)),
-    tecidoPedidos: snapshot.cortePedidos.filter(
-      (row) => row.statusVigente === 'AGUARDANDO TECIDO',
-    ).length,
+    tecidoPedidos: new Set(tecidoLinhas.map((row) => row.pedidoNorm)).size,
     tecidoPecas: round1(
       tecidoLinhas.reduce((sum, row) => sum + (row.qtdPecas ?? 0), 0),
+    ),
+    tecidoMetros: round1(
+      tecidoLinhas.reduce((sum, row) => sum + (row.metros ?? 0), 0),
+    ),
+    metrosConsumo: round1(
+      snapshot.cortePedidos.reduce((sum, row) => sum + row.metros, 0),
+    ),
+    metrosEconomia: round1(
+      snapshot.cortePedidos.reduce((sum, row) => sum + row.economia, 0),
     ),
     oficinasPendentes: round1(
       snapshot.oficinas.reduce((sum, row) => sum + row.qtdPendentes, 0),

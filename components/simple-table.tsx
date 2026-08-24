@@ -50,7 +50,7 @@ export function SimpleTable({
                     'px-4 py-3',
                     col.numeric
                       ? 'w-px whitespace-nowrap text-right font-medium tabular-nums'
-                      : 'min-w-0 max-w-[14rem] truncate',
+                      : 'min-w-0 max-w-[22rem] truncate',
                   )}
                   title={
                     col.numeric ? undefined : String(row[col.key] ?? '')

@@ -30,6 +30,7 @@ export type CorteLinha = {
   metros: number | null
   economia: number | null
   tecido: string | null
+  codTecido: string | null
   responsavel: string | null
   canal: string | null
   cliente: string | null
@@ -111,6 +112,9 @@ export type HeaderKpis = {
   wipPecas: number
   tecidoPedidos: number
   tecidoPecas: number
+  tecidoMetros: number
+  metrosConsumo: number
+  metrosEconomia: number
   oficinasPendentes: number
   oficinasDefeitos: number
 }

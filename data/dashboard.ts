@@ -24,6 +24,25 @@ export type CargaInfo = {
   oficinasPendentes: number | null
 }
 
+export type TecidoUsoRow = {
+  cod: string
+  nome: string
+  metros: number
+  economia: number
+  pedidos: number
+}
+
+export type TecidoPendenteRow = {
+  pedidoNorm: string
+  data: string | null
+  cliente: string | null
+  statusVigente: string | null
+  pecas: number
+  metros: number
+  tecido: string | null
+  codTecido: string | null
+}
+
 export type NamedTotal = {
   nome: string
   pecas: number
@@ -98,7 +117,9 @@ export const getHeaderKpis = cache(async (): Promise<HeaderKpis | null> => {
   ).v
   const tecidoPedidos = (
     db
-      .prepare("SELECT COUNT(*) as v FROM fato_corte_pedido WHERE status_vigente = 'AGUARDANDO TECIDO'")
+      .prepare(
+        "SELECT COUNT(DISTINCT pedido_norm) as v FROM fato_corte_linha WHERE status = 'AGUARDANDO TECIDO'",
+      )
       .get() as { v: number }
   ).v
   const tecidoPecas = (
@@ -106,6 +127,18 @@ export const getHeaderKpis = cache(async (): Promise<HeaderKpis | null> => {
       .prepare("SELECT COALESCE(SUM(qtd_pecas), 0) as v FROM fato_corte_linha WHERE status = 'AGUARDANDO TECIDO'")
       .get() as { v: number }
   ).v
+  const tecidoMetros = (
+    db
+      .prepare(
+        "SELECT COALESCE(SUM(metros), 0) as v FROM fato_corte_linha WHERE status = 'AGUARDANDO TECIDO'",
+      )
+      .get() as { v: number }
+  ).v
+  const metrosRow = db
+    .prepare(
+      'SELECT COALESCE(SUM(metros), 0) as metros, COALESCE(SUM(economia), 0) as economia FROM fato_corte_pedido',
+    )
+    .get() as { metros: number; economia: number }
   const oficinasPendentes = (
     db.prepare('SELECT COALESCE(SUM(qtd_pendentes), 0) as v FROM fato_oficinas').get() as { v: number }
   ).v
@@ -122,6 +155,9 @@ export const getHeaderKpis = cache(async (): Promise<HeaderKpis | null> => {
     wipPecas,
     tecidoPedidos,
     tecidoPecas,
+    tecidoMetros,
+    metrosConsumo: metrosRow.metros,
+    metrosEconomia: metrosRow.economia,
     oficinasPendentes,
     oficinasDefeitos,
   }
@@ -285,10 +321,33 @@ export const getCorteBreakdown = cache(async (filters: { mes?: number; canal?: s
     .all() as CortePedidoRow[]
   const tecido = db
     .prepare(
-      `SELECT pedido_norm as pedidoNorm, data, status_vigente as statusVigente, pecas, canal, cliente, responsavel
-       FROM fato_corte_pedido WHERE status_vigente = 'AGUARDANDO TECIDO' ORDER BY pecas DESC`,
+      `SELECT l.pedido_norm as pedidoNorm, MAX(p.data) as data, MAX(p.cliente) as cliente,
+              l.status as statusVigente,
+              COALESCE(SUM(l.qtd_pecas), 0) as pecas,
+              COALESCE(SUM(l.metros), 0) as metros,
+              MAX(l.tecido) as tecido,
+              MAX(l.cod_tecido) as codTecido
+       FROM fato_corte_linha l
+       LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
+       WHERE l.status = 'AGUARDANDO TECIDO'
+       GROUP BY l.pedido_norm, l.status, COALESCE(l.cod_tecido, l.tecido)
+       ORDER BY metros DESC`,
     )
-    .all() as CortePedidoRow[]
+    .all() as TecidoPendenteRow[]
+  const porTecido = db
+    .prepare(
+      `SELECT COALESCE(NULLIF(trim(cod_tecido), ''), '(sem código)') as cod,
+              MAX(tecido) as nome,
+              COALESCE(SUM(metros), 0) as metros,
+              COALESCE(SUM(economia), 0) as economia,
+              COUNT(DISTINCT pedido_norm) as pedidos
+       FROM fato_corte_linha
+       WHERE tecido IS NOT NULL AND trim(tecido) != ''
+       GROUP BY COALESCE(NULLIF(trim(cod_tecido), ''), trim(tecido))
+       ORDER BY metros DESC
+       LIMIT 12`,
+    )
+    .all() as TecidoUsoRow[]
 
   const canais = db
     .prepare(
@@ -299,7 +358,16 @@ export const getCorteBreakdown = cache(async (filters: { mes?: number; canal?: s
   void where
   void params
 
-  return { porMes, porCanal, porResponsavel, porCliente, wip, tecido, canais: canais.map((row) => row.canal) }
+  return {
+    porMes,
+    porCanal,
+    porResponsavel,
+    porCliente,
+    wip,
+    tecido,
+    porTecido,
+    canais: canais.map((row) => row.canal),
+  }
 })
 
 function todayIso() {

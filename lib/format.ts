@@ -11,6 +11,19 @@ export function formatNumber(value: number, digits = 0) {
   }).format(value)
 }
 
+export function formatMeters(value: number, digits = 0) {
+  return `${formatNumber(value, digits)} m`
+}
+
+export function shortTecido(value: string | null | undefined) {
+  if (!value) return '—'
+  let text = value.replace(/\s+/g, ' ').trim()
+  text = text.replace(/^[0-9A-Za-z]+\s*[-_]\s*/, '')
+  text = text.replace(/\s*\/\s*MAT[EÉ]RIA PRIMA.*$/i, '')
+  text = text.replace(/_+(FABRICA|GALP[AÃ]O|GONDOLA).*$/i, '')
+  return text.trim() || value.replace(/\s+/g, ' ').trim()
+}
+
 export function formatDate(iso: string | null | undefined) {
   if (!iso) return '—'
   const [year, month, day] = iso.slice(0, 10).split('-')

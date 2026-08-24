@@ -1,11 +1,12 @@
 import { AlertTriangle } from 'lucide-react'
-import { formatDate, formatInt } from '@/lib/format'
+import { formatDate, formatInt, formatMeters } from '@/lib/format'
 
 export function AlertsBanner({
   wipPedidos,
   wipPecas,
   tecidoPedidos,
   tecidoPecas,
+  tecidoMetros,
   oficinasPendentes,
   ultimaRevisao,
   ultimoEnvio,
@@ -14,6 +15,7 @@ export function AlertsBanner({
   wipPecas: number
   tecidoPedidos: number
   tecidoPecas: number
+  tecidoMetros: number
   oficinasPendentes: number
   ultimaRevisao: string | null
   ultimoEnvio: string | null
@@ -23,7 +25,7 @@ export function AlertsBanner({
       ? `WIP Corte: ${formatInt(wipPedidos)} pedidos / ${formatInt(wipPecas)} pçs`
       : null,
     tecidoPedidos
-      ? `Aguardando tecido: ${formatInt(tecidoPedidos)} pedidos / ${formatInt(tecidoPecas)} pçs`
+      ? `Aguardando tecido: ${formatInt(tecidoPedidos)} pedidos / ${formatMeters(tecidoMetros)} / ${formatInt(tecidoPecas)} pçs`
       : null,
     oficinasPendentes
       ? `Oficinas pendentes: ${formatInt(oficinasPendentes)} pçs`

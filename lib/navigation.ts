@@ -27,7 +27,7 @@ export const navigation: NavItem[] = [
     title: 'Corte',
     href: '/corte',
     icon: Scissors,
-    description: 'Peças, canal, responsável e pedidos parados.',
+    description: 'Peças, tecido, consumo, economia e pedidos parados.',
   },
   {
     title: 'Costuras',

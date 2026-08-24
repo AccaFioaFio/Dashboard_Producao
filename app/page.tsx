@@ -14,7 +14,7 @@ import {
   getLatestCarga,
   getSerieMensal,
 } from '@/data/dashboard'
-import { formatDateTime, formatInt, MONTH_LABELS } from '@/lib/format'
+import { formatDateTime, formatInt, formatMeters, MONTH_LABELS } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,6 +56,7 @@ export default async function Page() {
         wipPecas={header.wipPecas}
         tecidoPedidos={header.tecidoPedidos}
         tecidoPecas={header.tecidoPecas}
+        tecidoMetros={header.tecidoMetros}
         oficinasPendentes={header.oficinasPendentes}
         ultimaRevisao={alertas.ultimaRevisao}
         ultimoEnvio={alertas.ultimoEnvio}
@@ -105,11 +106,22 @@ export default async function Page() {
         />
         <KpiCard
           label="Aguardando tecido"
-          value={`${formatInt(header.tecidoPedidos)} / ${formatInt(header.tecidoPecas)}`}
-          hint="Status vigente / peças no bloco"
+          value={`${formatInt(header.tecidoPedidos)} / ${formatMeters(header.tecidoMetros)}`}
+          hint={`${formatInt(header.tecidoPecas)} pçs com status AGUARDANDO TECIDO`}
           alert={header.tecidoPedidos > 0}
           tone="amber"
           progress={header.tecidoPedidos > 0 ? 48 : 10}
+        />
+        <KpiCard
+          label="Consumo de tecido"
+          value={formatMeters(header.metrosConsumo)}
+          hint={`Economia ${formatMeters(header.metrosEconomia)}`}
+          tone="teal"
+          progress={
+            header.metrosConsumo > 0
+              ? Math.min(100, (header.metrosEconomia / header.metrosConsumo) * 400)
+              : 8
+          }
         />
         <KpiCard
           label="Oficinas pendentes"

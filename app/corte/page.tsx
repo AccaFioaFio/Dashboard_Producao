@@ -5,7 +5,14 @@ import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
 import { getCorteBreakdown, getHeaderKpis } from '@/data/dashboard'
-import { MONTH_LABELS, formatDate, formatInt } from '@/lib/format'
+import {
+  MONTH_LABELS,
+  formatDate,
+  formatInt,
+  formatMeters,
+  formatNumber,
+  shortTecido,
+} from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Corte' }
@@ -16,10 +23,15 @@ export default async function CortePage() {
     getCorteBreakdown({}),
   ])
 
+  const metrosConsumo = header?.metrosConsumo ?? 0
+  const metrosEconomia = header?.metrosEconomia ?? 0
+  const economiaPct =
+    metrosConsumo > 0 ? (metrosEconomia / metrosConsumo) * 100 : 0
+
   return (
     <PageShell
       title="Corte"
-      description="Volume em peça e pedido. Agosto explode linha de tecido: não use contagem de linha."
+      description="Volume em peça e pedido, consumo de tecido e blocos parados. Agosto explode linha de tecido: não use contagem de linha."
       actions={<RefreshForm />}
     >
       <div className="grid gap-3 sm:grid-cols-3">
@@ -32,11 +44,84 @@ export default async function CortePage() {
           value={formatInt(header?.pedidosCorte ?? 0)}
         />
         <KpiCard
-          label="WIP / tecido"
-          value={`${formatInt(header?.wipPedidos ?? 0)} / ${formatInt(header?.tecidoPedidos ?? 0)}`}
-          hint="Pedidos com status vigente"
+          label="WIP"
+          value={`${formatInt(header?.wipPedidos ?? 0)} / ${formatInt(header?.wipPecas ?? 0)}`}
+          hint="Pedidos vigentes / peças EM PRODUÇÃO"
+        />
+        <KpiCard
+          label="Consumo de tecido"
+          value={formatMeters(metrosConsumo)}
+          hint="SUM de MTS / TECIDOS em 2026"
+          tone="teal"
+        />
+        <KpiCard
+          label="Economia de tecido"
+          value={formatMeters(metrosEconomia)}
+          hint={`${formatNumber(economiaPct, 1)}% do consumo (aproveitamento)`}
+          tone="amber"
+          progress={Math.min(100, Math.max(12, economiaPct * 12))}
+        />
+        <KpiCard
+          label="Aguardando tecido"
+          value={`${formatInt(header?.tecidoPedidos ?? 0)} / ${formatMeters(header?.tecidoMetros ?? 0)}`}
+          hint={`${formatInt(header?.tecidoPecas ?? 0)} pçs com status AGUARDANDO TECIDO`}
+          alert={(header?.tecidoPedidos ?? 0) > 0}
         />
       </div>
+
+      <section className="flex min-w-0 flex-col gap-2">
+        <h2 className="text-sm font-medium">Aguardando tecido para produção</h2>
+        <p className="text-xs text-muted-foreground">
+          Só linhas com status AGUARDANDO TECIDO: pedido, tecido e metros parados.
+        </p>
+        <SimpleTable
+          columns={[
+            { key: 'pedido', label: 'Pedido' },
+            { key: 'cliente', label: 'Cliente' },
+            { key: 'tecido', label: 'Tecido' },
+            { key: 'metros', label: 'Metros', numeric: true },
+            { key: 'pecas', label: 'Peças', numeric: true },
+            { key: 'status', label: 'Status' },
+          ]}
+          rows={corte.tecido.map((row) => ({
+            pedido: row.pedidoNorm,
+            cliente: row.cliente,
+            tecido: `${row.codTecido ? `${row.codTecido} · ` : ''}${shortTecido(row.tecido)}`,
+            metros: formatNumber(row.metros, row.metros >= 100 ? 0 : 1),
+            pecas: formatInt(row.pecas),
+            status: row.statusVigente ?? 'AGUARDANDO TECIDO',
+          }))}
+          empty="Nenhum pedido aguardando tecido"
+        />
+      </section>
+
+      <section className="flex min-w-0 flex-col gap-2">
+        <h2 className="text-sm font-medium">Tecidos mais usados</h2>
+        <p className="text-xs text-muted-foreground">
+          Consumo 2026 agrupado pelo código do tecido. Economia vem da coluna ECONOMIA DE
+          TECIDO.
+        </p>
+        <SimpleTable
+          columns={[
+            { key: 'tecido', label: 'Tecido' },
+            { key: 'metros', label: 'Consumo', numeric: true },
+            { key: 'share', label: '%', numeric: true },
+            { key: 'economia', label: 'Economia', numeric: true },
+            { key: 'pedidos', label: 'Pedidos', numeric: true },
+          ]}
+          rows={corte.porTecido.map((row) => ({
+            tecido: `${row.cod !== '(sem código)' ? `${row.cod} · ` : ''}${shortTecido(row.nome)}`,
+            metros: formatMeters(row.metros),
+            share:
+              metrosConsumo > 0
+                ? `${formatNumber((row.metros / metrosConsumo) * 100, 1)}%`
+                : '—',
+            economia: formatMeters(row.economia, row.economia >= 10 ? 0 : 1),
+            pedidos: formatInt(row.pedidos),
+          }))}
+          empty="Sem consumo de tecido na carga"
+        />
+      </section>
 
       <MonthlyAreaChart
         title="Peças por mês"
@@ -133,25 +218,6 @@ export default async function CortePage() {
             responsavel: row.responsavel,
           }))}
           empty="Nenhum pedido em produção"
-        />
-      </section>
-
-      <section className="flex min-w-0 flex-col gap-2">
-        <h2 className="text-sm font-medium">AGUARDANDO TECIDO</h2>
-        <SimpleTable
-          columns={[
-            { key: 'pedido', label: 'Pedido' },
-            { key: 'data', label: 'Data' },
-            { key: 'cliente', label: 'Cliente' },
-            { key: 'pecas', label: 'Peças', numeric: true },
-          ]}
-          rows={corte.tecido.map((row) => ({
-            pedido: row.pedidoNorm,
-            data: formatDate(row.data),
-            cliente: row.cliente,
-            pecas: formatInt(row.pecas),
-          }))}
-          empty="Nenhum pedido aguardando tecido"
         />
       </section>
     </PageShell>

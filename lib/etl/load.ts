@@ -180,11 +180,11 @@ export function replaceSnapshot(
     const insertCorteLinha = sqlite.prepare(`
       INSERT INTO fato_corte_linha (
         pedido_norm, data, is_header, is_star, qtd_pecas, qtd_terceiros,
-        qtd_estoque, metros, economia, tecido, status, responsavel, canal,
+        qtd_estoque, metros, economia, tecido, cod_tecido, status, responsavel, canal,
         cliente, inicio_corte, final_corte, dias_de_corte_raw, excel_row
       ) VALUES (
         @pedidoNorm, @data, @isHeader, @isStar, @qtdPecas, @qtdTerceiros,
-        @qtdEstoque, @metros, @economia, @tecido, @status, @responsavel, @canal,
+        @qtdEstoque, @metros, @economia, @tecido, @codTecido, @status, @responsavel, @canal,
         @cliente, @inicioCorte, @finalCorte, @diasDeCorteRaw, @excelRow
       )
     `)

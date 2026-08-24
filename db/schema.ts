@@ -48,6 +48,7 @@ export const fatoCorteLinha = sqliteTable(
     metros: real('metros'),
     economia: real('economia'),
     tecido: text('tecido'),
+    codTecido: text('cod_tecido'),
     status: text('status'),
     responsavel: text('responsavel'),
     canal: text('canal'),
