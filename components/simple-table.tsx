@@ -1,12 +1,17 @@
 import { cn } from '@/lib/utils'
 
+type TableRow = Record<string, string | number | boolean | null> & {
+  alert?: boolean
+  warning?: boolean
+}
+
 export function SimpleTable({
   columns,
   rows,
   empty = 'Nenhum registro',
 }: {
   columns: { key: string; label: string; numeric?: boolean }[]
-  rows: Record<string, string | number | null>[]
+  rows: TableRow[]
   empty?: string
 }) {
   if (!rows.length) {
@@ -41,7 +46,14 @@ export function SimpleTable({
           {rows.map((row, index) => (
             <tr
               key={index}
-              className="border-t border-border/80 hover:bg-muted/40"
+              className={cn(
+                'border-t border-border/80 hover:bg-muted/40',
+                row.alert &&
+                  'bg-destructive/[0.07] shadow-[inset_3px_0_0_0_var(--destructive)] hover:bg-destructive/12',
+                !row.alert &&
+                  row.warning &&
+                  'bg-chart-3/15 shadow-[inset_3px_0_0_0_var(--chart-3)] hover:bg-chart-3/25',
+              )}
             >
               {columns.map((col) => (
                 <td
@@ -51,6 +63,13 @@ export function SimpleTable({
                     col.numeric
                       ? 'w-px whitespace-nowrap text-right font-medium tabular-nums'
                       : 'min-w-0 max-w-[22rem] truncate',
+                    row.alert &&
+                      col.key === 'defeitos' &&
+                      'font-semibold text-destructive',
+                    !row.alert &&
+                      row.warning &&
+                      col.key === 'pendentes' &&
+                      'font-semibold text-[oklch(0.48_0.14_65)]',
                   )}
                   title={
                     col.numeric ? undefined : String(row[col.key] ?? '')

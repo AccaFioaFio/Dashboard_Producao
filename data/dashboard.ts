@@ -716,8 +716,9 @@ export const getOficinas = cache(async () => {
       `SELECT oficina as nome, COALESCE(SUM(qtd_pendentes), 0) as pecas,
               COUNT(*) as pedidos, COALESCE(SUM(qtd_enviadas), 0) as enviadas,
               COALESCE(SUM(qtd_retornadas), 0) as retornadas,
-              COALESCE(SUM(qtd_defeitos), 0) as defeitos
-       FROM fato_oficinas GROUP BY oficina ORDER BY pecas DESC`,
+              COALESCE(SUM(qtd_defeitos), 0) as defeitos,
+              COALESCE(SUM(valor_total), 0) as valor
+       FROM fato_oficinas GROUP BY oficina ORDER BY valor DESC, pecas DESC`,
     )
     .all() as {
     nome: string
@@ -726,6 +727,7 @@ export const getOficinas = cache(async () => {
     enviadas: number
     retornadas: number
     defeitos: number
+    valor: number
   }[]
   const sla = db
     .prepare(

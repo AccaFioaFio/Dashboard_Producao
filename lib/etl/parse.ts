@@ -343,7 +343,7 @@ export function parseOficinas(workbook: XLSX.WorkBook) {
   const colPrometida = headerIndex(map, ['DATA PROMETIDA ENTREGA'])
   const colRetorno = headerIndex(map, ['DATA RETORNO PRODUCAO'])
   const colProduto = headerIndex(map, ['ITEM', 'PRODUTO'])
-  const colValor = headerIndex(map, ['VALOT TOTAL', 'VALOR TOTAL'])
+  const colValor = headerIndex(map, ['VALOR UNIT'])
 
   const lotes: OficinaLote[] = []
   const qualidade: QualidadeEvento[] = []

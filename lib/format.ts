@@ -15,6 +15,13 @@ export function formatMeters(value: number, digits = 0) {
   return `${formatNumber(value, digits)} m`
 }
 
+export function formatMoney(value: number) {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value)
+}
+
 export function shortTecido(value: string | null | undefined) {
   if (!value) return '—'
   let text = value.replace(/\s+/g, ' ').trim()

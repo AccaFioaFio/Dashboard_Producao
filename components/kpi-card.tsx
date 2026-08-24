@@ -13,6 +13,7 @@ export function KpiCard({
   value,
   hint,
   alert = false,
+  warning = false,
   progress,
   tone = 'indigo',
 }: {
@@ -20,18 +21,37 @@ export function KpiCard({
   value: string
   hint?: string
   alert?: boolean
+  warning?: boolean
   progress?: number
   tone?: keyof typeof TONE_BAR
 }) {
-  const bar = alert ? TONE_BAR.rose : TONE_BAR[tone]
+  const bar = alert ? TONE_BAR.rose : warning ? TONE_BAR.amber : TONE_BAR[tone]
   const width = Math.max(8, Math.min(100, progress ?? 62))
 
   return (
-    <div className={cn('card-surface flex flex-col gap-3 p-5', alert && 'ring-1 ring-destructive/30')}>
+    <div
+      className={cn(
+        'card-surface flex flex-col gap-3 p-5',
+        alert &&
+          'bg-destructive/[0.07] shadow-[inset_3px_0_0_0_var(--destructive)] ring-1 ring-destructive/25',
+        !alert &&
+          warning &&
+          'bg-chart-3/20 shadow-[inset_3px_0_0_0_var(--chart-3)] ring-1 ring-chart-3/35',
+      )}
+    >
       <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
         {label}
       </p>
-      <p className="text-3xl font-bold tracking-tight text-foreground">{value}</p>
+      <p
+        className={cn(
+          'text-3xl font-bold tracking-tight',
+          alert && 'text-destructive',
+          !alert && warning && 'text-[oklch(0.48_0.14_65)]',
+          !alert && !warning && 'text-foreground',
+        )}
+      >
+        {value}
+      </p>
       {hint ? (
         <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p>
       ) : null}

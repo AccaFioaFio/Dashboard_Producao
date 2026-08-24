@@ -5,7 +5,7 @@ import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
 import { getHeaderKpis, getOficinas } from '@/data/dashboard'
-import { MONTH_LABELS, formatDate, formatInt, formatNumber } from '@/lib/format'
+import { MONTH_LABELS, formatDate, formatInt, formatMoney, formatNumber } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Oficinas' }
@@ -22,20 +22,26 @@ export default async function OficinasPage() {
       actions={<RefreshForm />}
     >
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Pendentes" value={formatInt(header?.oficinasPendentes ?? 0)} />
         <KpiCard
-          label="Defeitos"
-          value={formatInt(header?.oficinasDefeitos ?? 0)}
+          label="Valor Total Pago"
+          value={formatMoney(oficinas.sla.valor)}
+          hint="Soma do valor lançado por lote em 2026"
+          tone="teal"
         />
         <KpiCard
-          label="Retorno"
+          label="Peças Pendentes"
+          value={formatInt(header?.oficinasPendentes ?? 0)}
+          warning={(header?.oficinasPendentes ?? 0) > 0}
+        />
+        <KpiCard
+          label="Peças com Defeitos"
+          value={formatInt(header?.oficinasDefeitos ?? 0)}
+          alert={(header?.oficinasDefeitos ?? 0) > 0}
+        />
+        <KpiCard
+          label="% de Retorno"
           value={`${formatNumber(retorno, 1)}%`}
           hint={`${formatInt(oficinas.retornadas)} de ${formatInt(oficinas.enviadas)} enviadas`}
-        />
-        <KpiCard
-          label="SLA (lotes)"
-          value={`${formatInt(oficinas.sla.noPrazo)} / ${formatInt(oficinas.sla.atraso)}`}
-          hint={`${formatInt(oficinas.sla.abertos)} lotes abertos · ${formatInt(oficinas.sla.lotes)} no ano`}
         />
       </div>
 
@@ -68,6 +74,7 @@ export default async function OficinasPage() {
             { key: 'enviadas', label: 'Enviadas', numeric: true },
             { key: 'retornadas', label: 'Retornadas', numeric: true },
             { key: 'defeitos', label: 'Defeitos', numeric: true },
+            { key: 'valor', label: 'Valor pago', numeric: true },
           ]}
           rows={oficinas.ranking.map((row) => ({
             nome: row.nome,
@@ -75,6 +82,9 @@ export default async function OficinasPage() {
             enviadas: formatInt(row.enviadas),
             retornadas: formatInt(row.retornadas),
             defeitos: formatInt(row.defeitos),
+            valor: formatMoney(row.valor),
+            alert: row.defeitos > 0,
+            warning: row.pecas > 0 && row.defeitos === 0,
           }))}
         />
       </section>
