@@ -4,14 +4,24 @@ import { KpiCard } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
-import { getHeaderKpis, getOficinas } from '@/data/dashboard'
+import { FilterBar } from '@/components/filter-bar'
+import { getFilterOptions, getOficinas } from '@/data/dashboard'
 import { MONTH_LABELS, formatDate, formatInt, formatMoney, formatNumber } from '@/lib/format'
+import { parseFilters } from '@/lib/filters'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Oficinas' }
 
-export default async function OficinasPage() {
-  const [header, oficinas] = await Promise.all([getHeaderKpis(), getOficinas()])
+export default async function OficinasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const filters = parseFilters(await searchParams)
+  const [oficinas, options] = await Promise.all([
+    getOficinas(filters),
+    getFilterOptions(),
+  ])
   const retorno =
     oficinas.enviadas > 0 ? (oficinas.retornadas / oficinas.enviadas) * 100 : 0
 
@@ -21,22 +31,29 @@ export default async function OficinasPage() {
       description="Somente lotes com Data Envio em 2026 e oficina preenchida."
       actions={<RefreshForm />}
     >
+      <FilterBar
+        pathname="/oficinas"
+        values={filters}
+        options={options}
+        fields={['mes', 'oficina', 'q']}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Valor Total Pago"
           value={formatMoney(oficinas.sla.valor)}
-          hint="Soma do valor lançado por lote em 2026"
+          hint="Soma do valor lançado no recorte"
           tone="teal"
         />
         <KpiCard
           label="Peças Pendentes"
-          value={formatInt(header?.oficinasPendentes ?? 0)}
-          warning={(header?.oficinasPendentes ?? 0) > 0}
+          value={formatInt(oficinas.pendentes)}
+          warning={oficinas.pendentes > 0}
         />
         <KpiCard
           label="Peças com Defeitos"
-          value={formatInt(header?.oficinasDefeitos ?? 0)}
-          alert={(header?.oficinasDefeitos ?? 0) > 0}
+          value={formatInt(oficinas.defeitos)}
+          alert={oficinas.defeitos > 0}
         />
         <KpiCard
           label="% de Retorno"

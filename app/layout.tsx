@@ -1,16 +1,22 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { IBM_Plex_Mono, Inter } from 'next/font/google'
+import { AppearanceProvider } from '@/components/appearance-provider'
+import { AppHeader } from '@/components/app-header'
+import { AppSidebar } from '@/components/app-sidebar'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { AppSidebar } from '@/components/app-sidebar'
-import { AppHeader } from '@/components/app-header'
+import { APPEARANCE_BOOTSTRAP } from '@/lib/appearance'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
-const _ibmPlexMono = IBM_Plex_Mono({
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-sans-loaded',
+})
+const ibmPlexMono = IBM_Plex_Mono({
   subsets: ['latin'],
   weight: ['400', '500'],
+  variable: '--font-mono-loaded',
 })
 
 export const metadata: Metadata = {
@@ -18,8 +24,7 @@ export const metadata: Metadata = {
     default: 'Produção 2026',
     template: '%s · Produção 2026',
   },
-  description:
-    'Dashboard de produção 2026.',
+  description: 'Dashboard de produção 2026.',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -41,7 +46,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light',
+  colorScheme: 'light dark',
   themeColor: '#3d2e8a',
 }
 
@@ -51,17 +56,28 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="pt-BR" className={`${inter.className} bg-background`}>
+    <html
+      lang="pt-BR"
+      className={`${inter.variable} ${ibmPlexMono.variable} ${inter.className} bg-background`}
+      data-theme="violeta"
+      data-layout="conforto"
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: APPEARANCE_BOOTSTRAP }} />
+      </head>
       <body className="antialiased">
-        <TooltipProvider>
-          <SidebarProvider>
-            <AppSidebar />
-            <SidebarInset>
-              <AppHeader />
-              <div className="flex flex-1 flex-col">{children}</div>
-            </SidebarInset>
-          </SidebarProvider>
-        </TooltipProvider>
+        <AppearanceProvider>
+          <TooltipProvider>
+            <SidebarProvider>
+              <AppSidebar />
+              <SidebarInset className="relative overflow-hidden">
+                <AppHeader />
+                <div className="relative z-0 flex flex-1 flex-col">{children}</div>
+              </SidebarInset>
+            </SidebarProvider>
+          </TooltipProvider>
+        </AppearanceProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

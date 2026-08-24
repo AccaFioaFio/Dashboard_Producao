@@ -4,23 +4,30 @@ import { KpiCard } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
+import { FilterBar } from '@/components/filter-bar'
 import {
   getCosturas,
+  getFilterOptions,
   getFunil,
-  getHeaderKpis,
   getSerieMensal,
 } from '@/data/dashboard'
 import { MONTH_LABELS, formatDate, formatInt } from '@/lib/format'
+import { parseFilters } from '@/lib/filters'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Costuras' }
 
-export default async function CosturasPage() {
-  const [header, costuras, funil, serie] = await Promise.all([
-    getHeaderKpis(),
-    getCosturas(),
+export default async function CosturasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const filters = parseFilters(await searchParams)
+  const [costuras, funil, serie, options] = await Promise.all([
+    getCosturas(filters),
     getFunil(),
     getSerieMensal(),
+    getFilterOptions(),
   ])
   const pecasServico = costuras.mix
     .filter((row) => row.origemNorm !== 'Producao')
@@ -33,11 +40,18 @@ export default async function CosturasPage() {
       description="Funil usa só Origem = Produção. Etiqueta, festonê e conserto ficam no mix de serviço."
       actions={<RefreshForm />}
     >
+      <FilterBar
+        pathname="/costuras"
+        values={filters}
+        options={options}
+        fields={['mes', 'responsavel', 'produto', 'q']}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Produção"
-          value={formatInt(header?.pecasCosturaProd ?? 0)}
-          hint="Origem = Produção"
+          value={formatInt(costuras.producao.pecas)}
+          hint="Origem = Produção no recorte"
         />
         <KpiCard
           label="Serviço"
@@ -47,7 +61,7 @@ export default async function CosturasPage() {
         <KpiCard
           label="Pedidos com Costura"
           value={formatInt(funil?.comCostura ?? 0)}
-          hint={`${formatInt(funil?.semCostura ?? 0)} pedidos de Corte sem Costura Produção`}
+          hint={`${formatInt(funil?.semCostura ?? 0)} pedidos de Corte sem Costura Produção (ano)`}
         />
         <KpiCard
           label={`Hoje (${formatDate(costuras.hoje)})`}
@@ -58,7 +72,7 @@ export default async function CosturasPage() {
 
       <MonthlyAreaChart
         title="Peças por mês"
-        description="Costura Produção, mês a mês."
+        description="Costura Produção, mês a mês (ano 2026)."
         labels={serie.map((row) => MONTH_LABELS[row.mes - 1])}
         series={[
           {
@@ -141,7 +155,7 @@ export default async function CosturasPage() {
             responsavel: row.responsavel,
             produto: row.produto,
           }))}
-          empty="Nenhum lançamento de Produção hoje"
+          empty="Nenhum lançamento de Produção hoje neste recorte"
         />
       </section>
     </PageShell>

@@ -16,7 +16,7 @@ export function FunnelCard({ funil }: { funil: FunilKpis }) {
 
   return (
     <section className="card-surface flex min-w-0 flex-col p-5">
-      <h2 className="mb-4 text-sm font-semibold">Funil de pedido 2026</h2>
+      <h2 className="mb-4 text-sm font-semibold tracking-wide">Funil de pedido 2026</h2>
       <ul className="flex flex-col gap-3">
         {rows.map((row, index) => {
           const numeric = typeof row.value === 'number' ? row.value : funil.oficinas

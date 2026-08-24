@@ -4,7 +4,8 @@ import { KpiCard } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
-import { getHeaderKpis, getTecidos } from '@/data/dashboard'
+import { FilterBar } from '@/components/filter-bar'
+import { getFilterOptions, getHeaderKpis, getTecidos } from '@/data/dashboard'
 import {
   MONTH_LABELS,
   TIPO_TECIDO_LABEL,
@@ -13,12 +14,22 @@ import {
   formatNumber,
   shortTecido,
 } from '@/lib/format'
+import { parseFilters } from '@/lib/filters'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Tecidos' }
 
-export default async function TecidosPage() {
-  const [header, tecidos] = await Promise.all([getHeaderKpis(), getTecidos()])
+export default async function TecidosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const filters = parseFilters(await searchParams)
+  const [header, tecidos, options] = await Promise.all([
+    getHeaderKpis(),
+    getTecidos(filters),
+    getFilterOptions(),
+  ])
   const metrosCorte = tecidos.metrosCorte
   const metrosSignus = tecidos.metrosSignus
   const metrosEconomia = tecidos.metrosEconomia
@@ -32,6 +43,13 @@ export default async function TecidosPage() {
       description="Consumo apontado no Corte versus baixa real no Signus. Só Linha = TECIDO entra no fato Signus; a baixa oficial é Produção (insumos) + SAIDA FF/AC/TC."
       actions={<RefreshForm />}
     >
+      <FilterBar
+        pathname="/tecidos"
+        values={filters}
+        options={options}
+        fields={['mes', 'canal', 'cliente', 'q']}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard
           label="Consumo no Corte"

@@ -4,23 +4,30 @@ import { KpiCard } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
+import { FilterBar } from '@/components/filter-bar'
 import {
+  getFilterOptions,
   getFunil,
-  getHeaderKpis,
   getRevisao,
   getSerieMensal,
 } from '@/data/dashboard'
 import { MONTH_LABELS, formatDate, formatInt } from '@/lib/format'
+import { parseFilters } from '@/lib/filters'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Revisão' }
 
-export default async function RevisaoPage() {
-  const [header, revisao, funil, serie] = await Promise.all([
-    getHeaderKpis(),
-    getRevisao(),
+export default async function RevisaoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const filters = parseFilters(await searchParams)
+  const [revisao, funil, serie, options] = await Promise.all([
+    getRevisao(filters),
     getFunil(),
     getSerieMensal(),
+    getFilterOptions(),
   ])
   const pecasHoje = revisao.doDia.reduce((sum, row) => sum + row.pecas, 0)
 
@@ -30,15 +37,23 @@ export default async function RevisaoPage() {
       description="Sem linha de total da tabela e sem Qtd igual ao número do pedido."
       actions={<RefreshForm />}
     >
+      <FilterBar
+        pathname="/revisao"
+        values={filters}
+        options={options}
+        fields={['mes', 'responsavel', 'produto', 'q']}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Revisão limpa"
-          value={formatInt(header?.pecasRevisao ?? 0)}
+          value={formatInt(revisao.resumo.pecas)}
+          hint="Peças no recorte"
         />
         <KpiCard
           label="Pedidos com Revisão"
-          value={formatInt(funil?.comRevisao ?? 0)}
-          hint={`${formatInt(funil?.semRevisao ?? 0)} pedidos de Corte sem Revisão`}
+          value={formatInt(revisao.resumo.pedidos)}
+          hint={`${formatInt(funil?.semRevisao ?? 0)} pedidos de Corte sem Revisão (ano)`}
         />
         <KpiCard
           label="Revisão sem Corte"
@@ -53,7 +68,7 @@ export default async function RevisaoPage() {
 
       <MonthlyAreaChart
         title="Peças por mês"
-        description="Revisão limpa, mês a mês."
+        description="Revisão limpa, mês a mês (ano 2026)."
         labels={serie.map((row) => MONTH_LABELS[row.mes - 1])}
         series={[
           {
@@ -111,7 +126,7 @@ export default async function RevisaoPage() {
             responsavel: row.responsavel,
             produto: row.produto,
           }))}
-          empty="Nenhum lançamento de Revisão hoje"
+          empty="Nenhum lançamento de Revisão hoje neste recorte"
         />
       </section>
     </PageShell>

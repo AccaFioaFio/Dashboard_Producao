@@ -4,16 +4,24 @@ import { KpiCard } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
-import { getCorteBreakdown, getHeaderKpis } from '@/data/dashboard'
+import { FilterBar } from '@/components/filter-bar'
+import { getCorteBreakdown, getFilterOptions } from '@/data/dashboard'
 import { MONTH_LABELS, formatDate, formatInt } from '@/lib/format'
+import { parseFilters } from '@/lib/filters'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Corte' }
 
-export default async function CortePage() {
-  const [header, corte] = await Promise.all([
-    getHeaderKpis(),
-    getCorteBreakdown({}),
+export default async function CortePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const params = await searchParams
+  const filters = parseFilters(params)
+  const [corte, options] = await Promise.all([
+    getCorteBreakdown(filters),
+    getFilterOptions(),
   ])
 
   return (
@@ -22,35 +30,42 @@ export default async function CortePage() {
       description="Volume em peça e pedido. Agosto explode linha de tecido: não use contagem de linha. Consumo e baixa de tecido ficam na aba Tecidos."
       actions={<RefreshForm />}
     >
+      <FilterBar
+        pathname="/corte"
+        values={filters}
+        options={options}
+        fields={['mes', 'canal', 'cliente', 'responsavel', 'q']}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Pedidos"
-          value={formatInt(header?.pedidosCorte ?? 0)}
-          hint="Nº pedido distinto, sem duplicata"
+          value={formatInt(corte.resumo.pedidos)}
+          hint="Nº pedido distinto no recorte"
           tone="indigo"
         />
         <KpiCard
           label="Ordens de corte"
-          value={formatInt(header?.ocsCorte ?? 0)}
-          hint={`${formatInt(header?.pedidosCorte ?? 0)} pedidos geraram estas OCs`}
+          value={formatInt(corte.resumo.ocs)}
+          hint={`${formatInt(corte.resumo.pedidos)} pedidos geraram estas OCs`}
           tone="teal"
         />
         <KpiCard
           label="Peças cortadas"
-          value={formatInt(header?.pecasCortadas ?? 0)}
+          value={formatInt(corte.resumo.pecas)}
           tone="amber"
         />
         <KpiCard
           label="WIP"
-          value={`${formatInt(header?.wipPedidos ?? 0)} / ${formatInt(header?.wipPecas ?? 0)}`}
+          value={`${formatInt(corte.resumo.wipPedidos)} / ${formatInt(corte.resumo.wipPecas)}`}
           hint="Pedidos vigentes / peças EM PRODUÇÃO"
-          alert={(header?.wipPedidos ?? 0) > 0}
+          alert={corte.resumo.wipPedidos > 0}
         />
       </div>
 
       <MonthlyAreaChart
         title="Peças por mês"
-        description="Volume do Corte em 2026, mês a mês."
+        description="Volume do Corte no recorte, mês a mês."
         labels={corte.porMes.map((row) => MONTH_LABELS[row.nome - 1])}
         series={[
           {
@@ -142,7 +157,7 @@ export default async function CortePage() {
             pecas: formatInt(row.pecas),
             responsavel: row.responsavel,
           }))}
-          empty="Nenhum pedido em produção"
+          empty="Nenhum pedido em produção neste recorte"
         />
       </section>
     </PageShell>

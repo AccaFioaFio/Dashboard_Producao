@@ -31,7 +31,7 @@ export function KpiCard({
   return (
     <div
       className={cn(
-        'card-surface flex flex-col gap-3 p-5',
+        'kpi-shine card-surface flex flex-col gap-3 p-5',
         alert &&
           'bg-destructive/[0.07] shadow-[inset_3px_0_0_0_var(--destructive)] ring-1 ring-destructive/25',
         !alert &&
@@ -44,7 +44,7 @@ export function KpiCard({
       </p>
       <p
         className={cn(
-          'text-3xl font-bold tracking-tight',
+          'font-mono text-3xl font-bold tracking-tight tabular-nums',
           alert && 'text-destructive',
           !alert && warning && 'text-[oklch(0.48_0.14_65)]',
           !alert && !warning && 'text-foreground',
@@ -56,7 +56,13 @@ export function KpiCard({
         <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p>
       ) : null}
       <div className="mt-auto h-1.5 overflow-hidden rounded-full bg-muted">
-        <div className={cn('h-full rounded-full', bar)} style={{ width: `${width}%` }} />
+        <div
+          className={cn(
+            'h-full rounded-full shadow-[0_0_16px_color-mix(in_oklch,var(--glow)_70%,transparent)]',
+            bar,
+          )}
+          style={{ width: `${width}%` }}
+        />
       </div>
     </div>
   )

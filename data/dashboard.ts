@@ -2,6 +2,7 @@ import 'server-only'
 
 import { cache } from 'react'
 import { getSqlite } from '@/db'
+import type { DashFilters, FilterOptions } from '@/lib/filters'
 import { isProducaoOrigem } from '@/lib/keys'
 import { YEAR } from '@/lib/paths'
 import type { FunilKpis, HeaderKpis, SerieMensal } from '@/lib/etl/types'
@@ -73,6 +74,131 @@ export type QualidadeRow = {
 function sqlite() {
   return getSqlite()
 }
+
+type SqlFilter = {
+  clauses: string[]
+  params: Record<string, unknown>
+}
+
+function emptyFilter(): SqlFilter {
+  return { clauses: ['1=1'], params: {} }
+}
+
+function likeContains(value: string) {
+  return `%${value.replaceAll('%', '').replaceAll('_', '')}%`
+}
+
+function applyPedidoFilters(
+  filter: SqlFilter,
+  alias: string,
+  filters: DashFilters,
+  cols: {
+    date?: string
+    canal?: boolean
+    cliente?: boolean
+    responsavel?: boolean
+    produto?: boolean
+    oficina?: boolean
+    pedido?: boolean
+  },
+) {
+  if (filters.mes && cols.date) {
+    filter.clauses.push(`CAST(substr(${alias}.${cols.date}, 6, 2) as INTEGER) = @mes`)
+    filter.params.mes = filters.mes
+  }
+  if (filters.canal && cols.canal) {
+    filter.clauses.push(`${alias}.canal = @canal`)
+    filter.params.canal = filters.canal
+  }
+  if (filters.cliente && cols.cliente) {
+    filter.clauses.push(`${alias}.cliente = @cliente`)
+    filter.params.cliente = filters.cliente
+  }
+  if (filters.responsavel && cols.responsavel) {
+    filter.clauses.push(`${alias}.responsavel = @responsavel`)
+    filter.params.responsavel = filters.responsavel
+  }
+  if (filters.produto && cols.produto) {
+    filter.clauses.push(`${alias}.produto = @produto`)
+    filter.params.produto = filters.produto
+  }
+  if (filters.oficina && cols.oficina) {
+    filter.clauses.push(`${alias}.oficina = @oficina`)
+    filter.params.oficina = filters.oficina
+  }
+  if (filters.q && cols.pedido) {
+    filter.clauses.push(`${alias}.pedido_norm LIKE @q`)
+    filter.params.q = likeContains(filters.q)
+  }
+}
+
+function whereSql(filter: SqlFilter) {
+  return filter.clauses.join(' AND ')
+}
+
+function runAll<T>(sql: string, params: Record<string, unknown>) {
+  const stmt = sqlite().prepare(sql)
+  return (Object.keys(params).length ? stmt.all(params) : stmt.all()) as T[]
+}
+
+function runGet<T>(sql: string, params: Record<string, unknown>) {
+  const stmt = sqlite().prepare(sql)
+  return (Object.keys(params).length ? stmt.get(params) : stmt.get()) as T
+}
+
+export const getFilterOptions = cache(async (): Promise<FilterOptions> => {
+  const db = sqlite()
+  const mesesRows = db
+    .prepare(
+      `SELECT DISTINCT CAST(substr(data, 6, 2) as INTEGER) as mes
+       FROM (
+         SELECT data FROM fato_corte_pedido
+         UNION SELECT data_producao FROM fato_costura
+         UNION SELECT data_producao FROM fato_revisao
+         UNION SELECT data_envio FROM fato_oficinas
+       )
+       WHERE data IS NOT NULL
+       ORDER BY mes`,
+    )
+    .all() as { mes: number }[]
+  const meses = mesesRows.map((row) => row.mes).filter((mes) => mes >= 1 && mes <= 12)
+  return {
+    meses: meses.length ? meses : [1, 2, 3, 4, 5, 6, 7, 8],
+    canais: (db.prepare('SELECT canal FROM dim_canal ORDER BY canal').all() as { canal: string }[])
+      .map((row) => row.canal)
+      .filter(Boolean),
+    clientes: (
+      db
+        .prepare(
+          `SELECT cliente FROM fato_corte_pedido
+           WHERE cliente IS NOT NULL AND trim(cliente) != ''
+           GROUP BY cliente ORDER BY SUM(pecas) DESC LIMIT 80`,
+        )
+        .all() as { cliente: string }[]
+    ).map((row) => row.cliente),
+    responsaveis: (
+      db
+        .prepare('SELECT responsavel FROM dim_responsavel ORDER BY responsavel')
+        .all() as { responsavel: string }[]
+    )
+      .map((row) => row.responsavel)
+      .filter(Boolean),
+    produtos: (
+      db
+        .prepare(
+          `SELECT produto FROM dim_produto
+           WHERE produto IS NOT NULL AND trim(produto) != ''
+           ORDER BY produto LIMIT 80`,
+        )
+        .all() as { produto: string }[]
+    ).map((row) => row.produto),
+    oficinas: (
+      db.prepare('SELECT oficina FROM dim_oficina ORDER BY oficina').all() as { oficina: string }[]
+    )
+      .map((row) => row.oficina)
+      .filter(Boolean),
+  }
+})
 
 export const getLatestCarga = cache(async (): Promise<CargaInfo | null> => {
   const row = sqlite()
@@ -281,89 +407,87 @@ export const getAlertas = cache(async () => {
   return { ultimaRevisao, ultimoEnvio, costuraHoje, revisaoHoje, year: YEAR }
 })
 
-export const getCorteBreakdown = cache(async (filters: { mes?: number; canal?: string }) => {
-  const db = sqlite()
-  const clauses = ['1=1']
-  const params: Record<string, unknown> = {}
-  if (filters.mes) {
-    clauses.push("CAST(substr(p.data, 6, 2) as INTEGER) = @mes")
-    params.mes = filters.mes
-  }
-  if (filters.canal) {
-    clauses.push('p.canal = @canal')
-    params.canal = filters.canal
-  }
-  const where = clauses.join(' AND ')
+export const getCorteBreakdown = cache(async (filters: DashFilters = {}) => {
+  const filter = emptyFilter()
+  applyPedidoFilters(filter, 'p', filters, {
+    date: 'data',
+    canal: true,
+    cliente: true,
+    responsavel: true,
+    pedido: true,
+  })
+  const where = whereSql(filter)
+  const { params } = filter
 
-  const porMes = db
-    .prepare(
-      `SELECT CAST(substr(data, 6, 2) as INTEGER) as nome, COALESCE(SUM(pecas), 0) as pecas, COUNT(*) as pedidos
-       FROM fato_corte_pedido WHERE data IS NOT NULL GROUP BY nome ORDER BY nome`,
-    )
-    .all() as { nome: number; pecas: number; pedidos: number }[]
-  const porCanal = db
-    .prepare(
-      `SELECT COALESCE(canal, '(sem canal)') as nome, COALESCE(SUM(pecas), 0) as pecas, COUNT(*) as pedidos
-       FROM fato_corte_pedido GROUP BY canal ORDER BY pecas DESC`,
-    )
-    .all() as NamedTotal[]
-  const porResponsavel = db
-    .prepare(
-      `SELECT COALESCE(responsavel, '(sem responsável)') as nome, COALESCE(SUM(pecas), 0) as pecas, COUNT(*) as pedidos
-       FROM fato_corte_pedido GROUP BY responsavel ORDER BY pecas DESC`,
-    )
-    .all() as NamedTotal[]
-  const porCliente = db
-    .prepare(
-      `SELECT COALESCE(cliente, '(sem cliente)') as nome, COALESCE(SUM(pecas), 0) as pecas, COUNT(*) as pedidos
-       FROM fato_corte_pedido GROUP BY cliente ORDER BY pecas DESC LIMIT 12`,
-    )
-    .all() as NamedTotal[]
+  const porMes = runAll<{ nome: number; pecas: number; pedidos: number }>(
+    `SELECT CAST(substr(p.data, 6, 2) as INTEGER) as nome, COALESCE(SUM(p.pecas), 0) as pecas, COUNT(*) as pedidos
+     FROM fato_corte_pedido p WHERE ${where} AND p.data IS NOT NULL GROUP BY nome ORDER BY nome`,
+    params,
+  )
+  const porCanal = runAll<NamedTotal>(
+    `SELECT COALESCE(p.canal, '(sem canal)') as nome, COALESCE(SUM(p.pecas), 0) as pecas, COUNT(*) as pedidos
+     FROM fato_corte_pedido p WHERE ${where} GROUP BY p.canal ORDER BY pecas DESC`,
+    params,
+  )
+  const porResponsavel = runAll<NamedTotal>(
+    `SELECT COALESCE(p.responsavel, '(sem responsável)') as nome, COALESCE(SUM(p.pecas), 0) as pecas, COUNT(*) as pedidos
+     FROM fato_corte_pedido p WHERE ${where} GROUP BY p.responsavel ORDER BY pecas DESC`,
+    params,
+  )
+  const porCliente = runAll<NamedTotal>(
+    `SELECT COALESCE(p.cliente, '(sem cliente)') as nome, COALESCE(SUM(p.pecas), 0) as pecas, COUNT(*) as pedidos
+     FROM fato_corte_pedido p WHERE ${where} GROUP BY p.cliente ORDER BY pecas DESC LIMIT 12`,
+    params,
+  )
 
-  const wip = db
-    .prepare(
-      `SELECT pedido_norm as pedidoNorm, data, status_vigente as statusVigente, pecas, canal, cliente, responsavel
-       FROM fato_corte_pedido WHERE status_vigente = 'EM PRODUÇÃO' ORDER BY pecas DESC`,
-    )
-    .all() as CortePedidoRow[]
-  const tecido = db
-    .prepare(
-      `SELECT l.pedido_norm as pedidoNorm, MAX(p.data) as data, MAX(p.cliente) as cliente,
-              l.status as statusVigente,
-              COALESCE(SUM(l.qtd_pecas), 0) as pecas,
-              COALESCE(SUM(l.metros), 0) as metros,
-              MAX(l.tecido) as tecido,
-              MAX(l.cod_tecido) as codTecido
-       FROM fato_corte_linha l
-       LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
-       WHERE l.status = 'AGUARDANDO TECIDO'
-       GROUP BY l.pedido_norm, l.status, COALESCE(l.cod_tecido, l.tecido)
-       ORDER BY metros DESC`,
-    )
-    .all() as TecidoPendenteRow[]
-  const porTecido = db
-    .prepare(
-      `SELECT COALESCE(NULLIF(trim(cod_tecido), ''), '(sem código)') as cod,
-              MAX(tecido) as nome,
-              COALESCE(SUM(metros), 0) as metros,
-              COALESCE(SUM(economia), 0) as economia,
-              COUNT(DISTINCT pedido_norm) as pedidos
-       FROM fato_corte_linha
-       WHERE tecido IS NOT NULL AND trim(tecido) != ''
-       GROUP BY COALESCE(NULLIF(trim(cod_tecido), ''), trim(tecido))
-       ORDER BY metros DESC
-       LIMIT 12`,
-    )
-    .all() as TecidoUsoRow[]
-
-  const canais = db
-    .prepare(
-      `SELECT canal FROM dim_canal ORDER BY canal`,
-    )
-    .all() as { canal: string }[]
-
-  void where
-  void params
+  const wip = runAll<CortePedidoRow>(
+    `SELECT p.pedido_norm as pedidoNorm, p.data, p.status_vigente as statusVigente, p.pecas, p.canal, p.cliente, p.responsavel
+     FROM fato_corte_pedido p WHERE ${where} AND p.status_vigente = 'EM PRODUÇÃO' ORDER BY p.pecas DESC`,
+    params,
+  )
+  const tecido = runAll<TecidoPendenteRow>(
+    `SELECT l.pedido_norm as pedidoNorm, MAX(p.data) as data, MAX(p.cliente) as cliente,
+            l.status as statusVigente,
+            COALESCE(SUM(l.qtd_pecas), 0) as pecas,
+            COALESCE(SUM(l.metros), 0) as metros,
+            MAX(l.tecido) as tecido,
+            MAX(l.cod_tecido) as codTecido
+     FROM fato_corte_linha l
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
+     WHERE ${where} AND l.status = 'AGUARDANDO TECIDO'
+     GROUP BY l.pedido_norm, l.status, COALESCE(l.cod_tecido, l.tecido)
+     ORDER BY metros DESC`,
+    params,
+  )
+  const porTecido = runAll<TecidoUsoRow>(
+    `SELECT COALESCE(NULLIF(trim(l.cod_tecido), ''), '(sem código)') as cod,
+            MAX(l.tecido) as nome,
+            COALESCE(SUM(l.metros), 0) as metros,
+            COALESCE(SUM(l.economia), 0) as economia,
+            COUNT(DISTINCT l.pedido_norm) as pedidos
+     FROM fato_corte_linha l
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
+     WHERE ${where} AND l.tecido IS NOT NULL AND trim(l.tecido) != ''
+     GROUP BY COALESCE(NULLIF(trim(l.cod_tecido), ''), trim(l.tecido))
+     ORDER BY metros DESC
+     LIMIT 12`,
+    params,
+  )
+  const resumo = runGet<{ pecas: number; pedidos: number; wipPedidos: number; wipPecas: number }>(
+    `SELECT COALESCE(SUM(p.pecas), 0) as pecas,
+            COUNT(*) as pedidos,
+            COALESCE(SUM(CASE WHEN p.status_vigente = 'EM PRODUÇÃO' THEN 1 ELSE 0 END), 0) as wipPedidos,
+            COALESCE(SUM(CASE WHEN p.status_vigente = 'EM PRODUÇÃO' THEN p.pecas ELSE 0 END), 0) as wipPecas
+     FROM fato_corte_pedido p WHERE ${where}`,
+    params,
+  )
+  const ocs = runGet<{ v: number }>(
+    `SELECT COUNT(*) as v
+     FROM fato_corte_linha l
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
+     WHERE ${where} AND l.is_header = 1`,
+    params,
+  )
 
   return {
     porMes,
@@ -373,7 +497,7 @@ export const getCorteBreakdown = cache(async (filters: { mes?: number; canal?: s
     wip,
     tecido,
     porTecido,
-    canais: canais.map((row) => row.canal),
+    resumo: { ...resumo, ocs: ocs.v },
   }
 })
 
@@ -399,8 +523,16 @@ export type TecidoCruzadoRow = {
   signusPedidos: number
 }
 
-export const getTecidos = cache(async () => {
+export const getTecidos = cache(async (filters: DashFilters = {}) => {
   const db = sqlite()
+  const pendingFilter = emptyFilter()
+  applyPedidoFilters(pendingFilter, 'p', filters, {
+    date: 'data',
+    canal: true,
+    cliente: true,
+    pedido: true,
+  })
+  const pendingWhere = whereSql(pendingFilter)
   const hasSignus = Boolean(
     db
       .prepare(
@@ -594,21 +726,20 @@ export const getTecidos = cache(async () => {
       }[])
     : []
 
-  const tecido = db
-    .prepare(
-      `SELECT l.pedido_norm as pedidoNorm, MAX(p.data) as data, MAX(p.cliente) as cliente,
-              l.status as statusVigente,
-              COALESCE(SUM(l.qtd_pecas), 0) as pecas,
-              COALESCE(SUM(l.metros), 0) as metros,
-              MAX(l.tecido) as tecido,
-              MAX(l.cod_tecido) as codTecido
-       FROM fato_corte_linha l
-       LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
-       WHERE l.status = 'AGUARDANDO TECIDO'
-       GROUP BY l.pedido_norm, l.status, COALESCE(l.cod_tecido, l.tecido)
-       ORDER BY metros DESC`,
-    )
-    .all() as TecidoPendenteRow[]
+  const tecido = runAll<TecidoPendenteRow>(
+    `SELECT l.pedido_norm as pedidoNorm, MAX(p.data) as data, MAX(p.cliente) as cliente,
+            l.status as statusVigente,
+            COALESCE(SUM(l.qtd_pecas), 0) as pecas,
+            COALESCE(SUM(l.metros), 0) as metros,
+            MAX(l.tecido) as tecido,
+            MAX(l.cod_tecido) as codTecido
+     FROM fato_corte_linha l
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
+     WHERE ${pendingWhere} AND l.status = 'AGUARDANDO TECIDO'
+     GROUP BY l.pedido_norm, l.status, COALESCE(l.cod_tecido, l.tecido)
+     ORDER BY metros DESC`,
+    pendingFilter.params,
+  )
 
   const porCanalSignus = hasSignus
     ? (db
@@ -647,80 +778,100 @@ function todayIso() {
   return (db.prepare(`SELECT date('now', 'localtime') as v`).get() as { v: string }).v
 }
 
-export const getCosturas = cache(async () => {
-  const db = sqlite()
-  const mix = db
-    .prepare(
-      `SELECT origem, origem_norm as origemNorm, COUNT(*) as lancamentos,
-              COALESCE(SUM(qtd_pecas), 0) as pecas, COUNT(DISTINCT pedido_norm) as pedidos
-       FROM fato_costura GROUP BY origem_norm ORDER BY pecas DESC`,
-    )
-    .all() as {
+export const getCosturas = cache(async (filters: DashFilters = {}) => {
+  const filter = emptyFilter()
+  applyPedidoFilters(filter, 'c', filters, {
+    date: 'data_producao',
+    responsavel: true,
+    produto: true,
+    pedido: true,
+  })
+  const where = whereSql(filter)
+  const { params } = filter
+  const mix = runAll<{
     origem: string
     origemNorm: string
     lancamentos: number
     pecas: number
     pedidos: number
-  }[]
-  const porResponsavel = db
-    .prepare(
-      `SELECT COALESCE(responsavel, '(sem)') as nome, COALESCE(SUM(qtd_pecas), 0) as pecas, COUNT(*) as pedidos
-       FROM fato_costura WHERE origem_norm = 'Producao'
-       GROUP BY responsavel ORDER BY pecas DESC`,
-    )
-    .all() as NamedTotal[]
+  }>(
+    `SELECT c.origem, c.origem_norm as origemNorm, COUNT(*) as lancamentos,
+            COALESCE(SUM(c.qtd_pecas), 0) as pecas, COUNT(DISTINCT c.pedido_norm) as pedidos
+     FROM fato_costura c WHERE ${where} GROUP BY c.origem_norm ORDER BY pecas DESC`,
+    params,
+  )
+  const porResponsavel = runAll<NamedTotal>(
+    `SELECT COALESCE(c.responsavel, '(sem)') as nome, COALESCE(SUM(c.qtd_pecas), 0) as pecas, COUNT(*) as pedidos
+     FROM fato_costura c WHERE ${where} AND c.origem_norm = 'Producao'
+     GROUP BY c.responsavel ORDER BY pecas DESC`,
+    params,
+  )
   const hoje = todayIso()
-  const doDia = db
-    .prepare(
-      `SELECT pedido_norm as pedido, qtd_pecas as pecas, responsavel, produto, origem
-       FROM fato_costura WHERE data_producao = ? AND origem_norm = 'Producao'
-       ORDER BY excel_row DESC`,
-    )
-    .all(hoje) as {
+  const doDia = runAll<{
     pedido: string
     pecas: number
     responsavel: string | null
     produto: string | null
     origem: string
-  }[]
-  return { mix, porResponsavel, doDia, hoje }
+  }>(
+    `SELECT c.pedido_norm as pedido, c.qtd_pecas as pecas, c.responsavel, c.produto, c.origem
+     FROM fato_costura c
+     WHERE ${where} AND c.data_producao = @hoje AND c.origem_norm = 'Producao'
+     ORDER BY c.excel_row DESC`,
+    { ...params, hoje },
+  )
+  const producao = runGet<{ pecas: number; pedidos: number }>(
+    `SELECT COALESCE(SUM(c.qtd_pecas), 0) as pecas, COUNT(DISTINCT c.pedido_norm) as pedidos
+     FROM fato_costura c WHERE ${where} AND c.origem_norm = 'Producao'`,
+    params,
+  )
+  return { mix, porResponsavel, doDia, hoje, producao }
 })
 
-export const getRevisao = cache(async () => {
-  const db = sqlite()
-  const porResponsavel = db
-    .prepare(
-      `SELECT COALESCE(responsavel, '(sem)') as nome, COALESCE(SUM(qtd_pecas), 0) as pecas, COUNT(*) as pedidos
-       FROM fato_revisao GROUP BY responsavel ORDER BY pecas DESC`,
-    )
-    .all() as NamedTotal[]
+export const getRevisao = cache(async (filters: DashFilters = {}) => {
+  const filter = emptyFilter()
+  applyPedidoFilters(filter, 'r', filters, {
+    date: 'data_producao',
+    responsavel: true,
+    produto: true,
+    pedido: true,
+  })
+  const where = whereSql(filter)
+  const { params } = filter
+  const porResponsavel = runAll<NamedTotal>(
+    `SELECT COALESCE(r.responsavel, '(sem)') as nome, COALESCE(SUM(r.qtd_pecas), 0) as pecas, COUNT(*) as pedidos
+     FROM fato_revisao r WHERE ${where} GROUP BY r.responsavel ORDER BY pecas DESC`,
+    params,
+  )
   const hoje = todayIso()
-  const doDia = db
-    .prepare(
-      `SELECT pedido_norm as pedido, qtd_pecas as pecas, responsavel, produto
-       FROM fato_revisao WHERE data_producao = ? ORDER BY excel_row DESC`,
-    )
-    .all(hoje) as {
+  const doDia = runAll<{
     pedido: string
     pecas: number
     responsavel: string | null
     produto: string | null
-  }[]
-  return { porResponsavel, doDia, hoje }
+  }>(
+    `SELECT r.pedido_norm as pedido, r.qtd_pecas as pecas, r.responsavel, r.produto
+     FROM fato_revisao r WHERE ${where} AND r.data_producao = @hoje ORDER BY r.excel_row DESC`,
+    { ...params, hoje },
+  )
+  const resumo = runGet<{ pecas: number; pedidos: number }>(
+    `SELECT COALESCE(SUM(r.qtd_pecas), 0) as pecas, COUNT(DISTINCT r.pedido_norm) as pedidos
+     FROM fato_revisao r WHERE ${where}`,
+    params,
+  )
+  return { porResponsavel, doDia, hoje, resumo }
 })
 
-export const getOficinas = cache(async () => {
-  const db = sqlite()
-  const ranking = db
-    .prepare(
-      `SELECT oficina as nome, COALESCE(SUM(qtd_pendentes), 0) as pecas,
-              COUNT(*) as pedidos, COALESCE(SUM(qtd_enviadas), 0) as enviadas,
-              COALESCE(SUM(qtd_retornadas), 0) as retornadas,
-              COALESCE(SUM(qtd_defeitos), 0) as defeitos,
-              COALESCE(SUM(valor_total), 0) as valor
-       FROM fato_oficinas GROUP BY oficina ORDER BY valor DESC, pecas DESC`,
-    )
-    .all() as {
+export const getOficinas = cache(async (filters: DashFilters = {}) => {
+  const filter = emptyFilter()
+  applyPedidoFilters(filter, 'o', filters, {
+    date: 'data_envio',
+    oficina: true,
+    pedido: true,
+  })
+  const where = whereSql(filter)
+  const { params } = filter
+  const ranking = runAll<{
     nome: string
     pecas: number
     pedidos: number
@@ -728,47 +879,76 @@ export const getOficinas = cache(async () => {
     retornadas: number
     defeitos: number
     valor: number
-  }[]
-  const sla = db
-    .prepare(
-      `SELECT
-         SUM(CASE WHEN status_entrega LIKE 'Em dia%' THEN 1 ELSE 0 END) as noPrazo,
-         SUM(CASE WHEN status_entrega LIKE '%Atrasad%' THEN 1 ELSE 0 END) as atraso,
-         COUNT(*) as lotes,
-         SUM(CASE WHEN qtd_pendentes > 0 THEN 1 ELSE 0 END) as abertos,
-         COALESCE(SUM(valor_total), 0) as valor
-       FROM fato_oficinas`,
-    )
-    .get() as {
+  }>(
+    `SELECT o.oficina as nome, COALESCE(SUM(o.qtd_pendentes), 0) as pecas,
+            COUNT(*) as pedidos, COALESCE(SUM(o.qtd_enviadas), 0) as enviadas,
+            COALESCE(SUM(o.qtd_retornadas), 0) as retornadas,
+            COALESCE(SUM(o.qtd_defeitos), 0) as defeitos,
+            COALESCE(SUM(o.valor_total), 0) as valor
+     FROM fato_oficinas o WHERE ${where} GROUP BY o.oficina ORDER BY valor DESC, pecas DESC`,
+    params,
+  )
+  const sla = runGet<{
     noPrazo: number
     atraso: number
     lotes: number
     abertos: number
     valor: number
+  }>(
+    `SELECT
+       SUM(CASE WHEN o.status_entrega LIKE 'Em dia%' THEN 1 ELSE 0 END) as noPrazo,
+       SUM(CASE WHEN o.status_entrega LIKE '%Atrasad%' THEN 1 ELSE 0 END) as atraso,
+       COUNT(*) as lotes,
+       SUM(CASE WHEN o.qtd_pendentes > 0 THEN 1 ELSE 0 END) as abertos,
+       COALESCE(SUM(o.valor_total), 0) as valor
+     FROM fato_oficinas o WHERE ${where}`,
+    params,
+  )
+  const enviadas = runGet<{ v: number }>(
+    `SELECT COALESCE(SUM(o.qtd_enviadas), 0) as v FROM fato_oficinas o WHERE ${where}`,
+    params,
+  ).v
+  const retornadas = runGet<{ v: number }>(
+    `SELECT COALESCE(SUM(o.qtd_retornadas), 0) as v FROM fato_oficinas o WHERE ${where}`,
+    params,
+  ).v
+  const pendentes = runGet<{ v: number }>(
+    `SELECT COALESCE(SUM(o.qtd_pendentes), 0) as v FROM fato_oficinas o WHERE ${where}`,
+    params,
+  ).v
+  const defeitos = runGet<{ v: number }>(
+    `SELECT COALESCE(SUM(o.qtd_defeitos), 0) as v FROM fato_oficinas o WHERE ${where}`,
+    params,
+  ).v
+  const semRetorno = runAll<{
+    oficina: string
+    pedido: string | null
+    enviadas: number
+    data: string
+  }>(
+    `SELECT o.oficina, o.pedido_norm as pedido, o.qtd_enviadas as enviadas, o.data_envio as data
+     FROM fato_oficinas o
+     WHERE ${where} AND o.qtd_enviadas > 0 AND o.qtd_retornadas = 0 AND o.qtd_pendentes = 0
+     ORDER BY o.qtd_enviadas DESC LIMIT 20`,
+    params,
+  )
+  const porMes = runAll<{ mes: number; enviadas: number; pendentes: number }>(
+    `SELECT CAST(substr(o.data_envio, 6, 2) as INTEGER) as mes,
+            COALESCE(SUM(o.qtd_enviadas), 0) as enviadas,
+            COALESCE(SUM(o.qtd_pendentes), 0) as pendentes
+     FROM fato_oficinas o WHERE ${where} GROUP BY mes ORDER BY mes`,
+    params,
+  )
+  return {
+    ranking,
+    sla,
+    enviadas,
+    retornadas,
+    pendentes,
+    defeitos,
+    semRetorno,
+    porMes,
   }
-  const enviadas = (
-    db.prepare('SELECT COALESCE(SUM(qtd_enviadas), 0) as v FROM fato_oficinas').get() as { v: number }
-  ).v
-  const retornadas = (
-    db.prepare('SELECT COALESCE(SUM(qtd_retornadas), 0) as v FROM fato_oficinas').get() as { v: number }
-  ).v
-  const semRetorno = db
-    .prepare(
-      `SELECT oficina, pedido_norm as pedido, qtd_enviadas as enviadas, data_envio as data
-       FROM fato_oficinas
-       WHERE qtd_enviadas > 0 AND qtd_retornadas = 0 AND qtd_pendentes = 0
-       ORDER BY qtd_enviadas DESC LIMIT 20`,
-    )
-    .all() as { oficina: string; pedido: string | null; enviadas: number; data: string }[]
-  const porMes = db
-    .prepare(
-      `SELECT CAST(substr(data_envio, 6, 2) as INTEGER) as mes,
-              COALESCE(SUM(qtd_enviadas), 0) as enviadas,
-              COALESCE(SUM(qtd_pendentes), 0) as pendentes
-       FROM fato_oficinas GROUP BY mes ORDER BY mes`,
-    )
-    .all() as { mes: number; enviadas: number; pendentes: number }[]
-  return { ranking, sla, enviadas, retornadas, semRetorno, porMes }
 })
 
 export const getQualidade = cache(async () => {

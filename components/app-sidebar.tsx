@@ -71,10 +71,11 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border/80">
         <div className="flex items-center gap-2 px-2 py-2 group-data-[collapsible=icon]:hidden">
-          <span className="size-2 shrink-0 rounded-full bg-chart-2" />
-          <p className="truncate text-xs text-sidebar-foreground/55">
-            Painel analítico
-          </p>
+          <span className="relative flex size-2.5">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-chart-2 opacity-40" />
+            <span className="relative inline-flex size-2.5 rounded-full bg-chart-2" />
+          </span>
+          <p className="truncate text-xs text-sidebar-foreground/55">Painel ao vivo · 2026</p>
         </div>
       </SidebarFooter>
       <SidebarRail />
