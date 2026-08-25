@@ -157,20 +157,29 @@ export default async function TecidosValoresPage({
               valorConsumo: formatMoney(row.valorConsumoEst),
               pedidos: formatInt(row.pedidos),
             },
-            children: row.pedidoRows.map((pedido) => ({
-              cells: {
-                pedido: pedido.pedidoNorm,
-                cliente: pedido.cliente,
-                consumo: formatMeters(pedido.consumo, pedido.consumo >= 10 ? 0 : 1),
-                baixa: formatMeters(pedido.baixa, pedido.baixa >= 10 ? 0 : 1),
-                delta: formatMeters(pedido.consumo - pedido.baixa, 0),
-                vu: pedido.valorUnitario == null ? '—' : formatMoney(pedido.valorUnitario),
-                valor: formatMoney(pedido.valorBaixa),
-                documento: documentosLabel(pedido.documentos),
-              },
-              warning: pedido.consumo > 0 && pedido.baixa === 0,
-              alert: pedido.baixa > 0 && pedido.consumo === 0,
-            })),
+            children: row.pedidoRows.map((pedido) => {
+              const alert = pedido.baixa > 0 && pedido.consumo === 0
+              const warning = pedido.consumo > 0 && pedido.baixa === 0
+              return {
+                cells: {
+                  pedido: pedido.pedidoNorm,
+                  cliente: pedido.cliente,
+                  consumo: formatMeters(pedido.consumo, pedido.consumo >= 10 ? 0 : 1),
+                  baixa: formatMeters(pedido.baixa, pedido.baixa >= 10 ? 0 : 1),
+                  delta: formatMeters(pedido.consumo - pedido.baixa, 0),
+                  vu: pedido.valorUnitario == null ? '—' : formatMoney(pedido.valorUnitario),
+                  valor: formatMoney(pedido.valorBaixa),
+                  documento: documentosLabel(pedido.documentos),
+                },
+                warning,
+                alert,
+                hint: alert
+                  ? 'Vermelho: há baixa no Signus, mas o Corte não registrou consumo neste pedido. Costuma ser lançamento auxiliar.'
+                  : warning
+                    ? 'Amarelo: o Corte registrou consumo, mas ainda não há baixa no Signus. Por isso o valor fica zerado.'
+                    : undefined,
+              }
+            }),
           }))}
           empty="Sem tecido com valor na carga"
           childEmpty="Nenhum pedido neste tecido"

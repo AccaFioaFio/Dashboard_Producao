@@ -1,8 +1,13 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 type CellValue = string | number | boolean | null
@@ -13,6 +18,7 @@ type ChildRow = {
   cells: Record<string, CellValue>
   alert?: boolean
   warning?: boolean
+  hint?: string
 }
 
 export type GroupedTableGroup = {
@@ -20,6 +26,7 @@ export type GroupedTableGroup = {
   cells: Record<string, CellValue>
   alert?: boolean
   warning?: boolean
+  hint?: string
   children: ChildRow[]
 }
 
@@ -35,15 +42,47 @@ function cellClass(col: TableColumn, header = false) {
   )
 }
 
-function rowTone(row: { alert?: boolean; warning?: boolean }, nested = false) {
+function rowTone(
+  row: { alert?: boolean; warning?: boolean; hint?: string },
+  nested = false,
+) {
   return cn(
     'border-t border-border/80 hover:bg-muted/40',
     nested && 'bg-muted/20',
+    row.hint && 'cursor-help',
     row.alert &&
       'bg-destructive/[0.07] shadow-[inset_3px_0_0_0_var(--destructive)] hover:bg-destructive/12',
     !row.alert &&
       row.warning &&
       'bg-chart-3/15 shadow-[inset_3px_0_0_0_var(--chart-3)] hover:bg-chart-3/25',
+  )
+}
+
+function TonedRow({
+  row,
+  nested,
+  className,
+  children,
+}: {
+  row: { alert?: boolean; warning?: boolean; hint?: string }
+  nested?: boolean
+  className?: string
+  children: ReactNode
+}) {
+  const rowClassName = cn(rowTone(row, nested), className)
+  if (!row.hint) {
+    return <tr className={rowClassName}>{children}</tr>
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger delay={250} render={<tr className={rowClassName} />}>
+        {children}
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs text-left leading-snug">
+        {row.hint}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -151,7 +190,7 @@ function GroupRows({
 }) {
   return (
     <>
-      <tr className={cn(rowTone(group), 'bg-muted/25 font-medium')}>
+      <TonedRow row={group} className="bg-muted/25 font-medium">
         <td className="w-px px-1.5 py-1">
           {canExpand ? (
             <Button
@@ -175,7 +214,7 @@ function GroupRows({
             {group.cells[col.key] ?? '—'}
           </td>
         ))}
-      </tr>
+      </TonedRow>
       {expanded ? (
         <tr className="border-t border-border/60">
           <td colSpan={columns.length + 1} className="bg-muted/15 px-3 py-2 pl-10">
@@ -192,13 +231,13 @@ function GroupRows({
                 </thead>
                 <tbody>
                   {group.children.map((child, index) => (
-                    <tr key={index} className={rowTone(child, true)}>
+                    <TonedRow key={index} row={child} nested>
                       {childColumns.map((col) => (
                         <td key={col.key} className={cellClass(col)}>
                           {child.cells[col.key] ?? '—'}
                         </td>
                       ))}
-                    </tr>
+                    </TonedRow>
                   ))}
                 </tbody>
               </table>
