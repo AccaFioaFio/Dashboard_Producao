@@ -6,13 +6,13 @@
 
 | Arquivo | Tabela | Filtro de ano |
 |---|---|---|
-| `...\PRODUÇÃO CORTE E COSTURA\PROGRAMAÇÃO CORTE E COSTURA .xlsx` | `DADOS_PRODUÇÃOFATO` (aba CORTE) | `DATA` ∈ 2026 (com `*` herdando a data do cabeçalho) |
+| `Arquivos do Excel/PROGRAMAÇÃO CORTE E COSTURA .xlsx` | `DADOS_PRODUÇÃOFATO` (aba CORTE) | `DATA` ∈ 2026 (com `*` herdando a data do cabeçalho) |
 | Idem, aba oculta **RELATORIO COSTURA** | `RELATORIO_COSTURA` | `Data Produção` ∈ 2026 |
 | Idem, aba oculta **RELATORIO REVISÃO** | `RELATORIO_REVISÃO` | `Data Produção` ∈ 2026 |
-| `...\Produção Oficinas.xlsx` | `TAB_OFICINAS` | `Data Envio` ∈ 2026 |
-| `...\Relatorio Signus\Movimentação Tecidos.xls` | `FatoTecidoSignus` (aba Movimentação Tecidos) | `Data de movimentação` ∈ 2026 e Linha = TECIDO |
+| `Arquivos do Excel/Produção Oficinas.xlsx` | `TAB_OFICINAS` | `Data Envio` ∈ 2026 |
+| `Arquivos do Excel/Movimentação Tecidos.xls` | `FatoTecidoSignus` (aba Movimentação Tecidos) | `Data de movimentação` ∈ 2026 e Linha = TECIDO |
 
-Os arquivos estão no OneDrive e mudam o dia inteiro. O usuário entra e clica em **Atualizar dados** (reflash). Depois do refresh, o recorte continua sendo só 2026.
+Os arquivos ficam na pasta `Arquivos do Excel` na raiz do projeto e mudam o dia inteiro. O usuário entra e clica em **Atualizar dados** (reflash). Depois do refresh, o recorte continua sendo só 2026.
 
 ---
 
@@ -152,7 +152,7 @@ Lilica: 708 enviadas, 0 retornadas e 0 pendentes — quebra de cadastro, vai par
 ## 3. Modelo de dados
 
 ```
-Excel OneDrive  →  cópia cache  →  filtro ano = 2026  →  fatos/dims  →  KPIs
+Excel (pasta Arquivos do Excel)  →  cópia cache  →  filtro ano = 2026  →  fatos/dims  →  KPIs
 ```
 
 Filtro de ano na transformação, não só no visual. Linha 2024/2025 nem entra no modelo da v1.
@@ -240,13 +240,13 @@ Filtros: mês 2026, canal, cliente, responsável, produto, oficina. Sem seletor 
 ## 5. Botão Atualizar dados
 
 1. Abre a última carga 2026 (se não houver cache, carrega).
-2. Clique copia os três arquivos do OneDrive para cache (não lê in-place): Corte `.xlsx`, Oficinas `.xlsx` e Signus `.xls`.
+2. Clique copia os três arquivos da pasta `Arquivos do Excel` (raiz do projeto) para cache (não lê in-place): Corte `.xlsx`, Oficinas `.xlsx` e Signus `.xls`.
 3. Aplica recorte **ano = 2026** + regras do §2 e §3.1.
 4. Mostra hora da leitura e `LastWriteTime` de cada arquivo.
 5. Falha de cópia: mantém a carga anterior.
 6. Lê as abas ocultas de costura e revisão, e a aba de movimentação de tecidos.
 
-Caminhos: `CORTE_XLSX`, `OFICINAS_XLSX`, `SIGNUS_XLS`. Cadastro completo de clientes e **saldo atual** de estoque de tecido fora da v1.
+Caminhos padrão: pasta `Arquivos do Excel` na raiz. Override opcional por `CORTE_XLSX`, `OFICINAS_XLSX`, `SIGNUS_XLS`. Cadastro completo de clientes e **saldo atual** de estoque de tecido fora da v1.
 
 ---
 

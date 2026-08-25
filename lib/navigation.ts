@@ -64,7 +64,7 @@ export const navigation: NavItem[] = [
     title: 'Configurações',
     href: '/configuracoes',
     icon: Settings,
-    description: 'Caminhos OneDrive, última carga e atualizar dados.',
+    description: 'Caminhos da pasta Arquivos do Excel, última carga e atualizar dados.',
   },
 ]
 

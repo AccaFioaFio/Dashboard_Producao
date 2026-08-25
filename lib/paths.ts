@@ -10,12 +10,11 @@ export const CACHE_DIR = path.join(DATA_DIR, 'cache')
 export const DB_PATH = path.join(DATA_DIR, 'producao.sqlite')
 export const MIGRATIONS_DIR = path.join(PROJECT_ROOT, 'drizzle')
 
-const DEFAULT_CORTE =
-  'C:\\Users\\opera\\OneDrive\\FIO A FIO\\RELATORIO\\PRODUÇÃO CORTE E COSTURA\\PROGRAMAÇÃO CORTE E COSTURA .xlsx'
-const DEFAULT_OFICINAS =
-  'C:\\Users\\opera\\OneDrive\\Produção Q\\00 - OFICINAS 2026\\Produção Oficinas.xlsx'
-const DEFAULT_SIGNUS =
-  'C:\\Users\\opera\\OneDrive\\Área de Trabalho\\1 - TABELA BASE PARA ATUALIZAÇÃO\\TABELAS  2 SEMESTRES 2026\\Relatorio Signus\\Movimentação Tecidos.xls'
+export const EXCEL_DIR = path.join(PROJECT_ROOT, 'Arquivos do Excel')
+
+const DEFAULT_CORTE = path.join(EXCEL_DIR, 'PROGRAMAÇÃO CORTE E COSTURA .xlsx')
+const DEFAULT_OFICINAS = path.join(EXCEL_DIR, 'Produção Oficinas.xlsx')
+const DEFAULT_SIGNUS = path.join(EXCEL_DIR, 'Movimentação Tecidos.xls')
 
 export function ensureDataDirs() {
   if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true })

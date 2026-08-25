@@ -39,7 +39,7 @@ export default async function Page() {
         <SectionPlaceholder
           icon={LayoutDashboard}
           title="Nenhuma carga 2026"
-          description="Clique em Atualizar dados para copiar as planilhas do OneDrive, aplicar o recorte de 2026 e gravar os fatos."
+          description="Clique em Atualizar dados para copiar as planilhas da pasta Arquivos do Excel, aplicar o recorte de 2026 e gravar os fatos."
         />
       </PageShell>
     )

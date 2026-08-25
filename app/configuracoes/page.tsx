@@ -14,7 +14,7 @@ export default async function ConfiguracoesPage() {
   return (
     <PageShell
       title="Configurações"
-      description="Fontes OneDrive e última carga 2026. O refresh copia Corte, Oficinas e Signus para cache; se a cópia falhar, a carga anterior permanece."
+      description="Fontes da pasta Arquivos do Excel e última carga 2026. O refresh copia Corte, Oficinas e Signus para cache; se a cópia falhar, a carga anterior permanece."
       actions={<RefreshForm />}
     >
       <dl className="card-surface grid gap-4 p-5 text-sm sm:grid-cols-2">
