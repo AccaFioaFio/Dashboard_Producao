@@ -13,7 +13,7 @@ import {
   formatInt,
   formatMeters,
   formatNumber,
-  shortTecido,
+  formatTecido,
 } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
 
@@ -131,7 +131,7 @@ export default async function TecidosPage({
         </p>
         <SimpleTable
           columns={[
-            { key: 'tecido', label: 'Tecido' },
+            { key: 'tecido', label: 'Tecido', wrap: true },
             { key: 'corte', label: 'Corte', numeric: true },
             { key: 'share', label: '% Corte', numeric: true },
             { key: 'signus', label: 'Signus', numeric: true },
@@ -139,7 +139,7 @@ export default async function TecidosPage({
             { key: 'pedidos', label: 'Pedidos', numeric: true },
           ]}
           rows={tecidos.porTecido.map((row) => ({
-            tecido: `${row.cod !== '(sem código)' ? `${row.cod} · ` : ''}${shortTecido(row.nome)}`,
+            tecido: formatTecido(row.cod, row.nome),
             corte: formatMeters(row.metros),
             share:
               metrosCorte > 0
@@ -197,13 +197,13 @@ export default async function TecidosPage({
         </p>
         <SimpleTable
           columns={[
-            { key: 'tecido', label: 'Tecido' },
+            { key: 'tecido', label: 'Tecido', wrap: true },
             { key: 'corte', label: 'Corte', numeric: true },
             { key: 'signus', label: 'Signus', numeric: true },
             { key: 'delta', label: 'Delta', numeric: true },
           ]}
           rows={tecidos.cruzados.map((row) => ({
-            tecido: `${row.cod !== '(sem código)' ? `${row.cod} · ` : ''}${shortTecido(row.nome)}`,
+            tecido: formatTecido(row.cod, row.nome),
             corte: formatMeters(row.corteMetros),
             signus: formatMeters(row.signusMetros),
             delta: formatMeters(row.corteMetros - row.signusMetros),
@@ -231,12 +231,12 @@ export default async function TecidosPage({
           <h2 className="text-sm font-medium">Signus sem código no Corte</h2>
           <SimpleTable
             columns={[
-              { key: 'tecido', label: 'Tecido' },
+              { key: 'tecido', label: 'Tecido', wrap: true },
               { key: 'signus', label: 'Signus', numeric: true },
               { key: 'pedidos', label: 'Pedidos', numeric: true },
             ]}
             rows={tecidos.signusSemCorte.map((row) => ({
-              tecido: `${row.cod} · ${shortTecido(row.nome)}`,
+              tecido: formatTecido(row.cod, row.nome),
               signus: formatMeters(row.signusMetros),
               pedidos: formatInt(row.signusPedidos),
             }))}
@@ -254,7 +254,7 @@ export default async function TecidosPage({
           columns={[
             { key: 'pedido', label: 'Pedido' },
             { key: 'cliente', label: 'Cliente' },
-            { key: 'tecido', label: 'Tecido' },
+            { key: 'tecido', label: 'Tecido', wrap: true },
             { key: 'metros', label: 'Metros', numeric: true },
             { key: 'pecas', label: 'Peças', numeric: true },
             { key: 'status', label: 'Status' },
@@ -262,7 +262,7 @@ export default async function TecidosPage({
           rows={tecidos.tecido.map((row) => ({
             pedido: row.pedidoNorm,
             cliente: row.cliente,
-            tecido: `${row.codTecido ? `${row.codTecido} · ` : ''}${shortTecido(row.tecido)}`,
+            tecido: formatTecido(row.codTecido, row.tecido),
             metros: formatNumber(row.metros, row.metros >= 100 ? 0 : 1),
             pecas: formatInt(row.pecas),
             status: row.statusVigente ?? 'AGUARDANDO TECIDO',

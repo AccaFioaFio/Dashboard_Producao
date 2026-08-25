@@ -6,7 +6,7 @@ import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
 import { FilterBar } from '@/components/filter-bar'
 import { getFilterOptions, getOficinas } from '@/data/dashboard'
-import { MONTH_LABELS, formatDate, formatInt, formatMoney, formatNumber } from '@/lib/format'
+import { MONTH_LABELS, formatDate, formatInt, formatMoney, formatMoneyCompact, formatNumber } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
 
 export const dynamic = 'force-dynamic'
@@ -41,7 +41,7 @@ export default async function OficinasPage({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Valor Total Pago"
-          value={formatMoney(oficinas.sla.valor)}
+          value={formatMoneyCompact(oficinas.sla.valor)}
           hint="Soma do valor lançado no recorte"
           tone="teal"
         />

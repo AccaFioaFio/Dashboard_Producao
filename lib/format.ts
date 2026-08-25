@@ -22,13 +22,34 @@ export function formatMoney(value: number) {
   }).format(value)
 }
 
+export function formatMoneyCompact(value: number) {
+  const abs = Math.abs(value)
+  if (abs >= 1_000_000) {
+    const sign = value < 0 ? '-' : ''
+    return `${sign}R$ ${formatNumber(abs / 1_000_000, 2)} mi`
+  }
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: abs >= 10_000 ? 0 : 2,
+    maximumFractionDigits: abs >= 10_000 ? 0 : 2,
+  }).format(value)
+}
+
 export function shortTecido(value: string | null | undefined) {
   if (!value) return '—'
-  let text = value.replace(/\s+/g, ' ').trim()
-  text = text.replace(/^[0-9A-Za-z]+\s*[-_]\s*/, '')
-  text = text.replace(/\s*\/\s*MAT[EÉ]RIA PRIMA.*$/i, '')
-  text = text.replace(/_+(FABRICA|GALP[AÃ]O|GONDOLA).*$/i, '')
-  return text.trim() || value.replace(/\s+/g, ' ').trim()
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+export function formatTecido(
+  cod: string | null | undefined,
+  nome: string | null | undefined,
+) {
+  const code = (cod ?? '').replace(/\s+/g, ' ').trim()
+  const name = shortTecido(nome)
+  if (code && code !== '(sem código)' && name !== '—') return `${code} · ${name}`
+  if (name !== '—') return name
+  return code || '—'
 }
 
 export function formatDate(iso: string | null | undefined) {

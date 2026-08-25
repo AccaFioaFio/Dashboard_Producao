@@ -805,17 +805,6 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
   }
 })
 
-export type TecidoValorRow = {
-  cod: string
-  nome: string | null
-  valorUnitario: number | null
-  consumo: number
-  baixa: number
-  valorBaixa: number
-  valorConsumoEst: number
-  pedidos: number
-}
-
 export type PedidoTecidoRow = {
   pedidoNorm: string
   cliente: string | null
@@ -829,27 +818,24 @@ export type PedidoTecidoRow = {
   movimentos: number
 }
 
+export type TecidoValorRow = {
+  cod: string
+  nome: string | null
+  valorUnitario: number | null
+  consumo: number
+  baixa: number
+  valorBaixa: number
+  valorConsumoEst: number
+  pedidos: number
+  pedidoRows: PedidoTecidoRow[]
+}
+
 export type TecidoDocumentoRow = {
   tipoDocumento: string | null
   movimentos: number
   metros: number
   valor: number
   pedidos: number
-}
-
-export type TecidoMovimentoRow = {
-  data: string
-  pedidoNorm: string | null
-  origemMov: string | null
-  cod: string
-  nome: string | null
-  tipoDocumento: string | null
-  tipoMovimento: string
-  qtd: number
-  metros: number
-  valorUnitario: number | null
-  valorTotal: number | null
-  isBaixa: number
 }
 
 export const getTecidosValores = cache(async (filters: DashFilters = {}) => {
@@ -906,9 +892,7 @@ export const getTecidosValores = cache(async (filters: DashFilters = {}) => {
     movimentosComValor: 0,
     hasValores,
     porTecido: [] as TecidoValorRow[],
-    porPedido: [] as PedidoTecidoRow[],
     porDocumento: [] as TecidoDocumentoRow[],
-    movimentos: [] as TecidoMovimentoRow[],
   }
   if (!hasSignus || !hasValores) return empty
 
@@ -986,6 +970,7 @@ export const getTecidosValores = cache(async (filters: DashFilters = {}) => {
       valorBaixa: 0,
       valorConsumoEst: 0,
       pedidos: row.pedidos,
+      pedidoRows: [],
     })
   }
   for (const row of signusTecidos) {
@@ -999,6 +984,7 @@ export const getTecidosValores = cache(async (filters: DashFilters = {}) => {
       valorBaixa: 0,
       valorConsumoEst: 0,
       pedidos: 0,
+      pedidoRows: [],
     }
     current.nome = current.nome || row.nome
     current.baixa = row.baixa
@@ -1008,30 +994,26 @@ export const getTecidosValores = cache(async (filters: DashFilters = {}) => {
       row.valorUnitario != null ? row.valorUnitario * current.consumo : 0
     tecidoMap.set(key, current)
   }
-  const porTecido = [...tecidoMap.values()]
-    .map((row) => ({
-      ...row,
-      valorConsumoEst:
-        row.valorUnitario != null ? row.valorUnitario * row.consumo : row.valorConsumoEst,
-    }))
-    .sort((a, b) => b.valorBaixa - a.valorBaixa || b.consumo - a.consumo)
-    .slice(0, 40)
-  const valorConsumoEst = porTecido.reduce((sum, row) => sum + row.valorConsumoEst, 0)
-
-  const cortePedidos = runAll<{
+  const cortePedidoTecido = runAll<{
+    cod: string
     pedidoNorm: string
     cliente: string | null
     canal: string | null
     consumo: number
-    pecas: number
   }>(
-    `SELECT p.pedido_norm as pedidoNorm, p.cliente, p.canal,
-            COALESCE(p.metros, 0) as consumo, COALESCE(p.pecas, 0) as pecas
-     FROM fato_corte_pedido p
-     WHERE ${corteWhere}`,
+    `SELECT COALESCE(NULLIF(trim(l.cod_tecido), ''), '(sem código)') as cod,
+            l.pedido_norm as pedidoNorm,
+            MAX(p.cliente) as cliente,
+            MAX(p.canal) as canal,
+            COALESCE(SUM(l.metros), 0) as consumo
+     FROM fato_corte_linha l
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
+     WHERE ${corteWhere} AND l.tecido IS NOT NULL AND trim(l.tecido) != ''
+     GROUP BY COALESCE(NULLIF(trim(l.cod_tecido), ''), trim(l.tecido)), l.pedido_norm`,
     params,
   )
-  const signusPedidos = runAll<{
+  const signusPedidoTecido = runAll<{
+    cod: string
     pedidoNorm: string
     baixa: number
     valorBaixa: number
@@ -1039,7 +1021,7 @@ export const getTecidosValores = cache(async (filters: DashFilters = {}) => {
     documentos: string | null
     movimentos: number
   }>(
-    `SELECT s.pedido_norm as pedidoNorm,
+    `SELECT s.cod_produto as cod, s.pedido_norm as pedidoNorm,
             COALESCE(SUM(CASE WHEN s.is_baixa = 1 THEN s.metros ELSE 0 END), 0) as baixa,
             COALESCE(SUM(CASE WHEN s.is_baixa = 1 THEN ${valorExpr} ELSE 0 END), 0) as valorBaixa,
             SUM(CASE WHEN s.is_baixa = 1 AND s.valor_unitario IS NOT NULL AND s.qtd != 0 THEN s.valor_unitario * s.qtd END)
@@ -1048,48 +1030,88 @@ export const getTecidosValores = cache(async (filters: DashFilters = {}) => {
             COUNT(*) as movimentos
      FROM fato_tecido_signus s
      WHERE ${signusWhere} AND s.pedido_norm IS NOT NULL AND trim(s.pedido_norm) != ''
-     GROUP BY s.pedido_norm`,
+     GROUP BY s.cod_produto, s.pedido_norm`,
     params,
   )
-
-  const pedidoMap = new Map<string, PedidoTecidoRow>()
-  for (const row of cortePedidos) {
-    pedidoMap.set(row.pedidoNorm, {
-      pedidoNorm: row.pedidoNorm,
-      cliente: row.cliente,
-      canal: row.canal,
-      consumo: row.consumo,
-      baixa: 0,
-      pecas: row.pecas,
-      valorBaixa: 0,
-      valorUnitario: null,
-      documentos: null,
-      movimentos: 0,
-    })
-  }
-  for (const row of signusPedidos) {
-    const current = pedidoMap.get(row.pedidoNorm) ?? {
-      pedidoNorm: row.pedidoNorm,
-      cliente: null,
-      canal: null,
-      consumo: 0,
-      baixa: 0,
-      pecas: 0,
-      valorBaixa: 0,
-      valorUnitario: null,
-      documentos: null,
-      movimentos: 0,
+  const pedidoByTecido = new Map<string, Map<string, PedidoTecidoRow>>()
+  const emptyPedido = (pedidoNorm: string): PedidoTecidoRow => ({
+    pedidoNorm,
+    cliente: null,
+    canal: null,
+    consumo: 0,
+    baixa: 0,
+    pecas: 0,
+    valorBaixa: 0,
+    valorUnitario: null,
+    documentos: null,
+    movimentos: 0,
+  })
+  function ensurePedido(cod: string, pedidoNorm: string) {
+    const tKey = normCod(cod)
+    let inner = pedidoByTecido.get(tKey)
+    if (!inner) {
+      inner = new Map()
+      pedidoByTecido.set(tKey, inner)
     }
+    let row = inner.get(pedidoNorm)
+    if (!row) {
+      row = emptyPedido(pedidoNorm)
+      inner.set(pedidoNorm, row)
+    }
+    return row
+  }
+  for (const row of cortePedidoTecido) {
+    const current = ensurePedido(row.cod, row.pedidoNorm)
+    current.cliente = row.cliente
+    current.canal = row.canal
+    current.consumo = row.consumo
+  }
+  for (const row of signusPedidoTecido) {
+    const current = ensurePedido(row.cod, row.pedidoNorm)
     current.baixa = row.baixa
     current.valorBaixa = row.valorBaixa
     current.valorUnitario = row.valorUnitario
     current.documentos = row.documentos
     current.movimentos = row.movimentos
-    pedidoMap.set(row.pedidoNorm, current)
   }
-  const porPedido = [...pedidoMap.values()]
-    .sort((a, b) => b.consumo - a.consumo || b.valorBaixa - a.valorBaixa)
-    .slice(0, 250)
+
+  const porTecido = [...tecidoMap.values()]
+    .map((row) => {
+      const inner = pedidoByTecido.get(normCod(row.cod))
+      const pedidoRows = inner
+        ? [...inner.values()].sort(
+            (a, b) => b.valorBaixa - a.valorBaixa || b.consumo - a.consumo,
+          )
+        : []
+      return {
+        ...row,
+        valorConsumoEst:
+          row.valorUnitario != null ? row.valorUnitario * row.consumo : row.valorConsumoEst,
+        pedidoRows,
+        pedidos: pedidoRows.length || row.pedidos,
+      }
+    })
+    .sort((a, b) => b.valorBaixa - a.valorBaixa || b.consumo - a.consumo)
+    .slice(0, 40)
+  const valorConsumoEst = porTecido.reduce((sum, row) => sum + row.valorConsumoEst, 0)
+
+  const cortePedidos = runAll<{
+    pedidoNorm: string
+  }>(
+    `SELECT p.pedido_norm as pedidoNorm FROM fato_corte_pedido p WHERE ${corteWhere}`,
+    params,
+  )
+  const signusPedidos = runAll<{
+    pedidoNorm: string
+    baixa: number
+  }>(
+    `SELECT s.pedido_norm as pedidoNorm,
+            COALESCE(SUM(CASE WHEN s.is_baixa = 1 THEN s.metros ELSE 0 END), 0) as baixa
+     FROM fato_tecido_signus s
+     WHERE ${signusWhere} AND s.pedido_norm IS NOT NULL AND trim(s.pedido_norm) != ''
+     GROUP BY s.pedido_norm`,
+    params,
+  )
   const pedidosCorte = cortePedidos.length
   const pedidosComBaixaSet = new Set(
     signusPedidos.filter((row) => row.baixa > 0).map((row) => row.pedidoNorm),
@@ -1110,19 +1132,6 @@ export const getTecidosValores = cache(async (filters: DashFilters = {}) => {
     params,
   )
 
-  const movimentos = runAll<TecidoMovimentoRow>(
-    `SELECT s.data, s.pedido_norm as pedidoNorm, s.origem_mov as origemMov,
-            s.cod_produto as cod, s.nome_produto as nome,
-            s.tipo_documento as tipoDocumento, s.tipo_movimento as tipoMovimento,
-            s.qtd, s.metros, s.valor_unitario as valorUnitario,
-            ${valorExpr} as valorTotal, s.is_baixa as isBaixa
-     FROM fato_tecido_signus s
-     WHERE ${signusWhere}
-     ORDER BY COALESCE(${valorExpr}, 0) DESC, s.data DESC
-     LIMIT 150`,
-    params,
-  )
-
   return {
     metrosCorte,
     pecasCorte,
@@ -1138,9 +1147,7 @@ export const getTecidosValores = cache(async (filters: DashFilters = {}) => {
     movimentosComValor: kpis.movimentosComValor ?? 0,
     hasValores,
     porTecido,
-    porPedido,
     porDocumento,
-    movimentos,
   }
 })
 

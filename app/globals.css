@@ -462,6 +462,12 @@
   }
 }
 
+@utility table-surface {
+  &:hover {
+    transform: none;
+  }
+}
+
 @keyframes shine-bar {
   from {
     transform: translateX(-120%);

@@ -31,7 +31,7 @@ export function KpiCard({
   return (
     <div
       className={cn(
-        'kpi-shine card-surface flex flex-col gap-3 p-5',
+        'kpi-shine card-surface flex flex-col gap-1.5 p-3.5',
         alert &&
           'bg-destructive/[0.07] shadow-[inset_3px_0_0_0_var(--destructive)] ring-1 ring-destructive/25',
         !alert &&
@@ -39,12 +39,12 @@ export function KpiCard({
           'bg-chart-3/20 shadow-[inset_3px_0_0_0_var(--chart-3)] ring-1 ring-chart-3/35',
       )}
     >
-      <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+      <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
         {label}
       </p>
       <p
         className={cn(
-          'font-mono text-3xl font-bold tracking-tight tabular-nums',
+          'font-mono text-xl font-bold tracking-tight tabular-nums',
           alert && 'text-destructive',
           !alert && warning && 'text-[oklch(0.48_0.14_65)]',
           !alert && !warning && 'text-foreground',
@@ -53,9 +53,9 @@ export function KpiCard({
         {value}
       </p>
       {hint ? (
-        <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p>
+        <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>
       ) : null}
-      <div className="mt-auto h-1.5 overflow-hidden rounded-full bg-muted">
+      <div className="mt-auto h-1 overflow-hidden rounded-full bg-muted">
         <div
           className={cn(
             'h-full rounded-full shadow-[0_0_16px_color-mix(in_oklch,var(--glow)_70%,transparent)]',
