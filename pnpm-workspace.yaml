@@ -2,3 +2,6 @@ allowBuilds:
   better-sqlite3: true
   esbuild: true
   msw: false
+
+overrides:
+  hono: 4.12.25
