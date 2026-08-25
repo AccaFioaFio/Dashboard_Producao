@@ -5,7 +5,8 @@ import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
 import { FilterBar } from '@/components/filter-bar'
-import { getFilterOptions, getHeaderKpis, getTecidos } from '@/data/dashboard'
+import { TecidosValoresButton } from '@/components/tecidos-valores-nav'
+import { getFilterOptions, getTecidos } from '@/data/dashboard'
 import {
   MONTH_LABELS,
   TIPO_TECIDO_LABEL,
@@ -25,8 +26,7 @@ export default async function TecidosPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   const filters = parseFilters(await searchParams)
-  const [header, tecidos, options] = await Promise.all([
-    getHeaderKpis(),
+  const [tecidos, options] = await Promise.all([
     getTecidos(filters),
     getFilterOptions(),
   ])
@@ -41,7 +41,12 @@ export default async function TecidosPage({
     <PageShell
       title="Tecidos"
       description="Consumo apontado no Corte versus baixa real no Signus. Só Linha = TECIDO entra no fato Signus; a baixa oficial é Produção (insumos) + SAIDA FF/AC/TC."
-      actions={<RefreshForm />}
+      actions={
+        <>
+          <TecidosValoresButton filters={filters} />
+          <RefreshForm />
+        </>
+      }
     >
       <FilterBar
         pathname="/tecidos"
@@ -54,7 +59,7 @@ export default async function TecidosPage({
         <KpiCard
           label="Consumo no Corte"
           value={formatMeters(metrosCorte)}
-          hint="SUM de MTS / TECIDOS na programação 2026"
+          hint="SUM de MTS / TECIDOS no recorte"
           tone="teal"
         />
         <KpiCard
@@ -78,9 +83,9 @@ export default async function TecidosPage({
         />
         <KpiCard
           label="Aguardando tecido"
-          value={`${formatInt(header?.tecidoPedidos ?? 0)} / ${formatMeters(header?.tecidoMetros ?? 0)}`}
-          hint={`${formatInt(header?.tecidoPecas ?? 0)} pçs com status AGUARDANDO TECIDO`}
-          alert={(header?.tecidoPedidos ?? 0) > 0}
+          value={`${formatInt(tecidos.tecidoPedidos)} / ${formatMeters(tecidos.tecidoMetros)}`}
+          hint={`${formatInt(tecidos.tecidoPecas)} pçs com status AGUARDANDO TECIDO`}
+          alert={tecidos.tecidoPedidos > 0}
         />
         <KpiCard
           label="Retorno do corte"

@@ -69,5 +69,9 @@ export const navigation: NavItem[] = [
 ]
 
 export function findNavItem(href: string): NavItem | undefined {
-  return navigation.find((item) => item.href === href)
+  const exact = navigation.find((item) => item.href === href)
+  if (exact) return exact
+  return navigation
+    .filter((item) => item.href !== '/' && href.startsWith(`${item.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0]
 }

@@ -247,11 +247,15 @@ export function replaceSnapshot(
       INSERT INTO fato_tecido_signus (
         movimento_id, data, es, qtd, metros, cod_produto, nome_produto,
         almox, categoria, linha, unidade, tipo_movimento, tipo_norm,
-        canal_norm, pedido_norm, origem_mov, is_baixa, excel_row
+        canal_norm, pedido_norm, origem_mov, is_baixa,
+        valor_unitario, valor_total, valor_unitario_liq, valor_total_liq,
+        tipo_documento, tipo_documento_sigla, excel_row
       ) VALUES (
         @movimentoId, @data, @es, @qtd, @metros, @codProduto, @nomeProduto,
         @almox, @categoria, @linha, @unidade, @tipoMovimento, @tipoNorm,
-        @canalNorm, @pedidoNorm, @origemMov, @isBaixa, @excelRow
+        @canalNorm, @pedidoNorm, @origemMov, @isBaixa,
+        @valorUnitario, @valorTotal, @valorUnitarioLiq, @valorTotalLiq,
+        @tipoDocumento, @tipoDocumentoSigla, @excelRow
       )
     `)
     for (const group of chunk(snapshot.tecidosSignus)) {

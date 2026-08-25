@@ -21,10 +21,32 @@ const FALLBACK_COLS = {
   data: 15,
   es: 17,
   qtd: 18,
+  custoBruto: 22,
+  valorTotalBruto: 26,
   tipo: 29,
   origemMov: 30,
   linha: 36,
+  valorTotalContabil: 40,
+  valorUnitario: 41,
+  valorTotalLiq: 42,
+  valorUnitarioLiq: 43,
+  tipoDocSigla: 47,
+  tipoDocumento: 48,
   unidade: 51,
+}
+
+function pickMoney(...values: unknown[]) {
+  for (const value of values) {
+    const parsed = asNumber(value)
+    if (parsed != null) return parsed
+  }
+  return null
+}
+
+function resolveTotal(total: number | null, unitario: number | null, qtd: number) {
+  if (total != null && total !== 0) return total
+  if (unitario != null && qtd) return unitario * qtd
+  return total
 }
 
 function col(map: Map<string, number>, aliases: string[], fallback: number) {
@@ -114,6 +136,38 @@ export function parseSignusTecidos(workbook: XLSX.WorkBook) {
   const colOrig = col(map, ['ORIG MOV'], FALLBACK_COLS.origemMov)
   const colLinha = col(map, ['LINHA'], FALLBACK_COLS.linha)
   const colUm = col(map, ['UNIDADE DE MEDIDA'], FALLBACK_COLS.unidade)
+  const colVu = col(
+    map,
+    ['VALOR UNITARIO CONTABIL BRUTO', 'CUSTO BRUTO'],
+    FALLBACK_COLS.valorUnitario,
+  )
+  const colVuLiq = col(
+    map,
+    ['VALOR UNITARIO CONTABIL LIQUIDO', 'CUSTO LIQUIDO'],
+    FALLBACK_COLS.valorUnitarioLiq,
+  )
+  const colVt = col(
+    map,
+    [
+      'VALOR TOTAL BRUTO DA MOVIMENT',
+      'VALOR TOTAL CONTABIL BRUTO',
+    ],
+    FALLBACK_COLS.valorTotalBruto,
+  )
+  const colVtLiq = col(
+    map,
+    [
+      'VALOR TOTAL LIQUIDO DA MOVIMENT',
+      'VALOR TOTAL CONTABIL LIQUIDO',
+    ],
+    FALLBACK_COLS.valorTotalLiq,
+  )
+  const colDoc = col(map, ['TIPO DE DOCUMENTO'], FALLBACK_COLS.tipoDocumento)
+  const colDocSigla = col(
+    map,
+    ['TIPO DE DOCUMENTO - SIGLA', 'TIPO DE DOCUMENTO SIGLA'],
+    FALLBACK_COLS.tipoDocSigla,
+  )
 
   const movimentos: SignusTecidoMovimento[] = []
 
@@ -140,6 +194,18 @@ export function parseSignusTecidos(workbook: XLSX.WorkBook) {
     const unidade = asText(cell(values, colUm))
     const qtd = asNumber(cell(values, colQtd)) ?? 0
     const isBaixa = tipoNorm === 'baixa_producao' || tipoNorm === 'baixa_canal'
+    const valorUnitario = pickMoney(cell(values, colVu), cell(values, FALLBACK_COLS.custoBruto))
+    const valorUnitarioLiq = pickMoney(cell(values, colVuLiq))
+    const valorTotal = resolveTotal(
+      pickMoney(cell(values, colVt), cell(values, FALLBACK_COLS.valorTotalContabil)),
+      valorUnitario,
+      qtd,
+    )
+    const valorTotalLiq = resolveTotal(
+      pickMoney(cell(values, colVtLiq)),
+      valorUnitarioLiq,
+      qtd,
+    )
 
     movimentos.push({
       excelRow: i + 1,
@@ -160,6 +226,12 @@ export function parseSignusTecidos(workbook: XLSX.WorkBook) {
       pedidoNorm: parsePedidoOrigemSignus(cell(values, colOrig)),
       origemMov: asText(cell(values, colOrig)),
       isBaixa,
+      valorUnitario,
+      valorTotal,
+      valorUnitarioLiq,
+      valorTotalLiq,
+      tipoDocumento: asText(cell(values, colDoc)),
+      tipoDocumentoSigla: asText(cell(values, colDocSigla)),
     })
   }
 

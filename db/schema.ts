@@ -175,6 +175,12 @@ export const fatoTecidoSignus = sqliteTable(
     pedidoNorm: text('pedido_norm'),
     origemMov: text('origem_mov'),
     isBaixa: integer('is_baixa', { mode: 'boolean' }).notNull().default(false),
+    valorUnitario: real('valor_unitario'),
+    valorTotal: real('valor_total'),
+    valorUnitarioLiq: real('valor_unitario_liq'),
+    valorTotalLiq: real('valor_total_liq'),
+    tipoDocumento: text('tipo_documento'),
+    tipoDocumentoSigla: text('tipo_documento_sigla'),
     excelRow: integer('excel_row').notNull(),
   },
   (table) => [
@@ -182,6 +188,7 @@ export const fatoTecidoSignus = sqliteTable(
     index('idx_signus_cod').on(table.codProduto),
     index('idx_signus_data').on(table.data),
     index('idx_signus_tipo').on(table.tipoNorm),
+    index('idx_signus_documento').on(table.tipoDocumento),
   ],
 )
 

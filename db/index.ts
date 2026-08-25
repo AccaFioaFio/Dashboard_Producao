@@ -24,7 +24,12 @@ function applyMigrations(connection: Database.Database) {
       .map((row) => (row as { name: string }).name),
   )
 
-  const files = ['0000_init.sql', '0001_cod_tecido.sql', '0002_tecido_signus.sql']
+  const files = [
+    '0000_init.sql',
+    '0001_cod_tecido.sql',
+    '0002_tecido_signus.sql',
+    '0003_signus_valores.sql',
+  ]
   for (const file of files) {
     if (applied.has(file)) continue
     const sql = readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8')

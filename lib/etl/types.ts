@@ -127,6 +127,12 @@ export type SignusTecidoMovimento = {
   pedidoNorm: string | null
   origemMov: string | null
   isBaixa: boolean
+  valorUnitario: number | null
+  valorTotal: number | null
+  valorUnitarioLiq: number | null
+  valorTotalLiq: number | null
+  tipoDocumento: string | null
+  tipoDocumentoSigla: string | null
 }
 
 export type Snapshot = {

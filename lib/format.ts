@@ -76,3 +76,24 @@ export const TIPO_TECIDO_LABEL: Record<string, string> = {
   outras_saidas: 'Outras saídas',
   outras_entradas: 'Outras entradas',
 }
+
+export function tipoDocumentoLabel(value: string | null | undefined) {
+  const raw = (value ?? '').replace(/\s+/g, ' ').trim()
+  if (!raw) return 'Sem tipo de documento'
+  const folded = raw
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toUpperCase()
+  if (folded.includes('INVENT')) return 'Inventário'
+  if (folded.includes('NOTA FISCAL') && folded.includes('ENTRADA')) {
+    return 'Nota fiscal — entrada'
+  }
+  if (folded.includes('NOTA FISCAL') && folded.includes('SAIDA')) {
+    return 'Nota fiscal — saída'
+  }
+  if (folded.includes('TRANSFER')) return 'Transferência de estoque'
+  if (folded.includes('LANCTO') || folded.includes('LANCAMENTO')) {
+    return 'Lançamento auxiliar'
+  }
+  return raw
+}
