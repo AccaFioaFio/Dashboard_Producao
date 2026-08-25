@@ -9,7 +9,7 @@ import {
   normalizePedido,
   normalizeStatus,
 } from '@/lib/keys'
-import { YEAR } from '@/lib/paths'
+import { YEAR } from '@/lib/year'
 import { asNumber, headerIndex, sheetNameFold } from '@/lib/etl/excel'
 import type {
   CorteLinha,

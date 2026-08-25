@@ -4,7 +4,8 @@ import { cache } from 'react'
 import { getSqlite } from '@/db'
 import type { DashFilters, FilterOptions } from '@/lib/filters'
 import { isProducaoOrigem } from '@/lib/keys'
-import { YEAR } from '@/lib/paths'
+import { ensureCloudDatabase } from '@/lib/cloud/carga'
+import { YEAR } from '@/lib/year'
 import type { FunilKpis, HeaderKpis, SerieMensal } from '@/lib/etl/types'
 
 export type CargaInfo = {
@@ -173,6 +174,7 @@ function runGet<T>(sql: string, params: Record<string, unknown>) {
 }
 
 export const getFilterOptions = cache(async (): Promise<FilterOptions> => {
+  await ensureCloudDatabase()
   const db = sqlite()
   const mesesRows = db
     .prepare(
@@ -227,6 +229,7 @@ export const getFilterOptions = cache(async (): Promise<FilterOptions> => {
 })
 
 export const getLatestCarga = cache(async (): Promise<CargaInfo | null> => {
+  await ensureCloudDatabase()
   const row = sqlite()
     .prepare(
       `SELECT id, lida_em as lidaEm, corte_path as cortePath, oficinas_path as oficinasPath,
@@ -246,6 +249,7 @@ export const getLatestCarga = cache(async (): Promise<CargaInfo | null> => {
 
 export const getHeaderKpis = cache(async (): Promise<HeaderKpis | null> => {
   try {
+    await ensureCloudDatabase()
     const db = sqlite()
   const pecasCortadas =
     (db.prepare('SELECT COALESCE(SUM(pecas), 0) as v FROM fato_corte_pedido').get() as { v: number }).v
@@ -326,6 +330,7 @@ export const getHeaderKpis = cache(async (): Promise<HeaderKpis | null> => {
 })
 
 export const getFunil = cache(async (): Promise<FunilKpis | null> => {
+  await ensureCloudDatabase()
   const db = sqlite()
   const corte = (
     db.prepare('SELECT COUNT(*) as v FROM dim_pedido WHERE no_corte = 1').get() as { v: number }
@@ -374,6 +379,7 @@ export const getFunil = cache(async (): Promise<FunilKpis | null> => {
 })
 
 export const getSerieMensal = cache(async (): Promise<SerieMensal[]> => {
+  await ensureCloudDatabase()
   const db = sqlite()
   const cortadas = db
     .prepare(
@@ -407,6 +413,7 @@ export const getSerieMensal = cache(async (): Promise<SerieMensal[]> => {
 })
 
 export const getAlertas = cache(async () => {
+  await ensureCloudDatabase()
   const db = sqlite()
   const ultimaRevisao = (
     db.prepare('SELECT MAX(data_producao) as v FROM fato_revisao').get() as { v: string | null }
@@ -434,6 +441,7 @@ export const getAlertas = cache(async () => {
 })
 
 export const getCorteBreakdown = cache(async (filters: DashFilters = {}) => {
+  await ensureCloudDatabase()
   const filter = emptyFilter()
   applyPedidoFilters(filter, 'p', filters, {
     date: 'data',
@@ -566,6 +574,7 @@ export type TecidoCruzadoRow = {
 }
 
 export const getTecidos = cache(async (filters: DashFilters = {}) => {
+  await ensureCloudDatabase()
   const db = sqlite()
   const corteFilter = emptyFilter()
   applyPedidoFilters(corteFilter, 'p', filters, {
@@ -857,6 +866,7 @@ export type TecidoDocumentoRow = {
 }
 
 export const getTecidosValores = cache(async (filters: DashFilters = {}) => {
+  await ensureCloudDatabase()
   const db = sqlite()
   const corteFilter = emptyFilter()
   applyPedidoFilters(corteFilter, 'p', filters, {
@@ -1175,6 +1185,7 @@ function todayIso() {
 }
 
 export const getCosturas = cache(async (filters: DashFilters = {}) => {
+  await ensureCloudDatabase()
   const filter = emptyFilter()
   applyPedidoFilters(filter, 'c', filters, {
     date: 'data_producao',
@@ -1225,6 +1236,7 @@ export const getCosturas = cache(async (filters: DashFilters = {}) => {
 })
 
 export const getRevisao = cache(async (filters: DashFilters = {}) => {
+  await ensureCloudDatabase()
   const filter = emptyFilter()
   applyPedidoFilters(filter, 'r', filters, {
     date: 'data_producao',
@@ -1259,6 +1271,7 @@ export const getRevisao = cache(async (filters: DashFilters = {}) => {
 })
 
 export const getOficinas = cache(async (filters: DashFilters = {}) => {
+  await ensureCloudDatabase()
   const filter = emptyFilter()
   applyPedidoFilters(filter, 'o', filters, {
     date: 'data_envio',
@@ -1348,6 +1361,7 @@ export const getOficinas = cache(async (filters: DashFilters = {}) => {
 })
 
 export const getQualidade = cache(async () => {
+  await ensureCloudDatabase()
   const db = sqlite()
   const resumo = db
     .prepare(

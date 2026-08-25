@@ -65,6 +65,21 @@ export function getDb() {
   return db
 }
 
+export function resetSqlite() {
+  try {
+    sqlite?.close()
+  } catch {
+    // Ignore close errors from a leftover cloud restore.
+  }
+  sqlite = null
+  db = null
+}
+
+export function checkpointSqlite() {
+  const connection = getSqlite()
+  connection.pragma('wal_checkpoint(TRUNCATE)')
+}
+
 export function dbExists() {
   return existsSync(DB_PATH)
 }

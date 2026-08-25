@@ -8,7 +8,7 @@ import {
   foldSignus,
   parsePedidoOrigemSignus,
 } from '@/lib/keys'
-import { YEAR } from '@/lib/paths'
+import { YEAR } from '@/lib/year'
 import type { SignusTecidoMovimento, TipoTecidoNorm } from '@/lib/etl/types'
 
 const FALLBACK_COLS = {

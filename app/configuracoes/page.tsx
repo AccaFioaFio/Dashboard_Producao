@@ -14,7 +14,7 @@ export default async function ConfiguracoesPage() {
   return (
     <PageShell
       title="Configurações"
-      description="Fontes da pasta Arquivos do Excel e última carga 2026. O refresh copia Corte, Oficinas e Signus para cache; se a cópia falhar, a carga anterior permanece."
+      description="Neste PC o refresh lê a pasta Arquivos do Excel. No site da Vercel, envie as três planilhas; a carga fica gravada no Blob Store."
       actions={<RefreshForm />}
     >
       <dl className="card-surface grid gap-3 p-3 text-sm sm:grid-cols-2">

@@ -1,11 +1,16 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
 
-export const YEAR = 2026
+export { YEAR } from '@/lib/year'
+export { CLOUD_DB_BLOB, CLOUD_SNAPSHOT_BLOB } from '@/lib/cloud/constants'
 
 export const PROJECT_ROOT = process.cwd()
 
-export const DATA_DIR = path.join(PROJECT_ROOT, 'data')
+export const IS_CLOUD = process.env.VERCEL === '1'
+
+export const DATA_DIR = IS_CLOUD
+  ? path.join('/tmp', 'dashboard-data')
+  : path.join(PROJECT_ROOT, 'data')
 export const CACHE_DIR = path.join(DATA_DIR, 'cache')
 export const DB_PATH = path.join(DATA_DIR, 'producao.sqlite')
 export const MIGRATIONS_DIR = path.join(PROJECT_ROOT, 'drizzle')

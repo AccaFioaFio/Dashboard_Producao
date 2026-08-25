@@ -181,3 +181,13 @@ export type SerieMensal = {
   costura: number
   revisao: number
 }
+
+export type SnapshotPayload = {
+  snapshot: Snapshot
+  cortePath: string
+  oficinasPath: string
+  signusPath: string
+  corteLastWrite: string
+  oficinasLastWrite: string
+  signusLastWrite: string
+}

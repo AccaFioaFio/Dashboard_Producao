@@ -1,4 +1,4 @@
-import { YEAR } from '@/lib/paths'
+import { YEAR } from '@/lib/year'
 
 export function toIsoDate(value: unknown): string | null {
   if (value == null || value === '') return null

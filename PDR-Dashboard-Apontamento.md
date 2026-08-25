@@ -1,5 +1,8 @@
 # PDR — Dashboard de Apontamento da Produção (somente 2026)
 
+**Este arquivo é o contrato dos números** (KPI, funil, invariantes).  
+**Como o leitor recebe a carga:** `PRD.md` e `PLAN.md`. Se a UX de atualização conflitar, o `PRD.md` prevalece.
+
 **Produto:** Dashboard de acompanhamento e apontamento (corte, costura, revisão e oficinas)  
 **Período oficial:** **01/01/2026 a 24/08/2026** (agosto ainda em curso)  
 **Regra de recorte:** 2024 e 2025 saem da carga analítica. O dashboard v1 não mostra, não soma e não cruza outros anos.
@@ -237,16 +240,13 @@ Filtros: mês 2026, canal, cliente, responsável, produto, oficina. Sem seletor 
 
 ---
 
-## 5. Botão Atualizar dados
+## 5. Carga (transporte) — ver `PRD.md`
 
-1. Abre a última carga 2026 (se não houver cache, carrega).
-2. Clique copia os três arquivos da pasta `Arquivos do Excel` (raiz do projeto) para cache (não lê in-place): Corte `.xlsx`, Oficinas `.xlsx` e Signus `.xls`.
-3. Aplica recorte **ano = 2026** + regras do §2 e §3.1.
-4. Mostra hora da leitura e `LastWriteTime` de cada arquivo.
-5. Falha de cópia: mantém a carga anterior.
-6. Lê as abas ocultas de costura e revisão, e a aba de movimentação de tecidos.
+O recorte **ano = 2026** e as regras do §2 e §3.1 valem em qualquer transporte.
 
-Caminhos padrão: pasta `Arquivos do Excel` na raiz. Override opcional por `CORTE_XLSX`, `OFICINAS_XLSX`, `SIGNUS_XLS`. Cadastro completo de clientes e **saldo atual** de estoque de tecido fora da v1.
+O leitor **não** envia planilha e **não** depende do botão Atualizar. Publicação: processo neste PC observa os arquivos, copia para cache (Excel aberto não lê in-place), valida invariantes e publica a carga pronta na nuvem. Falha mantém a carga anterior. Abas ocultas de costura/revisão e Signus entram na leitura.
+
+Caminhos: origem real dos três arquivos (`CORTE_XLSX`, `OFICINAS_XLSX`, `SIGNUS_XLS`). Blob Store na Vercel (private) para o site **consumir** a carga já pronta. Cadastro completo de clientes e **saldo atual** de estoque de tecido fora da v1.
 
 ---
 
