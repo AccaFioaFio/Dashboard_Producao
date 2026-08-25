@@ -21,21 +21,40 @@ const DEFAULT_CORTE = path.join(EXCEL_DIR, 'PROGRAMAÇÃO CORTE E COSTURA .xlsx'
 const DEFAULT_OFICINAS = path.join(EXCEL_DIR, 'Produção Oficinas.xlsx')
 const DEFAULT_SIGNUS = path.join(EXCEL_DIR, 'Movimentação Tecidos.xls')
 
+export type SourceFilePaths = {
+  corte: string
+  oficinas: string
+  signus: string
+}
+
+function resolveSourcePath(configured: string | undefined, fallback: string) {
+  const raw = configured?.trim() || fallback
+  return path.isAbsolute(raw) ? raw : path.resolve(PROJECT_ROOT, raw)
+}
+
+export function sourceFilePaths(): SourceFilePaths {
+  return {
+    corte: resolveSourcePath(process.env.CORTE_XLSX, DEFAULT_CORTE),
+    oficinas: resolveSourcePath(process.env.OFICINAS_XLSX, DEFAULT_OFICINAS),
+    signus: resolveSourcePath(process.env.SIGNUS_XLS, DEFAULT_SIGNUS),
+  }
+}
+
 export function ensureDataDirs() {
   if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true })
   if (!existsSync(CACHE_DIR)) mkdirSync(CACHE_DIR, { recursive: true })
 }
 
 export function corteXlsxPath() {
-  return process.env.CORTE_XLSX?.trim() || DEFAULT_CORTE
+  return sourceFilePaths().corte
 }
 
 export function oficinasXlsxPath() {
-  return process.env.OFICINAS_XLSX?.trim() || DEFAULT_OFICINAS
+  return sourceFilePaths().oficinas
 }
 
 export function signusXlsPath() {
-  return process.env.SIGNUS_XLS?.trim() || DEFAULT_SIGNUS
+  return sourceFilePaths().signus
 }
 
 export function cachePath(filename: string) {

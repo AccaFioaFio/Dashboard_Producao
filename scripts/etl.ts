@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { loadLocalEnv } from '../lib/load-env'
 import { refreshFromExcel } from '../lib/etl/refresh'
 import { corteXlsxPath, oficinasXlsxPath, signusXlsPath } from '../lib/paths'
 import { computeFunil, computeHeaderKpis, computeSerieMensal, checkInvariants } from '../lib/etl/kpis'
@@ -6,6 +7,7 @@ import { diffGolden } from '../lib/etl/golden'
 import { parseWorkbookFiles } from '../lib/etl/snapshot'
 
 async function main() {
+  loadLocalEnv()
   const mode = process.argv[2] ?? 'refresh'
   if (mode === 'golden') {
     const corte = corteXlsxPath()

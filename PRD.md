@@ -136,6 +136,17 @@ Manutenção excepcional (PC desligado, Blob vazio na primeira vez) pode existir
 
 ---
 
+## 11. Como deixar o publicador ligado (este PC)
+
+1. No `.env` ou `.env.local`: `BLOB_READ_WRITE_TOKEN` (Blob Store da Vercel) e, se preciso, os três caminhos absolutos da origem.
+2. Terminal na pasta do projeto: `pnpm carga:watch` — deixa a janela aberta.
+3. Ou crie uma tarefa do Windows para iniciar `pnpm carga:watch` com o login.
+4. Uma vez: `pnpm carga:publish` publica a carga atual sem ficar observando.
+
+Sem este PC ligado (e sem o processo), o site não recebe Excel novo. Isso é esperado.
+
+---
+
 ## 9. Aceite
 
 - [ ] Um leitor em outro dispositivo abre o site e vê a última carga boa **sem enviar arquivo e sem senha**.

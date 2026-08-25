@@ -8,6 +8,8 @@
     "start": "next start",
     "db:migrate": "tsx -e \"import { getSqlite } from './db/index.ts'; getSqlite(); console.log('ok')\"",
     "etl": "tsx scripts/etl.ts",
+    "carga:publish": "tsx scripts/publish-carga.ts",
+    "carga:watch": "tsx scripts/publish-carga.ts --watch",
     "test:kpis": "tsx scripts/verify-kpis.ts"
   },
   "dependencies": {

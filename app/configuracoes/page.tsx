@@ -14,9 +14,20 @@ export default async function ConfiguracoesPage() {
   return (
     <PageShell
       title="Configurações"
-      description="Neste PC o refresh lê a pasta Arquivos do Excel. No site da Vercel, envie as três planilhas; a carga fica gravada no Blob Store."
+      description="Quem consulta o dashboard não envia planilha. Neste PC, pnpm carga:watch lê a origem e publica a carga na nuvem."
       actions={<RefreshForm />}
     >
+      <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+        Deixe o publicador ligado neste computador (terminal ou tarefa do
+        Windows): <span className="font-mono text-xs">pnpm carga:watch</span>.
+        Sem o processo no ar, o site fica na última carga boa. Coloque{' '}
+        <span className="font-mono text-xs">BLOB_READ_WRITE_TOKEN</span> no{' '}
+        <span className="font-mono text-xs">.env</span> local (o mesmo Blob da
+        Vercel) e, se a fábrica grava no OneDrive, os caminhos absolutos{' '}
+        <span className="font-mono text-xs">CORTE_XLSX</span>,{' '}
+        <span className="font-mono text-xs">OFICINAS_XLSX</span> e{' '}
+        <span className="font-mono text-xs">SIGNUS_XLS</span>.
+      </p>
       <dl className="card-surface grid gap-3 p-3 text-sm sm:grid-cols-2">
         <div className="flex flex-col gap-1 sm:col-span-2">
           <dt className="text-xs text-muted-foreground">CORTE_XLSX</dt>

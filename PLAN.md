@@ -33,21 +33,10 @@ O que falta é **tirar o humano do meio** (upload no navegador / clique no site)
 
 Objetivo: salvar o Excel → carga pronta na nuvem, sem abrir o site.
 
-1. **Script de publicação** (ex.: `scripts/publish-carga.ts`, npm `pnpm carga:publish`):
-   - Lê os caminhos reais (`CORTE_XLSX` / `OFICINAS_XLSX` / `SIGNUS_XLS`, hoje em `lib/paths.ts`).
-   - Reusa `refreshFromExcel` + `persistCloudDb`.
-   - Exige `BLOB_READ_WRITE_TOKEN` no `.env` **local** (o mesmo store da Vercel). Sem token, falha claro: a nuvem não atualiza.
-   - Log: last write de cada arquivo, `lidaEm`, ok/erro. Não imprime o token.
-
-2. **Watcher** (ex.: `pnpm carga:watch`):
-   - Observa `mtime` dos três arquivos (chokidar ou `fs.watch` + debounce ~5–10 s).
-   - Se a cópia falhar porque o Excel está aberto, espera e tenta de novo (backoff). Não publica carga pela metade.
-   - Ignora mudança se os três `mtime` forem iguais aos da última publicação bem-sucedida.
-   - Um publish por vez (fila de 1).
-
-3. **Origem real:** se a fábrica grava no OneDrive, o `.env` local aponta para esses três caminhos. A pasta `Arquivos do Excel` deixa de ser passo obrigatório.
-
-4. **Como deixar ligado:** instrução curta no PRD/configurações — tarefa do Windows ou terminal `pnpm carga:watch` neste PC. Sem PC ligado, o site congela na última carga boa (aviso da Fase 2).
+1. [x] **Script de publicação** — `pnpm carga:publish` (`scripts/publish-carga.ts`). Reusa `refreshFromExcel` + `persistCloudDb`. Exige `BLOB_READ_WRITE_TOKEN`. Log com last write / `lidaEm` / erro; não imprime o token.
+2. [x] **Watcher** — `pnpm carga:watch`. Debounce 8 s, poll 30 s, retry com backoff se o Excel estiver aberto, ignora o mesmo mtime da última publicação ok, um publish por vez.
+3. [x] **Origem real** — `CORTE_XLSX` / `OFICINAS_XLSX` / `SIGNUS_XLS` (absolutos no OneDrive, se for o caso). Relativos resolvem na raiz do projeto.
+4. [x] **Como deixar ligado** — `PRD.md` §11 e tela Configurações.
 
 **Fora desta fase:** parse mais rápido, UI nova, Graph/Power Automate.
 

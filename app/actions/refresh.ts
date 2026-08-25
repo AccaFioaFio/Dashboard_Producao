@@ -5,8 +5,6 @@ import { readCloudSnapshot } from '@/lib/cloud/carga'
 import { updateSecretOk } from '@/lib/cloud/secret'
 import { applySnapshotPayload, refreshFromExcel, type RefreshResult } from '@/lib/etl/refresh'
 
-export const maxDuration = 300
-
 export async function atualizarDados(
   _prev: RefreshResult | null = null,
   _formData?: FormData,

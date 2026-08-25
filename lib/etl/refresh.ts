@@ -96,7 +96,7 @@ export async function refreshFromExcel(): Promise<RefreshResult> {
       error instanceof Error ? error.message : 'Falha ao copiar os arquivos Excel'
     return {
       ok: false,
-      error: `Cópia da pasta Arquivos do Excel falhou; a carga anterior foi mantida. ${message}`,
+      error: `Cópia da origem dos Excel falhou; a carga anterior foi mantida. ${message}`,
     }
   }
 

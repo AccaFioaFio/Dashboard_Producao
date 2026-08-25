@@ -50,6 +50,8 @@ export const viewport: Viewport = {
   themeColor: '#3d2e8a',
 }
 
+export const maxDuration = 300
+
 export default function RootLayout({
   children,
 }: Readonly<{
