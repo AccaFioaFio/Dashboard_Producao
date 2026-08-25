@@ -545,6 +545,57 @@
   pointer-events: none;
 }
 
+.action-glow {
+  display: inline-flex;
+  border-radius: calc(var(--radius) + 2px);
+  animation: action-pulse 2.2s ease-in-out infinite;
+}
+
+.action-glow-face {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-color: color-mix(in oklch, var(--glow) 65%, var(--border)) !important;
+}
+
+.action-glow-face::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 -45%;
+  width: 40%;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    color-mix(in oklch, var(--shine) 80%, white),
+    color-mix(in oklch, white 55%, transparent),
+    transparent
+  );
+  animation: shine-bar 2.6s ease-in-out infinite;
+}
+
+.action-glow-face > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes action-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in oklch, var(--glow) 50%, white 12%),
+      0 0 12px color-mix(in oklch, var(--glow) 55%, transparent),
+      0 0 24px color-mix(in oklch, var(--glow) 28%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px color-mix(in oklch, var(--glow) 85%, white 10%),
+      0 0 20px color-mix(in oklch, var(--glow) 80%, transparent),
+      0 0 38px color-mix(in oklch, var(--glow) 42%, transparent);
+  }
+}
+
 [data-layout='compacto'] .kpi-shine::after,
 [data-layout='compacto'] .page-shell {
   animation: none;

@@ -9,10 +9,12 @@ export function TecidosValoresButton({ filters }: { filters: DashFilters }) {
   const query = filtersToSearch(filters).toString()
   const href = query ? `/tecidos/valores?${query}` : '/tecidos/valores'
   return (
-    <Button variant="outline" render={<Link href={href} />}>
-      <Banknote />
-      Valores do tecido
-    </Button>
+    <span className="action-glow">
+      <Button className="action-glow-face" render={<Link href={href} />}>
+        <Banknote />
+        Valores do tecido
+      </Button>
+    </span>
   )
 }
 
@@ -20,9 +22,11 @@ export function TecidosMetrosButton({ filters }: { filters: DashFilters }) {
   const query = filtersToSearch(filters).toString()
   const href = query ? `/tecidos?${query}` : '/tecidos'
   return (
-    <Button variant="outline" render={<Link href={href} />}>
-      <ArrowLeft />
-      Voltar aos metros
-    </Button>
+    <span className="action-glow">
+      <Button className="action-glow-face" render={<Link href={href} />}>
+        <ArrowLeft />
+        Voltar aos metros
+      </Button>
+    </span>
   )
 }

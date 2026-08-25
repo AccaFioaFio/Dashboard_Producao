@@ -11,10 +11,12 @@ export function RefreshForm() {
 
   return (
     <form action={action} className="flex flex-col items-end gap-1">
-      <Button type="submit" disabled={pending}>
-        <RefreshCw className={pending ? 'animate-spin' : undefined} />
-        {pending ? 'Atualizando…' : 'Atualizar dados'}
-      </Button>
+      <span className="action-glow">
+        <Button type="submit" disabled={pending} className="action-glow-face">
+          <RefreshCw className={pending ? 'animate-spin' : undefined} />
+          {pending ? 'Atualizando…' : 'Atualizar dados'}
+        </Button>
+      </span>
       <StatusMessage state={state} />
     </form>
   )
