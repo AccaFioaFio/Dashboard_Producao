@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Guia do publicador — outro PC</title>
+  <style>
+    @page { size: A4; margin: 16mm 16mm 18mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Calibri, Arial, sans-serif;
+      font-size: 11.5pt;
+      line-height: 1.45;
+      color: #1a1a1a;
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1 { font-size: 20pt; margin: 0 0 6px; }
+    h2 { font-size: 14pt; margin: 22px 0 8px; border-bottom: 2px solid #5b21b6; padding-bottom: 4px; color: #4c1d95; }
+    h3 { font-size: 12pt; margin: 16px 0 6px; color: #5b21b6; }
+    p, li { margin: 0 0 8px; }
+    .sub { color: #444; font-size: 11pt; margin-bottom: 18px; }
+    .box {
+      background: #f5f3ff;
+      border: 1px solid #ddd6fe;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin: 10px 0 14px;
+    }
+    .warn {
+      background: #fff7ed;
+      border: 1px solid #fdba74;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin: 10px 0 14px;
+    }
+    .ok {
+      background: #ecfdf5;
+      border: 1px solid #6ee7b7;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin: 10px 0 14px;
+    }
+    code, pre {
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 9.5pt;
+    }
+    code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
+    pre {
+      background: #111827;
+      color: #f9fafb;
+      padding: 12px 14px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    ol.passos > li { margin-bottom: 12px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 14px; font-size: 10.5pt; }
+    th, td { border: 1px solid #d1d5db; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #f5f3ff; }
+    .small { font-size: 10pt; color: #444; }
+    footer { margin-top: 28px; font-size: 9.5pt; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Guia do publicador — outro PC</h1>
+  <p class="sub">Dashboard Produção · como a planilha chega no site sem enviar ficheiro no navegador.<br />
+  Use este PDF no PC do trabalho. No Cursor, peça: <em>“leia docs/Guia-publicador-outro-PC.md e me ajude neste PC”</em>.</p>
+
+  <h2>1. Em uma frase</h2>
+  <p>O site na Vercel <strong>não lê o Excel</strong>. Um programa neste computador (o <strong>publicador / vigia</strong>) lê as três planilhas, monta um banco e envia para o Blob. Quem abre o dashboard só recarrega a página.</p>
+  <div class="box">
+    <strong>Excel salvo neste PC</strong> → terminal com o vigia → <strong>Blob na Vercel</strong> → o site mostra os números.
+  </div>
+
+  <h2>2. As três peças (não misture)</h2>
+  <table>
+    <tr><th>Peça</th><th>O que é</th><th>O que você faz</th></tr>
+    <tr>
+      <td>Código (GitHub)</td>
+      <td>O programa do dashboard e do vigia.</td>
+      <td>Clone ou <code>git pull</code> uma vez. Não é a planilha.</td>
+    </tr>
+    <tr>
+      <td>Números (Blob)</td>
+      <td>Arquivo <code>dashboard/producao.sqlite</code> na nuvem.</td>
+      <td>O vigia atualiza sozinho quando o Excel é salvo.</td>
+    </tr>
+    <tr>
+      <td>Segredos e caminhos (<code>.env.local</code>)</td>
+      <td>Token do Blob + pastas das planilhas <strong>deste</strong> PC.</td>
+      <td>Criar de novo em cada máquina. <strong>Não vai no Git</strong>.</td>
+    </tr>
+  </table>
+  <div class="warn">
+    <strong>Se o PC desligar</strong> ou o terminal fechar: o site continua no ar, com a <strong>última carga boa</strong>. Só para de atualizar até o vigia voltar em algum PC.
+  </div>
+  <p>Só <strong>um</strong> computador deve ter o vigia ligado. Notebook e PC do trabalho ao mesmo tempo brigam para publicar.</p>
+
+  <h2>3. O que você NÃO precisa fazer de novo</h2>
+  <ul>
+    <li>Criar outro Blob na Vercel (já existe: <code>dashboard-producao1-blob</code>, Private, GRU1).</li>
+    <li>Colocar o token outra vez em Environment Variables da Vercel (já está no projeto para o <strong>site</strong> ler o Blob).</li>
+    <li>Escolher / enviar planilha no navegador.</li>
+    <li><strong>Fazer deploy a cada atualização de Excel.</strong> Deploy reconstrói o <em>código</em> do site. Salvar a planilha é só <em>dado</em>: o vigia manda para o Blob; ninguém precisa de <code>git push</code> nem Redeploy.</li>
+  </ul>
+
+  <h2>4. Passo a passo no PC novo</h2>
+  <p>Faça na ordem. Pasta do projeto = a pasta que contém <code>package.json</code>.</p>
+
+  <h3>Passo A — Trazer o código</h3>
+  <p>Repositório: <code>https://github.com/AccaFioaFio/Dashboard_Producao</code></p>
+  <ul>
+    <li>Se a pasta <strong>não existe</strong>: clone (GitHub Desktop ou <code>git clone</code>).</li>
+    <li>Se a pasta <strong>já existe</strong>: abra o terminal nela e rode <code>git pull</code>.</li>
+  </ul>
+  <p class="small">O <code>.env.local</code> <strong>não</strong> vem no clone/pull. É normal. Você cria no passo C.</p>
+
+  <h3>Passo B — Instalar pacotes (uma vez nesta máquina)</h3>
+  <p>No terminal, <strong>dentro da pasta do projeto</strong>:</p>
+  <pre>pnpm install</pre>
+  <p>Espere aparecer algo como <code>Done in …</code>, <strong>sem</strong> a palavra <code>ERR_</code> no final.</p>
+  <div class="warn">
+    Não rode <code>pnpm dev</code> / <code>npm run dev</code> ao mesmo tempo que o install. Isso trava o ficheiro <code>better-sqlite3</code> e aparece <code>EPERM</code>. Feche o site local, depois instale de novo.
+  </div>
+  <p>Evite <code>pnpm carga:watch</code> neste PC se o pnpm tentar reinstalar pacotes sozinho. Use o comando do passo E.</p>
+
+  <h3>Passo C — Criar o ficheiro <code>.env.local</code></h3>
+  <p>Na raiz do projeto (junto do <code>package.json</code>), crie <code>.env.local</code>. <strong>Não</strong> cole nada no <code>package.json</code>.</p>
+  <p>Conteúdo (troque caminhos e cole o token de verdade):</p>
+  <pre>BLOB_READ_WRITE_TOKEN=vercel_blob_rw_COLE_AQUI
+BLOB_STORE_ID=store_qviaeEZFcFgswkZZ
+CORTE_XLSX="C:/Users/SEU_USUARIO/OneDrive/.../PROGRAMAÇÃO CORTE E COSTURA .xlsx"
+OFICINAS_XLSX="C:/Users/SEU_USUARIO/OneDrive/.../Produção Oficinas.xlsx"
+SIGNUS_XLS="C:/Users/SEU_USUARIO/OneDrive/.../Movimentação Tecidos.xls"</pre>
+  <ul>
+    <li>Caminhos <strong>absolutos deste PC</strong>, com aspas e barras <code>/</code> (não <code>\</code>).</li>
+    <li>Os caminhos do notebook <strong>não servem</strong> no PC do trabalho.</li>
+    <li>O token da Vercel é o <strong>mesmo</strong> em todos os PCs (é o mesmo Blob).</li>
+  </ul>
+
+  <h3>Passo D — Copiar o token (sem errar o campo)</h3>
+  <ol>
+    <li>Vercel → projeto <code>dashboard-producao1</code> → Storage → Blob <code>dashboard-producao1-blob</code>.</li>
+    <li>Aba <strong>.env.local</strong> (não “Create Private Blob”).</li>
+    <li>Olho / Show secrets no canto da caixa. Ícone de copiar.</li>
+    <li>No Value da Vercel, se estiver a <em>adicionar variável</em>: a Key já é <code>BLOB_READ_WRITE_TOKEN</code>; o Value é <strong>só</strong> <code>vercel_blob_rw_...</code>, sem <code>BLOB_READ_WRITE_TOKEN=</code> e sem aspas.</li>
+    <li>No ficheiro <code>.env.local</code> deste PC, a linha fica: <code>BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...</code> (pode ter aspas; o script tira).</li>
+  </ol>
+  <p class="small">Não cole o token no chat nem no Git. Se vazar, gere outro no Blob e atualize o <code>.env.local</code>.</p>
+
+  <h3>Passo E — Ligar o vigia (o “ponto 4” do dia a dia)</h3>
+  <p>Isso não é deploy. É deixar um programa <strong>acordado</strong> o expediente todo, olhando as três planilhas.</p>
+  <pre>npx tsx scripts/publish-carga.ts --watch</pre>
+  <p><strong>Tem que aparecer:</strong></p>
+  <pre>watcher no ar. Ctrl+C para parar. Este PC precisa ficar ligado.
+corte    C:/Users/.../PROGRAMAÇÃO CORTE E COSTURA .xlsx
+oficinas C:/Users/.../Produção Oficinas.xlsx
+signus   C:/Users/.../Movimentação Tecidos.xls</pre>
+  <div class="ok">
+    A janela fica <strong>ocupada</strong>: o prompt <code>PS C:\...&gt;</code> <strong>não</strong> volta. Não feche, não dê Ctrl+C, não desligue o PC no meio do dia.
+  </div>
+  <p>Se os três caminhos ainda forem os do notebook, o <code>.env.local</code> deste PC está errado. Se o prompt voltar na hora, o vigia <strong>morreu</strong> — rode o mesmo comando de novo. <strong>Não cole</strong> a mensagem de erro de volta no terminal (o PowerShell tenta executar o texto e aparece “AT command”, “not recognized”, etc.).</p>
+  <p>Quem aponta no Excel só precisa <strong>salvar</strong>. Em até ~2 minutos, recarregue o site (Ctrl+Shift+R). Não escolha ficheiro no navegador.</p>
+
+  <h3>Passo F — Conferir no site</h3>
+  <p>Abra <code>https://dashboard-producao1.vercel.app/configuracoes</code> (janela anônima se precisar).</p>
+  <ul>
+    <li><strong>Última leitura</strong> deve ter data/hora, não <code>—</code>.</li>
+    <li>Os caminhos <code>/var/task/Arquivos do Excel/...</code> na nuvem são <strong>normais</strong>: o site na Vercel não tem o Excel; ele lê o Blob. Ignore esses caminhos.</li>
+  </ul>
+
+  <h2>5. Rotina</h2>
+  <table>
+    <tr><th>Quando</th><th>O que fazer</th></tr>
+    <tr><td>Começo do expediente (PC já configurado)</td><td>Só o passo E: o comando <code>--watch</code> e deixar a janela aberta.</td></tr>
+    <tr><td>Alguém salvou o Excel</td><td>Nada no Git. Recarregar o site depois de 1–2 min.</td></tr>
+    <tr><td>Fim do expediente</td><td>Pode fechar o terminal e desligar. O site fica na última carga.</td></tr>
+    <tr><td>Trocar de máquina no dia seguinte</td><td>No PC que for usar: passo E. Não ligue o vigia nos dois.</td></tr>
+    <tr><td>Mudou o código (bug, tela)</td><td>Aí sim: commit, push, esperar Deploy <strong>Ready</strong> na Vercel.</td></tr>
+  </table>
+
+  <h2>6. Problemas comuns</h2>
+  <table>
+    <tr><th>O que aparece</th><th>Significado</th><th>O que fazer</th></tr>
+    <tr>
+      <td><code>Cannot find module 'better-sqlite3'</code></td>
+      <td>Pacotes não instalados ou install incompleto.</td>
+      <td>Fechar o <code>dev</code>. Rodar <code>pnpm install</code> até <code>Done</code>. Depois o passo E.</td>
+    </tr>
+    <tr>
+      <td><code>EPERM</code> no <code>better-sqlite3</code></td>
+      <td>Outro Node (<code>next dev</code>) está com o ficheiro aberto.</td>
+      <td>Ctrl+C no terminal do <code>dev</code>. Instalar de novo.</td>
+    </tr>
+    <tr>
+      <td>Site com Última leitura <code>—</code></td>
+      <td>O site não leu o Blob (token no projeto / deploy antigo).</td>
+      <td>Vercel → Environment Variables: <code>BLOB_READ_WRITE_TOKEN</code> e <code>BLOB_STORE_ID</code> em Production. Redeploy. Isto é do <em>site</em>, não do Excel.</td>
+    </tr>
+    <tr>
+      <td>Token no <code>package.json</code> (JSON vermelho)</td>
+      <td>Ficheiro errado.</td>
+      <td>Apagar a linha. Colar só no <code>.env.local</code>.</td>
+    </tr>
+  </table>
+
+  <h2>7. Para o assistente no Cursor (não apagar)</h2>
+  <p class="small">Quando o utilizador pedir ajuda noutra máquina: ler este ficheiro e o irmão <code>docs/Guia-publicador-outro-PC.md</code>.</p>
+  <ul class="small">
+    <li>Repo: <code>AccaFioaFio/Dashboard_Producao</code> · site: <code>https://dashboard-producao1.vercel.app</code></li>
+    <li>Blob: <code>dashboard-producao1-blob</code>, private, região gru1. Path da carga: <code>dashboard/producao.sqlite</code> (<code>lib/cloud/constants.ts</code>).</li>
+    <li>Publicar neste PC: <code>npx tsx scripts/publish-carga.ts --watch</code> (preferir isto a <code>pnpm carga:watch</code> se o pnpm 11 disparar install). Env: <code>lib/load-env.ts</code> lê <code>.env</code> e <code>.env.local</code>.</li>
+    <li>Variáveis: <code>BLOB_READ_WRITE_TOKEN</code> (obrigatório para publicar), <code>BLOB_STORE_ID</code>, <code>CORTE_XLSX</code>, <code>OFICINAS_XLSX</code>, <code>SIGNUS_XLS</code> — ver <code>lib/paths.ts</code>. Relativos resolvem na raiz; OneDrive = absoluto com <code>/</code>.</li>
+    <li>Site na Vercel: <code>ensureCloudDatabase</code> em <code>lib/cloud/carga.ts</code> (só se <code>VERCEL=1</code>). Precisa token ou OIDC + <code>BLOB_STORE_ID</code>. Caminhos <code>/var/task/...</code> no ecrã Configurações são o filesystem serverless, não a origem.</li>
+    <li>pnpm 11: <code>overrides.hono</code> está em <code>pnpm-workspace.yaml</code>, não no <code>package.json</code>.</li>
+    <li>Não reintroduzir upload de Excel como fluxo feliz. Não commitar <code>.env.local</code>. Um watcher por vez.</li>
+  </ul>
+
+  <footer>
+    Guia gerado para troca de máquina · Dashboard Produção · agosto 2026. Não inclui o valor do token.
+  </footer>
+</body>
+</html>
