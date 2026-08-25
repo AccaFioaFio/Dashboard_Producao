@@ -17,7 +17,7 @@ export default async function ConfiguracoesPage() {
       description="Fontes da pasta Arquivos do Excel e última carga 2026. O refresh copia Corte, Oficinas e Signus para cache; se a cópia falhar, a carga anterior permanece."
       actions={<RefreshForm />}
     >
-      <dl className="card-surface grid gap-4 p-5 text-sm sm:grid-cols-2">
+      <dl className="card-surface grid gap-3 p-3 text-sm sm:grid-cols-2">
         <div className="flex flex-col gap-1 sm:col-span-2">
           <dt className="text-xs text-muted-foreground">CORTE_XLSX</dt>
           <dd className="break-all font-mono text-xs">{corteXlsxPath()}</dd>

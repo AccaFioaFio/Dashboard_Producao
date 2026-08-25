@@ -60,7 +60,7 @@ export default function RootLayout({
       lang="pt-BR"
       className={`${inter.variable} ${ibmPlexMono.variable} ${inter.className} bg-background`}
       data-theme="violeta"
-      data-layout="conforto"
+      data-layout="compacto"
       suppressHydrationWarning
     >
       <head>

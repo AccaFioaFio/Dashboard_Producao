@@ -15,17 +15,17 @@ export function FunnelCard({ funil }: { funil: FunilKpis }) {
   const max = funil.corte || 1
 
   return (
-    <section className="card-surface flex min-w-0 flex-col p-5">
-      <h2 className="mb-4 text-sm font-semibold tracking-wide">Funil de pedido 2026</h2>
-      <ul className="flex flex-col gap-3">
+    <section className="card-surface flex min-w-0 flex-col p-3">
+      <h2 className="mb-2 text-sm font-semibold tracking-wide">Funil de pedido 2026</h2>
+      <ul className="flex flex-col gap-1.5">
         {rows.map((row, index) => {
           const numeric = typeof row.value === 'number' ? row.value : funil.oficinas
           const bars = ['bg-chart-1', 'bg-chart-2', 'bg-chart-3', 'bg-chart-4']
           return (
-            <li key={row.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-              <div className="flex min-w-0 flex-col gap-1">
+            <li key={row.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+              <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="text-xs text-muted-foreground">{row.label}</span>
-                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                   <div
                     className={`h-full rounded-full ${bars[index % bars.length]}`}
                     style={{ width: `${Math.min(100, (numeric / max) * 100)}%` }}

@@ -44,7 +44,7 @@ export function FilterBar({ pathname, values, options, fields }: FilterBarProps)
   }
 
   return (
-    <section className="filter-bar card-surface flex flex-col gap-3 p-3 md:p-4">
+    <section className="filter-bar card-surface flex flex-col gap-2 p-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-medium">
           <span className="flex size-7 items-center justify-center rounded-lg bg-primary/12 text-primary">

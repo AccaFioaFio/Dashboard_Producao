@@ -121,7 +121,7 @@ export function GroupedTable({
 
   if (!groups.length) {
     return (
-      <div className="card-surface table-surface px-4 py-8">
+      <div className="card-surface table-surface px-3 py-4">
         <p className="text-xs text-muted-foreground">{empty}</p>
       </div>
     )

@@ -35,8 +35,8 @@ export function SimpleTable({
 }) {
   if (!rows.length) {
     return (
-      <div className="card-surface px-4 py-8">
-        <p className="text-[10px] text-muted-foreground">{empty}</p>
+      <div className="card-surface px-3 py-4">
+        <p className="text-xs text-muted-foreground">{empty}</p>
       </div>
     )
   }

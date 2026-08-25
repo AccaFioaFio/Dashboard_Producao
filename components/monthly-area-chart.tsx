@@ -46,8 +46,8 @@ export function MonthlyAreaChart({
   const [active, setActive] = useState<number | null>(null)
 
   const width = 960
-  const height = 190
-  const pad = { top: 26, right: 24, bottom: 26, left: 20 }
+  const height = 148
+  const pad = { top: 18, right: 16, bottom: 22, left: 16 }
   const innerW = width - pad.left - pad.right
   const innerH = height - pad.top - pad.bottom
   const baseline = pad.top + innerH
@@ -104,19 +104,19 @@ export function MonthlyAreaChart({
 
   if (!labels.length) {
     return (
-      <section className="card-surface min-w-0 p-4">
+      <section className="card-surface min-w-0 p-3">
         <h2 className="text-sm font-medium">{title}</h2>
         {description ? (
           <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
         ) : null}
-        <p className="px-1 py-6 text-sm text-muted-foreground">Sem série mensal.</p>
+        <p className="px-1 py-4 text-sm text-muted-foreground">Sem série mensal.</p>
       </section>
     )
   }
 
   return (
-    <section className="card-surface min-w-0 p-5">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+    <section className="card-surface min-w-0 p-3">
+      <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="inline-flex items-center gap-2 text-sm font-semibold">
             {series.length === 1 ? (
@@ -148,7 +148,7 @@ export function MonthlyAreaChart({
 
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="h-[5cm] w-full overflow-visible"
+        className="h-[var(--chart-h)] w-full overflow-visible"
         role="img"
         aria-label={title}
         onMouseLeave={() => setActive(null)}

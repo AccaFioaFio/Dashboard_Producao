@@ -313,9 +313,13 @@
 }
 
 [data-layout='conforto'] {
-  --radius: 0.85rem;
-  --page-pad: 1.25rem;
-  --page-gap: 1.25rem;
+  --radius: 0.7rem;
+  --page-pad: 0.9rem;
+  --page-gap: 0.85rem;
+  --kpi-min-h: 6.25rem;
+  --kpi-pad: 0.65rem;
+  --chart-h: 3.6cm;
+  --header-h: 2.75rem;
   --card-shadow:
     0 1px 0 color-mix(in oklch, white 70%, transparent),
     0 10px 28px -12px color-mix(in oklch, var(--glow) 55%, transparent),
@@ -323,9 +327,13 @@
 }
 
 [data-layout='compacto'] {
-  --radius: 0.55rem;
-  --page-pad: 0.85rem;
-  --page-gap: 0.85rem;
+  --radius: 0.5rem;
+  --page-pad: 0.65rem;
+  --page-gap: 0.6rem;
+  --kpi-min-h: 5.5rem;
+  --kpi-pad: 0.5rem;
+  --chart-h: 3.2cm;
+  --header-h: 2.5rem;
   --card-shadow:
     0 1px 0 color-mix(in oklch, white 55%, transparent),
     0 8px 20px -12px color-mix(in oklch, var(--glow) 48%, transparent);
@@ -335,6 +343,10 @@
   --radius: 1.15rem;
   --page-pad: 1.75rem;
   --page-gap: 1.6rem;
+  --kpi-min-h: 7.25rem;
+  --kpi-pad: 0.85rem;
+  --chart-h: 5cm;
+  --header-h: 3.5rem;
   --card-shadow:
     0 1px 0 color-mix(in oklch, white 75%, transparent),
     0 16px 44px -16px color-mix(in oklch, var(--glow) 58%, transparent),
@@ -345,6 +357,10 @@
   --radius: 1.05rem;
   --page-pad: 1.35rem;
   --page-gap: 1.35rem;
+  --kpi-min-h: 6.75rem;
+  --kpi-pad: 0.75rem;
+  --chart-h: 4.2cm;
+  --header-h: 3.25rem;
   --card-shadow:
     0 1px 0 color-mix(in oklch, white 80%, transparent),
     0 0 0 1px color-mix(in oklch, var(--glow) 32%, transparent),
@@ -356,9 +372,13 @@
     @apply border-border outline-ring/50;
   }
   html {
-    --radius: 0.85rem;
-    --page-pad: 1.25rem;
-    --page-gap: 1.25rem;
+    --radius: 0.5rem;
+    --page-pad: 0.65rem;
+    --page-gap: 0.6rem;
+    --kpi-min-h: 5.5rem;
+    --kpi-pad: 0.5rem;
+    --chart-h: 3.2cm;
+    --header-h: 2.5rem;
     --shine: oklch(0.58 0.2 285 / 0.42);
     --card-wash: 22%;
     --card-rim: 32%;

@@ -13,7 +13,7 @@ export function AppHeader() {
   const isRoot = pathname === '/'
 
   return (
-    <header className="app-header relative sticky top-0 z-10 flex h-14 shrink-0 items-center gap-3 px-4 text-header-foreground">
+    <header className="app-header relative sticky top-0 z-10 flex h-[var(--header-h)] shrink-0 items-center gap-3 px-3 text-header-foreground">
       <SidebarTrigger className="text-header-foreground hover:bg-white/10 hover:text-header-foreground" />
 
       <nav className="flex min-w-0 items-center gap-2 text-sm">

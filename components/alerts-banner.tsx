@@ -39,9 +39,9 @@ export function AlertsBanner({
   ].filter(Boolean) as string[]
 
   return (
-    <div className="card-surface flex items-start gap-3 px-5 py-4">
-      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-chart-3" />
-      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+    <div className="card-surface flex items-start gap-2 px-3 py-2">
+      <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-chart-3" />
+      <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
         {items.map((item) => (
           <li key={item}>{item}</li>
         ))}

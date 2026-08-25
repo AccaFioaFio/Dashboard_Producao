@@ -44,6 +44,7 @@ export type TecidoPendenteRow = {
   metros: number
   tecido: string | null
   codTecido: string | null
+  responsavel: string | null
 }
 
 export type NamedTotal = {
@@ -476,7 +477,8 @@ export const getCorteBreakdown = cache(async (filters: DashFilters = {}) => {
             COALESCE(SUM(l.qtd_pecas), 0) as pecas,
             COALESCE(SUM(l.metros), 0) as metros,
             MAX(l.tecido) as tecido,
-            MAX(l.cod_tecido) as codTecido
+            MAX(l.cod_tecido) as codTecido,
+            MAX(p.responsavel) as responsavel
      FROM fato_corte_linha l
      LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
      WHERE ${where} AND l.status = 'AGUARDANDO TECIDO'
@@ -513,6 +515,15 @@ export const getCorteBreakdown = cache(async (filters: DashFilters = {}) => {
      WHERE ${where} AND l.is_header = 1`,
     params,
   )
+  const aguardando = runGet<{ pedidos: number; pecas: number; metros: number }>(
+    `SELECT COUNT(DISTINCT l.pedido_norm) as pedidos,
+            COALESCE(SUM(l.qtd_pecas), 0) as pecas,
+            COALESCE(SUM(l.metros), 0) as metros
+     FROM fato_corte_linha l
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
+     WHERE ${where} AND l.status = 'AGUARDANDO TECIDO'`,
+    params,
+  )
 
   return {
     porMes,
@@ -522,7 +533,13 @@ export const getCorteBreakdown = cache(async (filters: DashFilters = {}) => {
     wip,
     tecido,
     porTecido,
-    resumo: { ...resumo, ocs: ocs.v },
+    resumo: {
+      ...resumo,
+      ocs: ocs.v,
+      tecidoPedidos: aguardando.pedidos,
+      tecidoPecas: aguardando.pecas,
+      tecidoMetros: aguardando.metros,
+    },
   }
 })
 
@@ -762,7 +779,8 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
             COALESCE(SUM(l.qtd_pecas), 0) as pecas,
             COALESCE(SUM(l.metros), 0) as metros,
             MAX(l.tecido) as tecido,
-            MAX(l.cod_tecido) as codTecido
+            MAX(l.cod_tecido) as codTecido,
+            MAX(p.responsavel) as responsavel
      FROM fato_corte_linha l
      LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
      WHERE ${corteWhere} AND l.status = 'AGUARDANDO TECIDO'

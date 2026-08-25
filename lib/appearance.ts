@@ -43,7 +43,7 @@ export const LAYOUTS = [
   {
     id: 'conforto',
     label: 'Conforto',
-    hint: 'Cards espaçosos',
+    hint: 'Equilíbrio entre respiro e dados',
   },
   {
     id: 'compacto',
@@ -72,7 +72,7 @@ export type Appearance = {
 
 export const DEFAULT_APPEARANCE: Appearance = {
   theme: 'violeta',
-  layout: 'conforto',
+  layout: 'compacto',
 }
 
 export function isThemeId(value: unknown): value is ThemeId {

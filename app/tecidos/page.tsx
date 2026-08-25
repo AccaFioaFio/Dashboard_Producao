@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
-import { KpiCard } from '@/components/kpi-card'
+import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
@@ -55,7 +55,7 @@ export default async function TecidosPage({
         fields={['mes', 'canal', 'cliente', 'q']}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <KpiGrid columns={3}>
         <KpiCard
           label="Consumo no Corte"
           value={formatMeters(metrosCorte)}
@@ -93,9 +93,9 @@ export default async function TecidosPage({
           hint={`${formatInt(tecidos.baixasSemPedido)} baixas Signus sem nº de pedido em Orig. Mov.`}
           tone="magenta"
         />
-      </div>
+      </KpiGrid>
 
-      <div className="grid min-w-0 gap-4">
+      <div className="grid min-w-0 gap-[var(--page-gap)]">
         <MonthlyAreaChart
           title="Corte"
           description="Metros apontados no Corte, mês a mês."
@@ -153,7 +153,7 @@ export default async function TecidosPage({
         />
       </section>
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-[var(--page-gap)] lg:grid-cols-2">
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Por mês</h2>
           <SimpleTable
@@ -211,7 +211,7 @@ export default async function TecidosPage({
         />
       </section>
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-[var(--page-gap)] lg:grid-cols-2">
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Baixa Signus por canal</h2>
           <SimpleTable

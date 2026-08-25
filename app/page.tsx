@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
-import { KpiCard } from '@/components/kpi-card'
+import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { FunnelCard } from '@/components/funnel-card'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { AlertsBanner } from '@/components/alerts-banner'
@@ -62,7 +62,7 @@ export default async function Page() {
         ultimoEnvio={alertas.ultimoEnvio}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <KpiGrid>
         <KpiCard
           label="Peças cortadas"
           value={formatInt(header.pecasCortadas)}
@@ -127,9 +127,9 @@ export default async function Page() {
           tone="teal"
           progress={alertas.costuraHoje + alertas.revisaoHoje > 0 ? 70 : 15}
         />
-      </div>
+      </KpiGrid>
 
-      <div className="grid min-w-0 gap-4">
+      <div className="grid min-w-0 gap-[var(--page-gap)]">
         <MonthlyAreaChart
           title="Corte"
           description="Peças cortadas em 2026, mês a mês."

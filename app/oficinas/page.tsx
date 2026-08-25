@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
-import { KpiCard } from '@/components/kpi-card'
+import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
@@ -38,7 +38,7 @@ export default async function OficinasPage({
         fields={['mes', 'oficina', 'q']}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <KpiGrid>
         <KpiCard
           label="Valor Total Pago"
           value={formatMoneyCompact(oficinas.sla.valor)}
@@ -60,7 +60,7 @@ export default async function OficinasPage({
           value={`${formatNumber(retorno, 1)}%`}
           hint={`${formatInt(oficinas.retornadas)} de ${formatInt(oficinas.enviadas)} enviadas`}
         />
-      </div>
+      </KpiGrid>
 
       <MonthlyAreaChart
         title="Envios por mês"

@@ -21,19 +21,19 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b border-sidebar-border/80 px-2 py-2.5">
+      <SidebarHeader className="border-b border-sidebar-border/80 px-2 py-1.5">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
               tooltip="Fio a Fio"
-              className="h-auto min-h-12 justify-center overflow-visible py-2 hover:bg-transparent group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-1!"
+              className="h-auto min-h-10 justify-center overflow-visible py-1.5 hover:bg-transparent group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-1!"
               render={<Link href="/" />}
             >
               <img
                 src="/logo-fio-a-fio.png?v=3"
                 alt="Fio a Fio"
-                className="h-16 w-auto max-w-full object-contain group-data-[collapsible=icon]:h-6"
+                className="h-12 w-auto max-w-full object-contain group-data-[collapsible=icon]:h-6"
               />
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -41,9 +41,9 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup className="px-3 py-4">
+        <SidebarGroup className="px-2 py-2">
           <SidebarGroupContent>
-            <SidebarMenu className="gap-1.5">
+            <SidebarMenu className="gap-1">
               {navigation.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
@@ -52,7 +52,7 @@ export function AppSidebar() {
                       (item.href !== '/' && pathname.startsWith(`${item.href}/`))
                     }
                     tooltip={item.title}
-                    className="h-10 rounded-xl px-3 text-[13px] font-medium"
+                    className="h-9 rounded-lg px-2.5 text-[13px] font-medium"
                     render={<Link href={item.href} />}
                   >
                     <item.icon />

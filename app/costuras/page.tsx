@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
-import { KpiCard } from '@/components/kpi-card'
+import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
@@ -47,7 +47,7 @@ export default async function CosturasPage({
         fields={['mes', 'responsavel', 'produto', 'q']}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <KpiGrid>
         <KpiCard
           label="Produção"
           value={formatInt(costuras.producao.pecas)}
@@ -68,7 +68,7 @@ export default async function CosturasPage({
           value={formatInt(pecasHoje)}
           hint="Lançamentos Origem = Produção"
         />
-      </div>
+      </KpiGrid>
 
       <MonthlyAreaChart
         title="Peças por mês"
@@ -109,7 +109,7 @@ export default async function CosturasPage({
         />
       </section>
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-[var(--page-gap)] lg:grid-cols-2">
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Por mês</h2>
           <SimpleTable

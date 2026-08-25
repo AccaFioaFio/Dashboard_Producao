@@ -1,12 +1,18 @@
 import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
-import { KpiCard } from '@/components/kpi-card'
+import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { RefreshForm } from '@/components/refresh-form'
 import { FilterBar } from '@/components/filter-bar'
 import { getCorteBreakdown, getFilterOptions } from '@/data/dashboard'
-import { MONTH_LABELS, formatDate, formatInt } from '@/lib/format'
+import {
+  MONTH_LABELS,
+  formatDate,
+  formatInt,
+  formatMeters,
+  formatTecido,
+} from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
 
 export const dynamic = 'force-dynamic'
@@ -37,7 +43,7 @@ export default async function CortePage({
         fields={['mes', 'canal', 'cliente', 'responsavel', 'q']}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <KpiGrid columns={5}>
         <KpiCard
           label="Pedidos"
           value={formatInt(corte.resumo.pedidos)}
@@ -61,7 +67,13 @@ export default async function CortePage({
           hint="Pedidos vigentes / peças EM PRODUÇÃO"
           alert={corte.resumo.wipPedidos > 0}
         />
-      </div>
+        <KpiCard
+          label="Aguardando tecido"
+          value={`${formatInt(corte.resumo.tecidoPedidos)} / ${formatInt(corte.resumo.tecidoPecas)}`}
+          hint={`${formatMeters(corte.resumo.tecidoMetros)} com status AGUARDANDO TECIDO`}
+          alert={corte.resumo.tecidoPedidos > 0}
+        />
+      </KpiGrid>
 
       <MonthlyAreaChart
         title="Peças por mês"
@@ -77,7 +89,57 @@ export default async function CortePage({
         ]}
       />
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-[var(--page-gap)] lg:grid-cols-2">
+        <section className="flex min-w-0 flex-col gap-2">
+          <h2 className="text-sm font-medium">EM PRODUÇÃO</h2>
+          <SimpleTable
+            columns={[
+              { key: 'pedido', label: 'Pedido' },
+              { key: 'data', label: 'Data' },
+              { key: 'cliente', label: 'Cliente' },
+              { key: 'pecas', label: 'Peças', numeric: true },
+              { key: 'responsavel', label: 'Responsável' },
+            ]}
+            rows={corte.wip.map((row) => ({
+              pedido: row.pedidoNorm,
+              data: formatDate(row.data),
+              cliente: row.cliente,
+              pecas: formatInt(row.pecas),
+              responsavel: row.responsavel,
+            }))}
+            empty="Nenhum pedido em produção neste recorte"
+          />
+        </section>
+        <section className="flex min-w-0 flex-col gap-2">
+          <h2 className="text-sm font-medium">AGUARDANDO TECIDO</h2>
+          <p className="text-xs text-muted-foreground">
+            Produção parada no Corte por falta de tecido: pedido, tecido, metros e peças.
+          </p>
+          <SimpleTable
+            columns={[
+              { key: 'pedido', label: 'Pedido' },
+              { key: 'data', label: 'Data' },
+              { key: 'cliente', label: 'Cliente' },
+              { key: 'tecido', label: 'Tecido', wrap: true },
+              { key: 'metros', label: 'Metros', numeric: true },
+              { key: 'pecas', label: 'Peças', numeric: true },
+              { key: 'responsavel', label: 'Responsável' },
+            ]}
+            rows={corte.tecido.map((row) => ({
+              pedido: row.pedidoNorm,
+              data: formatDate(row.data),
+              cliente: row.cliente,
+              tecido: formatTecido(row.codTecido, row.tecido),
+              metros: formatMeters(row.metros, row.metros >= 10 ? 0 : 1),
+              pecas: formatInt(row.pecas),
+              responsavel: row.responsavel,
+            }))}
+            empty="Nenhum pedido aguardando tecido neste recorte"
+          />
+        </section>
+      </div>
+
+      <div className="grid min-w-0 gap-[var(--page-gap)] lg:grid-cols-2">
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Por mês</h2>
           <SimpleTable
@@ -139,27 +201,6 @@ export default async function CortePage({
           />
         </section>
       </div>
-
-      <section className="flex min-w-0 flex-col gap-2">
-        <h2 className="text-sm font-medium">EM PRODUÇÃO</h2>
-        <SimpleTable
-          columns={[
-            { key: 'pedido', label: 'Pedido' },
-            { key: 'data', label: 'Data' },
-            { key: 'cliente', label: 'Cliente' },
-            { key: 'pecas', label: 'Peças', numeric: true },
-            { key: 'responsavel', label: 'Responsável' },
-          ]}
-          rows={corte.wip.map((row) => ({
-            pedido: row.pedidoNorm,
-            data: formatDate(row.data),
-            cliente: row.cliente,
-            pecas: formatInt(row.pecas),
-            responsavel: row.responsavel,
-          }))}
-          empty="Nenhum pedido em produção neste recorte"
-        />
-      </section>
     </PageShell>
   )
 }

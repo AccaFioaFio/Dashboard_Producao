@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
-import { KpiCard } from '@/components/kpi-card'
+import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { GroupedTable } from '@/components/grouped-table'
 import { RefreshForm } from '@/components/refresh-form'
@@ -70,7 +70,7 @@ export default async function TecidosValoresPage({
         </p>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <KpiGrid>
         <KpiCard
           label="Valor da baixa"
           value={formatMoneyCompact(valores.valorBaixa)}
@@ -118,7 +118,7 @@ export default async function TecidosValoresPage({
           hint={`${formatMeters(valores.metrosBaixa)} de ${formatMeters(valores.metrosCorte)}`}
           tone="indigo"
         />
-      </div>
+      </KpiGrid>
 
       <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Tecido e pedidos</h2>
