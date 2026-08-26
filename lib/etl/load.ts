@@ -112,6 +112,9 @@ export function replaceSnapshot(
 
     for (const row of snapshot.cortePedidos) {
       addDate(row.data)
+      addDate(row.pcpProntas)
+      addDate(row.inicioCorte)
+      addDate(row.finalCorte)
       if (row.canal) canais.add(row.canal)
       if (row.responsavel) responsaveis.add(row.responsavel)
     }
@@ -175,11 +178,11 @@ export function replaceSnapshot(
       INSERT INTO fato_corte_pedido (
         pedido_norm, data, status_vigente, pecas, terceiros, estoque,
         metros, economia, responsavel, canal, cliente, inicio_corte,
-        final_corte, lead_time_dias, status_duplo, headers_count
+        final_corte, pcp_prontas, observacao, lead_time_dias, status_duplo, headers_count
       ) VALUES (
         @pedidoNorm, @data, @statusVigente, @pecas, @terceiros, @estoque,
         @metros, @economia, @responsavel, @canal, @cliente, @inicioCorte,
-        @finalCorte, @leadTimeDias, @statusDuplo, @headersCount
+        @finalCorte, @pcpProntas, @observacao, @leadTimeDias, @statusDuplo, @headersCount
       )
     `)
     for (const row of snapshot.cortePedidos) {
@@ -193,11 +196,11 @@ export function replaceSnapshot(
       INSERT INTO fato_corte_linha (
         pedido_norm, data, is_header, is_star, qtd_pecas, qtd_terceiros,
         qtd_estoque, metros, economia, tecido, cod_tecido, status, responsavel, canal,
-        cliente, inicio_corte, final_corte, dias_de_corte_raw, excel_row
+        cliente, inicio_corte, final_corte, pcp_prontas, dias_de_corte_raw, excel_row
       ) VALUES (
         @pedidoNorm, @data, @isHeader, @isStar, @qtdPecas, @qtdTerceiros,
         @qtdEstoque, @metros, @economia, @tecido, @codTecido, @status, @responsavel, @canal,
-        @cliente, @inicioCorte, @finalCorte, @diasDeCorteRaw, @excelRow
+        @cliente, @inicioCorte, @finalCorte, @pcpProntas, @diasDeCorteRaw, @excelRow
       )
     `)
     for (const group of chunk(snapshot.corteLinhas)) {

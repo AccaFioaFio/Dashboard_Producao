@@ -5,8 +5,8 @@ import {
   Layers,
   Scissors,
   Settings,
-  ShieldCheck,
   Shirt,
+  Timer,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -55,10 +55,10 @@ export const navigation: NavItem[] = [
     description: 'Pendentes, SLA, Lilica e lotes sem retorno.',
   },
   {
-    title: 'Qualidade',
+    title: 'Tempo de produção',
     href: '/qualidade',
-    icon: ShieldCheck,
-    description: 'Órfãos, totais, serial de Corte e cadastro quebrado.',
+    icon: Timer,
+    description: 'Dias de PCP prontas até a Data Produção da Revisão.',
   },
   {
     title: 'Configurações',

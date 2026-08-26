@@ -1,8 +1,17 @@
+'use client'
+
+import type { ReactNode } from 'react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 type TableRow = Record<string, string | number | boolean | null> & {
   alert?: boolean
   warning?: boolean
+  hint?: string
 }
 
 export type TableColumn = {
@@ -21,6 +30,41 @@ function columnClass(col: TableColumn, header = false) {
         ? 'min-w-[12rem] whitespace-normal break-words leading-snug'
         : 'min-w-0 whitespace-normal break-words leading-snug',
     !header && col.numeric && 'font-medium tabular-nums',
+  )
+}
+
+function TonedRow({
+  row,
+  children,
+}: {
+  row: TableRow
+  children: ReactNode
+}) {
+  const className = cn(
+    'border-t border-border/80 hover:bg-muted/40',
+    row.hint && 'cursor-help',
+    row.alert &&
+      'bg-destructive/[0.07] shadow-[inset_3px_0_0_0_var(--destructive)] hover:bg-destructive/12',
+    !row.alert &&
+      row.warning &&
+      'bg-chart-3/15 shadow-[inset_3px_0_0_0_var(--chart-3)] hover:bg-chart-3/25',
+  )
+  if (!row.hint) {
+    return <tr className={className}>{children}</tr>
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger delay={180} render={<tr className={className} />}>
+        {children}
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        align="start"
+        className="max-w-sm whitespace-pre-line text-left leading-snug"
+      >
+        {row.hint}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -55,17 +99,7 @@ export function SimpleTable({
         </thead>
         <tbody>
           {rows.map((row, index) => (
-            <tr
-              key={index}
-              className={cn(
-                'border-t border-border/80 hover:bg-muted/40',
-                row.alert &&
-                  'bg-destructive/[0.07] shadow-[inset_3px_0_0_0_var(--destructive)] hover:bg-destructive/12',
-                !row.alert &&
-                  row.warning &&
-                  'bg-chart-3/15 shadow-[inset_3px_0_0_0_var(--chart-3)] hover:bg-chart-3/25',
-              )}
-            >
+            <TonedRow key={index} row={row}>
               {columns.map((col) => (
                 <td
                   key={col.key}
@@ -83,7 +117,7 @@ export function SimpleTable({
                   {row[col.key] ?? '—'}
                 </td>
               ))}
-            </tr>
+            </TonedRow>
           ))}
         </tbody>
       </table>

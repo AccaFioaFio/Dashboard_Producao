@@ -37,6 +37,12 @@ export function isYear(iso: string | null, year = YEAR) {
   return yearOf(iso) === year
 }
 
+export function isPlausibleBusinessDate(iso: string | null, year = YEAR) {
+  const y = yearOf(iso)
+  if (y == null) return false
+  return y >= year - 2 && y <= year + 1
+}
+
 export function monthOf(iso: string | null) {
   if (!iso) return null
   return Number(iso.slice(5, 7))
@@ -48,6 +54,16 @@ export function leadTimeDays(inicio: string | null, fim: string | null) {
   const end = Date.parse(`${fim}T00:00:00Z`)
   if (Number.isNaN(start) || Number.isNaN(end)) return null
   return (end - start) / 86400000
+}
+
+export function quantile(sorted: number[], q: number) {
+  if (!sorted.length) return null
+  const clamped = Math.min(1, Math.max(0, q))
+  const pos = (sorted.length - 1) * clamped
+  const lo = Math.floor(pos)
+  const hi = Math.ceil(pos)
+  if (lo === hi) return sorted[lo]
+  return sorted[lo] * (hi - pos) + sorted[hi] * (pos - lo)
 }
 
 export function isSerialDiasDeCorte(value: number | null, inicio: string | null) {

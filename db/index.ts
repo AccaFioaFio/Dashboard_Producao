@@ -29,6 +29,8 @@ function applyMigrations(connection: Database.Database) {
     '0001_cod_tecido.sql',
     '0002_tecido_signus.sql',
     '0003_signus_valores.sql',
+    '0004_pcp_prontas.sql',
+    '0005_observacao.sql',
   ]
   for (const file of files) {
     if (applied.has(file)) continue

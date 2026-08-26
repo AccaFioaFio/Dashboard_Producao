@@ -16,6 +16,11 @@ import {
   tipoDocumentoLabel,
 } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
+import {
+  explainDocumentoValor,
+  explainTecidoValorGrupo,
+  explainTecidoValorPedido,
+} from '@/lib/table-explain'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Valores do tecido' }
@@ -151,9 +156,19 @@ export default async function TecidosValoresPage({
               valorConsumo: formatMoney(row.valorConsumoEst),
               pedidos: formatInt(row.pedidos),
             },
+            hint: explainTecidoValorGrupo({
+              tecido: formatTecido(row.cod, row.nome),
+              valorUnitario: row.valorUnitario,
+              baixa: row.baixa,
+              valorBaixa: row.valorBaixa,
+              consumo: row.consumo,
+              valorConsumoEst: row.valorConsumoEst,
+              pedidos: row.pedidos,
+            }),
             children: row.pedidoRows.map((pedido) => {
               const alert = pedido.baixa > 0 && pedido.consumo === 0
               const warning = pedido.consumo > 0 && pedido.baixa === 0
+              const documento = documentosLabel(pedido.documentos)
               return {
                 cells: {
                   pedido: pedido.pedidoNorm,
@@ -163,15 +178,22 @@ export default async function TecidosValoresPage({
                   delta: formatMeters(pedido.consumo - pedido.baixa, 0),
                   vu: pedido.valorUnitario == null ? '—' : formatMoney(pedido.valorUnitario),
                   valor: formatMoney(pedido.valorBaixa),
-                  documento: documentosLabel(pedido.documentos),
+                  documento,
                 },
                 warning,
                 alert,
-                hint: alert
-                  ? 'Vermelho: há baixa no Signus, mas o Corte não registrou consumo neste pedido. Costuma ser lançamento auxiliar.'
-                  : warning
-                    ? 'Amarelo: o Corte registrou consumo, mas ainda não há baixa no Signus. Por isso o valor fica zerado.'
-                    : undefined,
+                hint: explainTecidoValorPedido({
+                  pedidoNorm: pedido.pedidoNorm,
+                  cliente: pedido.cliente,
+                  consumo: pedido.consumo,
+                  baixa: pedido.baixa,
+                  valorUnitario: pedido.valorUnitario,
+                  valorBaixa: pedido.valorBaixa,
+                  documentos: documento,
+                  observacao: pedido.observacao,
+                  alert,
+                  warning,
+                }),
               }
             }),
           }))}
@@ -200,6 +222,13 @@ export default async function TecidosValoresPage({
             metros: formatMeters(row.metros),
             movimentos: formatInt(row.movimentos),
             pedidos: formatInt(row.pedidos),
+            hint: explainDocumentoValor({
+              tipo: tipoDocumentoLabel(row.tipoDocumento),
+              valor: row.valor,
+              metros: row.metros,
+              movimentos: row.movimentos,
+              pedidos: row.pedidos,
+            }),
           }))}
           empty="Sem tipo de documento na carga"
         />

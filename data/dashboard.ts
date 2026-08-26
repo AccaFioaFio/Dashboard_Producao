@@ -7,6 +7,7 @@ import { isProducaoOrigem } from '@/lib/keys'
 import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { YEAR } from '@/lib/year'
 import type { FunilKpis, HeaderKpis, SerieMensal } from '@/lib/etl/types'
+import { analyzeTempoProducao, type TempoPedidoRow } from '@/lib/etl/tempo'
 
 export type CargaInfo = {
   id: number
@@ -46,6 +47,7 @@ export type TecidoPendenteRow = {
   tecido: string | null
   codTecido: string | null
   responsavel: string | null
+  observacao: string | null
 }
 
 export type NamedTotal = {
@@ -62,19 +64,25 @@ export type CortePedidoRow = {
   canal: string | null
   cliente: string | null
   responsavel: string | null
-}
-
-export type QualidadeRow = {
-  tipo: string
-  pedidoNorm: string | null
-  detalhe: string | null
-  excelRow: number | null
-  valor: number | null
-  count: number
+  observacao: string | null
 }
 
 function sqlite() {
   return getSqlite()
+}
+
+function hasObservacaoColumn() {
+  return Boolean(
+    sqlite()
+      .prepare(
+        `SELECT 1 as v FROM pragma_table_info('fato_corte_pedido') WHERE name = 'observacao'`,
+      )
+      .get(),
+  )
+}
+
+function observacaoExpr(alias = 'p') {
+  return hasObservacaoColumn() ? `${alias}.observacao` : 'NULL as observacao'
 }
 
 type SqlFilter = {
@@ -474,8 +482,10 @@ export const getCorteBreakdown = cache(async (filters: DashFilters = {}) => {
     params,
   )
 
+  const obs = observacaoExpr()
   const wip = runAll<CortePedidoRow>(
-    `SELECT p.pedido_norm as pedidoNorm, p.data, p.status_vigente as statusVigente, p.pecas, p.canal, p.cliente, p.responsavel
+    `SELECT p.pedido_norm as pedidoNorm, p.data, p.status_vigente as statusVigente, p.pecas, p.canal, p.cliente, p.responsavel,
+            ${obs}
      FROM fato_corte_pedido p WHERE ${where} AND p.status_vigente = 'EM PRODUÇÃO' ORDER BY p.pecas DESC`,
     params,
   )
@@ -486,7 +496,8 @@ export const getCorteBreakdown = cache(async (filters: DashFilters = {}) => {
             COALESCE(SUM(l.metros), 0) as metros,
             MAX(l.tecido) as tecido,
             MAX(l.cod_tecido) as codTecido,
-            MAX(p.responsavel) as responsavel
+            MAX(p.responsavel) as responsavel,
+            ${hasObservacaoColumn() ? 'MAX(p.observacao)' : 'NULL'} as observacao
      FROM fato_corte_linha l
      LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
      WHERE ${where} AND l.status = 'AGUARDANDO TECIDO'
@@ -789,7 +800,8 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
             COALESCE(SUM(l.metros), 0) as metros,
             MAX(l.tecido) as tecido,
             MAX(l.cod_tecido) as codTecido,
-            MAX(p.responsavel) as responsavel
+            MAX(p.responsavel) as responsavel,
+            ${hasObservacaoColumn() ? 'MAX(p.observacao)' : 'NULL'} as observacao
      FROM fato_corte_linha l
      LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
      WHERE ${corteWhere} AND l.status = 'AGUARDANDO TECIDO'
@@ -843,6 +855,7 @@ export type PedidoTecidoRow = {
   valorUnitario: number | null
   documentos: string | null
   movimentos: number
+  observacao: string | null
 }
 
 export type TecidoValorRow = {
@@ -1028,12 +1041,14 @@ export const getTecidosValores = cache(async (filters: DashFilters = {}) => {
     cliente: string | null
     canal: string | null
     consumo: number
+    observacao: string | null
   }>(
     `SELECT COALESCE(NULLIF(trim(l.cod_tecido), ''), '(sem código)') as cod,
             l.pedido_norm as pedidoNorm,
             MAX(p.cliente) as cliente,
             MAX(p.canal) as canal,
-            COALESCE(SUM(l.metros), 0) as consumo
+            COALESCE(SUM(l.metros), 0) as consumo,
+            ${hasObservacaoColumn() ? 'MAX(p.observacao)' : 'NULL'} as observacao
      FROM fato_corte_linha l
      LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
      WHERE ${corteWhere} AND l.tecido IS NOT NULL AND trim(l.tecido) != ''
@@ -1073,6 +1088,7 @@ export const getTecidosValores = cache(async (filters: DashFilters = {}) => {
     valorUnitario: null,
     documentos: null,
     movimentos: 0,
+    observacao: null,
   })
   function ensurePedido(cod: string, pedidoNorm: string) {
     const tKey = normCod(cod)
@@ -1093,6 +1109,7 @@ export const getTecidosValores = cache(async (filters: DashFilters = {}) => {
     current.cliente = row.cliente
     current.canal = row.canal
     current.consumo = row.consumo
+    current.observacao = row.observacao
   }
   for (const row of signusPedidoTecido) {
     const current = ensurePedido(row.cod, row.pedidoNorm)
@@ -1220,9 +1237,12 @@ export const getCosturas = cache(async (filters: DashFilters = {}) => {
     responsavel: string | null
     produto: string | null
     origem: string
+    observacao: string | null
   }>(
-    `SELECT c.pedido_norm as pedido, c.qtd_pecas as pecas, c.responsavel, c.produto, c.origem
+    `SELECT c.pedido_norm as pedido, c.qtd_pecas as pecas, c.responsavel, c.produto, c.origem,
+            ${observacaoExpr()}
      FROM fato_costura c
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = c.pedido_norm
      WHERE ${where} AND c.data_producao = @hoje AND c.origem_norm = 'Producao'
      ORDER BY c.excel_row DESC`,
     { ...params, hoje },
@@ -1257,9 +1277,13 @@ export const getRevisao = cache(async (filters: DashFilters = {}) => {
     pecas: number
     responsavel: string | null
     produto: string | null
+    observacao: string | null
   }>(
-    `SELECT r.pedido_norm as pedido, r.qtd_pecas as pecas, r.responsavel, r.produto
-     FROM fato_revisao r WHERE ${where} AND r.data_producao = @hoje ORDER BY r.excel_row DESC`,
+    `SELECT r.pedido_norm as pedido, r.qtd_pecas as pecas, r.responsavel, r.produto,
+            ${observacaoExpr()}
+     FROM fato_revisao r
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = r.pedido_norm
+     WHERE ${where} AND r.data_producao = @hoje ORDER BY r.excel_row DESC`,
     { ...params, hoje },
   )
   const resumo = runGet<{ pecas: number; pedidos: number }>(
@@ -1334,9 +1358,12 @@ export const getOficinas = cache(async (filters: DashFilters = {}) => {
     pedido: string | null
     enviadas: number
     data: string
+    observacao: string | null
   }>(
-    `SELECT o.oficina, o.pedido_norm as pedido, o.qtd_enviadas as enviadas, o.data_envio as data
+    `SELECT o.oficina, o.pedido_norm as pedido, o.qtd_enviadas as enviadas, o.data_envio as data,
+            ${observacaoExpr()}
      FROM fato_oficinas o
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = o.pedido_norm
      WHERE ${where} AND o.qtd_enviadas > 0 AND o.qtd_retornadas = 0 AND o.qtd_pendentes = 0
      ORDER BY o.qtd_enviadas DESC LIMIT 20`,
     params,
@@ -1360,22 +1387,41 @@ export const getOficinas = cache(async (filters: DashFilters = {}) => {
   }
 })
 
-export const getQualidade = cache(async () => {
+export const getTempoProducao = cache(async (filters: DashFilters = {}) => {
   await ensureCloudDatabase()
-  const db = sqlite()
-  const resumo = db
-    .prepare(
-      `SELECT tipo, COUNT(*) as count, COALESCE(SUM(valor), 0) as valor
-       FROM qualidade_evento GROUP BY tipo ORDER BY count DESC`,
-    )
-    .all() as { tipo: string; count: number; valor: number }[]
-  const eventos = db
-    .prepare(
-      `SELECT tipo, pedido_norm as pedidoNorm, detalhe, excel_row as excelRow, valor
-       FROM qualidade_evento ORDER BY tipo, excel_row LIMIT 200`,
-    )
-    .all() as QualidadeRow[]
-  return { resumo, eventos }
+  const filter = emptyFilter()
+  applyPedidoFilters(filter, 'p', { ...filters, mes: undefined }, {
+    canal: true,
+    cliente: true,
+    responsavel: true,
+    pedido: true,
+  })
+  const where = whereSql(filter)
+  const pedidos = runAll<TempoPedidoRow>(
+    `SELECT p.pedido_norm as pedidoNorm,
+            p.pecas,
+            p.canal,
+            p.cliente,
+            p.responsavel,
+            p.status_vigente as statusVigente,
+            p.data,
+            p.pcp_prontas as pcpProntas,
+            p.inicio_corte as inicioCorte,
+            p.final_corte as finalCorte,
+            ${observacaoExpr()},
+            MIN(r.data_producao) as dataRevisaoPrimeira,
+            MAX(r.data_producao) as dataRevisaoUltima,
+            COALESCE(SUM(r.qtd_pecas), 0) as pecasRevisao
+     FROM fato_corte_pedido p
+     LEFT JOIN fato_revisao r ON r.pedido_norm = p.pedido_norm
+     WHERE ${where}
+     GROUP BY p.pedido_norm`,
+    filter.params,
+  )
+  return analyzeTempoProducao(pedidos, {
+    mes: filters.mes,
+    hoje: todayIso(),
+  })
 })
 
 export { isProducaoOrigem }

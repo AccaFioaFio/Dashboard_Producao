@@ -15,6 +15,16 @@ import {
   formatTecido,
 } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
+import {
+  explainAguardandoTecido,
+  explainSignusSemCorte,
+  explainTecidoCanal,
+  explainTecidoCruzado,
+  explainTecidoMes,
+  explainTecidoRanking,
+  explainTecidoTipo,
+  tipoTecidoHint,
+} from '@/lib/table-explain'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Tecidos' }
@@ -142,6 +152,14 @@ export default async function TecidosPage({
             signus: formatMeters(row.signusMetros),
             economia: formatMeters(row.economia, row.economia >= 10 ? 0 : 1),
             pedidos: formatInt(row.pedidos),
+            hint: explainTecidoRanking({
+              tecido: formatTecido(row.cod, row.nome),
+              metros: row.metros,
+              signusMetros: row.signusMetros,
+              economia: row.economia,
+              pedidos: row.pedidos,
+              totalCorte: metrosCorte,
+            }),
           }))}
           empty="Sem consumo de tecido na carga"
         />
@@ -160,6 +178,11 @@ export default async function TecidosPage({
               mes: MONTH_LABELS[row.mes - 1],
               corte: formatMeters(row.corte),
               signus: formatMeters(row.signus),
+              hint: explainTecidoMes({
+                mes: MONTH_LABELS[row.mes - 1],
+                corte: row.corte,
+                signus: row.signus,
+              }),
             }))}
           />
         </section>
@@ -177,6 +200,13 @@ export default async function TecidosPage({
               metros: formatMeters(row.metros),
               movimentos: formatInt(row.movimentos),
               pedidos: formatInt(row.pedidos),
+              hint: explainTecidoTipo({
+                tipo: TIPO_TECIDO_LABEL[row.tipoNorm] ?? row.tipoNorm,
+                metros: row.metros,
+                movimentos: row.movimentos,
+                pedidos: row.pedidos,
+                extra: tipoTecidoHint(row.tipoNorm),
+              }),
             }))}
             empty="Sem movimentação Signus. Atualize os dados."
           />
@@ -201,6 +231,13 @@ export default async function TecidosPage({
             corte: formatMeters(row.corteMetros),
             signus: formatMeters(row.signusMetros),
             delta: formatMeters(row.corteMetros - row.signusMetros),
+            hint: explainTecidoCruzado({
+              tecido: formatTecido(row.cod, row.nome),
+              corteMetros: row.corteMetros,
+              signusMetros: row.signusMetros,
+              cortePedidos: row.cortePedidos,
+              signusPedidos: row.signusPedidos,
+            }),
           }))}
         />
       </section>
@@ -218,6 +255,11 @@ export default async function TecidosPage({
               nome: row.nome === '(sem canal)' ? 'Produção (insumos)' : row.nome,
               metros: formatMeters(row.metros),
               movimentos: formatInt(row.movimentos),
+              hint: explainTecidoCanal({
+                nome: row.nome === '(sem canal)' ? 'Produção (insumos)' : row.nome,
+                metros: row.metros,
+                movimentos: row.movimentos,
+              }),
             }))}
           />
         </section>
@@ -233,6 +275,11 @@ export default async function TecidosPage({
               tecido: formatTecido(row.cod, row.nome),
               signus: formatMeters(row.signusMetros),
               pedidos: formatInt(row.signusPedidos),
+              hint: explainSignusSemCorte({
+                tecido: formatTecido(row.cod, row.nome),
+                signusMetros: row.signusMetros,
+                signusPedidos: row.signusPedidos,
+              }),
             }))}
             empty="Toda baixa Signus tem código no Corte"
           />
@@ -260,6 +307,10 @@ export default async function TecidosPage({
             metros: formatNumber(row.metros, row.metros >= 100 ? 0 : 1),
             pecas: formatInt(row.pecas),
             status: row.statusVigente ?? 'AGUARDANDO TECIDO',
+            hint: explainAguardandoTecido({
+              ...row,
+              tecido: formatTecido(row.codTecido, row.tecido),
+            }),
           }))}
           empty="Nenhum pedido aguardando tecido"
         />

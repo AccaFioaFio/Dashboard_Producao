@@ -59,6 +59,11 @@ export function formatDate(iso: string | null | undefined) {
   return `${day}/${month}/${year}`
 }
 
+export function formatDays(value: number | null | undefined, digits = 1) {
+  if (value == null || !Number.isFinite(value)) return '—'
+  return `${formatNumber(value, digits)} d`
+}
+
 export function formatDateTime(iso: string | null | undefined) {
   if (!iso) return '—'
   const date = new Date(iso)

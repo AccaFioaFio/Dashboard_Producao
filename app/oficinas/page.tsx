@@ -7,6 +7,7 @@ import { FilterBar } from '@/components/filter-bar'
 import { getFilterOptions, getOficinas } from '@/data/dashboard'
 import { MONTH_LABELS, formatDate, formatInt, formatMoney, formatMoneyCompact, formatNumber } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
+import { explainOficinaRanking, explainOficinaSemRetorno } from '@/lib/table-explain'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Oficinas' }
@@ -100,6 +101,14 @@ export default async function OficinasPage({
             valor: formatMoney(row.valor),
             alert: row.defeitos > 0,
             warning: row.pecas > 0 && row.defeitos === 0,
+            hint: explainOficinaRanking({
+              nome: row.nome,
+              pendentes: row.pecas,
+              enviadas: row.enviadas,
+              retornadas: row.retornadas,
+              defeitos: row.defeitos,
+              valor: row.valor,
+            }),
           }))}
         />
       </section>
@@ -118,6 +127,7 @@ export default async function OficinasPage({
             pedido: row.pedido,
             enviadas: formatInt(row.enviadas),
             data: formatDate(row.data),
+            hint: explainOficinaSemRetorno(row),
           }))}
           empty="Nenhum lote nessa quebra"
         />

@@ -37,6 +37,8 @@ export type CorteLinha = {
   cliente: string | null
   inicioCorte: string | null
   finalCorte: string | null
+  pcpProntas: string | null
+  observacao: string | null
   diasDeCorteRaw: number | null
 }
 
@@ -54,6 +56,8 @@ export type CortePedido = {
   cliente: string | null
   inicioCorte: string | null
   finalCorte: string | null
+  pcpProntas: string | null
+  observacao: string | null
   leadTimeDias: number | null
   statusDuplo: boolean
   headersCount: number

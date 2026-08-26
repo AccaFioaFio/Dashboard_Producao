@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import { isSerialDiasDeCorte, isYear, leadTimeDays, toIsoDate } from '@/lib/dates'
+import { isPlausibleBusinessDate, isSerialDiasDeCorte, isYear, leadTimeDays, toIsoDate } from '@/lib/dates'
 import {
   asText,
   asTecidoCode,
@@ -105,6 +105,9 @@ export function parseCorte(workbook: XLSX.WorkBook) {
   const colRazao = headerIndex(map, ['RAZAO SOCIAL'])
   const colInicio = headerIndex(map, ['INICIO CORTE'])
   const colFinal = headerIndex(map, ['FINAL CORTE'])
+  const colPcp = headerIndex(map, ['PCP PRONTAS', 'PCP PRONTA'])
+  const colObsPedido = headerIndex(map, ['OBSERVACOES'])
+  const colObsLinha = headerIndex(map, ['OBSERVACAO'])
   const colDias = headerIndex(map, ['DIAS DE CORTE'])
   const colTecido = headerIndex(map, ['TECIDOS'])
   const colCodTecido = headerIndex(map, ['COD TECIDO'])
@@ -122,6 +125,8 @@ export function parseCorte(workbook: XLSX.WorkBook) {
   let headerResp: string | null = null
   let headerInicio: string | null = null
   let headerFinal: string | null = null
+  let headerPcp: string | null = null
+  let headerObs: string | null = null
 
   for (let i = rowIndex + 1; i < rows.length; i += 1) {
     const values = rows[i] ?? []
@@ -142,6 +147,9 @@ export function parseCorte(workbook: XLSX.WorkBook) {
       headerResp = asText(cell(values, colResp)) ?? headerResp
       headerInicio = toIsoDate(cell(values, colInicio))
       headerFinal = toIsoDate(cell(values, colFinal))
+      const pcp = toIsoDate(cell(values, colPcp))
+      headerPcp = isPlausibleBusinessDate(pcp) ? pcp : null
+      headerObs = asObservacao(cell(values, colObsPedido))
     }
 
     if (!headerPedido) continue
@@ -180,6 +188,11 @@ export function parseCorte(workbook: XLSX.WorkBook) {
       cliente: headerCliente,
       inicioCorte: inicio,
       finalCorte: fim,
+      pcpProntas: headerPcp,
+      observacao: joinObservacoes([
+        headerObs,
+        asObservacao(cell(values, colObsLinha)),
+      ]),
       diasDeCorteRaw: diasRaw,
     })
   }
@@ -225,6 +238,12 @@ export function parseCorte(workbook: XLSX.WorkBook) {
       finalCorte:
         [...headers].reverse().map((row) => row.finalCorte).find(Boolean) ??
         null,
+      pcpProntas:
+        headers
+          .map((row) => row.pcpProntas)
+          .filter((value): value is string => Boolean(value))
+          .sort()[0] ?? null,
+      observacao: joinObservacoes(group.map((row) => row.observacao)),
       leadTimeDias: leadTimeDays(
         headers.map((row) => row.inicioCorte).find(Boolean) ?? null,
         [...headers].reverse().map((row) => row.finalCorte).find(Boolean) ??
@@ -407,6 +426,35 @@ export function parseOficinas(workbook: XLSX.WorkBook) {
   }
 
   return { lotes, qualidade }
+}
+
+function asObservacao(value: unknown) {
+  if (value == null || value === '') return null
+  if (value instanceof Date) return null
+  if (typeof value === 'number') return null
+  const text = asText(value)
+  if (!text) return null
+  if (/^-?\d+([.,]\d+)?$/.test(text)) return null
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+function joinObservacoes(values: (string | null | undefined)[]) {
+  const seen = new Set<string>()
+  const parts: string[] = []
+  for (const raw of values) {
+    if (!raw) continue
+    for (const piece of raw.split(' · ')) {
+      const text = piece.replace(/\s+/g, ' ').trim()
+      if (!text) continue
+      const key = text.toUpperCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      parts.push(text)
+    }
+  }
+  if (!parts.length) return null
+  const joined = parts.join(' · ')
+  return joined.length > 500 ? `${joined.slice(0, 497)}...` : joined
 }
 
 function foldSafe(value: string) {

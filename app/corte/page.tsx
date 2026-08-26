@@ -13,6 +13,12 @@ import {
   formatTecido,
 } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
+import {
+  explainAguardandoTecido,
+  explainCorteWip,
+  explainMesVolume,
+  explainNamedVolume,
+} from '@/lib/table-explain'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Corte' }
@@ -104,6 +110,7 @@ export default async function CortePage({
               cliente: row.cliente,
               pecas: formatInt(row.pecas),
               responsavel: row.responsavel,
+              hint: explainCorteWip(row),
             }))}
             empty="Nenhum pedido em produção neste recorte"
           />
@@ -131,6 +138,10 @@ export default async function CortePage({
               metros: formatMeters(row.metros, row.metros >= 10 ? 0 : 1),
               pecas: formatInt(row.pecas),
               responsavel: row.responsavel,
+              hint: explainAguardandoTecido({
+                ...row,
+                tecido: formatTecido(row.codTecido, row.tecido),
+              }),
             }))}
             empty="Nenhum pedido aguardando tecido neste recorte"
           />
@@ -150,6 +161,12 @@ export default async function CortePage({
               mes: MONTH_LABELS[row.nome - 1],
               pecas: formatInt(row.pecas),
               pedidos: formatInt(row.pedidos),
+              hint: explainMesVolume({
+                mes: MONTH_LABELS[row.nome - 1],
+                pecas: row.pecas,
+                pedidos: row.pedidos,
+                extra: 'Peças = SUM da quantidade cortada, não contagem de linha.',
+              }),
             }))}
           />
         </section>
@@ -165,6 +182,14 @@ export default async function CortePage({
               nome: row.nome,
               pecas: formatInt(row.pecas),
               pedidos: formatInt(row.pedidos),
+              hint: explainNamedVolume({
+                titulo: 'Canal',
+                nome: row.nome,
+                pecas: row.pecas,
+                pedidos: row.pedidos,
+                totalPecas: corte.resumo.pecas,
+                extra: 'FATURAMENTO é canal (FAF, ACCA, TC…), não receita.',
+              }),
             }))}
           />
         </section>
@@ -180,6 +205,13 @@ export default async function CortePage({
               nome: row.nome,
               pecas: formatInt(row.pecas),
               pedidos: formatInt(row.pedidos),
+              hint: explainNamedVolume({
+                titulo: 'Responsável',
+                nome: row.nome,
+                pecas: row.pecas,
+                pedidos: row.pedidos,
+                totalPecas: corte.resumo.pecas,
+              }),
             }))}
           />
         </section>
@@ -195,6 +227,13 @@ export default async function CortePage({
               nome: row.nome,
               pecas: formatInt(row.pecas),
               pedidos: formatInt(row.pedidos),
+              hint: explainNamedVolume({
+                titulo: 'Cliente',
+                nome: row.nome,
+                pecas: row.pecas,
+                pedidos: row.pedidos,
+                totalPecas: corte.resumo.pecas,
+              }),
             }))}
           />
         </section>

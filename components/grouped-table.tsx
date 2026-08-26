@@ -76,10 +76,14 @@ function TonedRow({
 
   return (
     <Tooltip>
-      <TooltipTrigger delay={250} render={<tr className={rowClassName} />}>
+      <TooltipTrigger delay={180} render={<tr className={rowClassName} />}>
         {children}
       </TooltipTrigger>
-      <TooltipContent className="max-w-xs text-left leading-snug">
+      <TooltipContent
+        side="top"
+        align="start"
+        className="max-w-sm whitespace-pre-line text-left leading-snug"
+      >
         {row.hint}
       </TooltipContent>
     </Tooltip>

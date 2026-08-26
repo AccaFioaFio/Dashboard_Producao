@@ -12,6 +12,12 @@ import {
 } from '@/data/dashboard'
 import { MONTH_LABELS, formatDate, formatInt } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
+import {
+  explainCosturaOrigem,
+  explainLancamentoDia,
+  explainMesVolume,
+  explainNamedVolume,
+} from '@/lib/table-explain'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Costuras' }
@@ -92,18 +98,32 @@ export default async function CosturasPage({
             { key: 'pedidos', label: 'Pedidos', numeric: true },
             { key: 'uso', label: 'Uso' },
           ]}
-          rows={costuras.mix.map((row) => ({
-            origem: row.origem,
-            lancamentos: formatInt(row.lancamentos),
-            pecas: formatInt(row.pecas),
-            pedidos: formatInt(row.pedidos),
-            uso:
+          rows={costuras.mix.map((row) => {
+            const uso =
               row.origemNorm === 'Producao'
                 ? 'Funil'
                 : row.origemNorm === 'Conserto'
                   ? 'Retrabalho'
-                  : 'Serviço / acabamento',
-          }))}
+                  : 'Serviço / acabamento'
+            return {
+              origem: row.origem,
+              lancamentos: formatInt(row.lancamentos),
+              pecas: formatInt(row.pecas),
+              pedidos: formatInt(row.pedidos),
+              uso,
+              hint: explainCosturaOrigem({
+                origem: row.origem,
+                lancamentos: row.lancamentos,
+                pecas: row.pecas,
+                pedidos: row.pedidos,
+                uso,
+                extra:
+                  row.origemNorm === 'Producao'
+                    ? 'Só Origem = Produção entra no funil. Etiqueta, festonê e conserto ficam de fora.'
+                    : 'Não entra no KPI de Costura Produção do funil.',
+              }),
+            }
+          })}
         />
       </section>
 
@@ -118,6 +138,11 @@ export default async function CosturasPage({
             rows={serie.map((row) => ({
               mes: MONTH_LABELS[row.mes - 1],
               pecas: formatInt(row.costura),
+              hint: explainMesVolume({
+                mes: MONTH_LABELS[row.mes - 1],
+                pecas: row.costura,
+                extra: 'Só Origem = Produção. Acompanhamento, não fechamento contra o Corte.',
+              }),
             }))}
           />
         </section>
@@ -133,6 +158,14 @@ export default async function CosturasPage({
               nome: row.nome,
               pecas: formatInt(row.pecas),
               pedidos: formatInt(row.pedidos),
+              hint: explainNamedVolume({
+                titulo: 'Responsável',
+                nome: row.nome,
+                pecas: row.pecas,
+                pedidos: row.pedidos,
+                totalPecas: costuras.producao.pecas,
+                extra: 'Somente Origem = Produção.',
+              }),
             }))}
           />
         </section>
@@ -152,6 +185,10 @@ export default async function CosturasPage({
             pecas: formatInt(row.pecas),
             responsavel: row.responsavel,
             produto: row.produto,
+            hint: explainLancamentoDia({
+              ...row,
+              etapa: 'Costura Produção',
+            }),
           }))}
           empty="Nenhum lançamento de Produção hoje neste recorte"
         />

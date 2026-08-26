@@ -12,6 +12,11 @@ import {
 } from '@/data/dashboard'
 import { MONTH_LABELS, formatDate, formatInt } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
+import {
+  explainLancamentoDia,
+  explainMesVolume,
+  explainNamedVolume,
+} from '@/lib/table-explain'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Revisão' }
@@ -89,6 +94,12 @@ export default async function RevisaoPage({
             rows={serie.map((row) => ({
               mes: MONTH_LABELS[row.mes - 1],
               pecas: formatInt(row.revisao),
+              hint: explainMesVolume({
+                mes: MONTH_LABELS[row.mes - 1],
+                pecas: row.revisao,
+                extra:
+                  'Revisão limpa (sem linha de total e sem Qtd = número do pedido). Pode incluir pedido cortado em 2025.',
+              }),
             }))}
           />
         </section>
@@ -104,6 +115,14 @@ export default async function RevisaoPage({
               nome: row.nome,
               pecas: formatInt(row.pecas),
               pedidos: formatInt(row.pedidos),
+              hint: explainNamedVolume({
+                titulo: 'Responsável',
+                nome: row.nome,
+                pecas: row.pecas,
+                pedidos: row.pedidos,
+                totalPecas: revisao.resumo.pecas,
+                extra: 'Peças da Revisão limpa no recorte.',
+              }),
             }))}
           />
         </section>
@@ -123,6 +142,10 @@ export default async function RevisaoPage({
             pecas: formatInt(row.pecas),
             responsavel: row.responsavel,
             produto: row.produto,
+            hint: explainLancamentoDia({
+              ...row,
+              etapa: 'Revisão',
+            }),
           }))}
           empty="Nenhum lançamento de Revisão hoje neste recorte"
         />

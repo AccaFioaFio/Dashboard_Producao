@@ -1,5 +1,11 @@
 import { formatInt } from '@/lib/format'
 import type { FunilKpis } from '@/lib/etl/types'
+import { explainFunilRow } from '@/lib/table-explain'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 export function FunnelCard({ funil }: { funil: FunilKpis }) {
   const rows = [
@@ -22,20 +28,34 @@ export function FunnelCard({ funil }: { funil: FunilKpis }) {
           const numeric = typeof row.value === 'number' ? row.value : funil.oficinas
           const bars = ['bg-chart-1', 'bg-chart-2', 'bg-chart-3', 'bg-chart-4']
           return (
-            <li key={row.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-xs text-muted-foreground">{row.label}</span>
-                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={`h-full rounded-full ${bars[index % bars.length]}`}
-                    style={{ width: `${Math.min(100, (numeric / max) * 100)}%` }}
-                  />
+            <Tooltip key={row.label}>
+              <TooltipTrigger
+                delay={180}
+                render={
+                  <li className="grid cursor-help grid-cols-[minmax(0,1fr)_auto] items-center gap-2" />
+                }
+              >
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-xs text-muted-foreground">{row.label}</span>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={`h-full rounded-full ${bars[index % bars.length]}`}
+                      style={{ width: `${Math.min(100, (numeric / max) * 100)}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
-              <span className="font-mono text-sm tabular-nums">
-                {typeof row.value === 'number' ? formatInt(row.value) : row.value}
-              </span>
-            </li>
+                <span className="font-mono text-sm tabular-nums">
+                  {typeof row.value === 'number' ? formatInt(row.value) : row.value}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                align="start"
+                className="max-w-sm whitespace-pre-line text-left leading-snug"
+              >
+                {explainFunilRow(row.label, funil)}
+              </TooltipContent>
+            </Tooltip>
           )
         })}
       </ul>
