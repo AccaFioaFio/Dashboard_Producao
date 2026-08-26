@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react'
 import { Minus, Plus } from 'lucide-react'
+import { PedidoLink } from '@/components/pedido-link'
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,
@@ -12,7 +13,13 @@ import { cn } from '@/lib/utils'
 
 type CellValue = string | number | boolean | null
 
-type TableColumn = { key: string; label: string; numeric?: boolean; wrap?: boolean }
+type TableColumn = {
+  key: string
+  label: string
+  numeric?: boolean
+  wrap?: boolean
+  link?: boolean
+}
 
 type ChildRow = {
   cells: Record<string, CellValue>
@@ -238,7 +245,17 @@ function GroupRows({
                     <TonedRow key={index} row={child} nested>
                       {childColumns.map((col) => (
                         <td key={col.key} className={cellClass(col)}>
-                          {child.cells[col.key] ?? '—'}
+                          {col.link ? (
+                            <PedidoLink
+                              pedido={
+                                child.cells[col.key] == null
+                                  ? null
+                                  : String(child.cells[col.key])
+                              }
+                            />
+                          ) : (
+                            (child.cells[col.key] ?? '—')
+                          )}
                         </td>
                       ))}
                     </TonedRow>

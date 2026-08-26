@@ -136,7 +136,7 @@ export default async function TecidosValoresPage({
             { key: 'pedidos', label: 'Pedidos', numeric: true },
           ]}
           childColumns={[
-            { key: 'pedido', label: 'Pedido' },
+            { key: 'pedido', label: 'Pedido', link: true },
             { key: 'cliente', label: 'Cliente', wrap: true },
             { key: 'consumo', label: 'Consumo', numeric: true },
             { key: 'baixa', label: 'Baixa', numeric: true },

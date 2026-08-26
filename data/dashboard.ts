@@ -65,6 +65,7 @@ export type CortePedidoRow = {
   cliente: string | null
   responsavel: string | null
   observacao: string | null
+  diasParado: number | null
 }
 
 function sqlite() {
@@ -485,8 +486,10 @@ export const getCorteBreakdown = cache(async (filters: DashFilters = {}) => {
   const obs = observacaoExpr()
   const wip = runAll<CortePedidoRow>(
     `SELECT p.pedido_norm as pedidoNorm, p.data, p.status_vigente as statusVigente, p.pecas, p.canal, p.cliente, p.responsavel,
-            ${obs}
-     FROM fato_corte_pedido p WHERE ${where} AND p.status_vigente = 'EM PRODUÇÃO' ORDER BY p.pecas DESC`,
+            ${obs},
+            CAST(julianday('now', 'localtime') - julianday(COALESCE(p.data, p.inicio_corte, p.pcp_prontas)) AS INTEGER) as diasParado
+     FROM fato_corte_pedido p WHERE ${where} AND p.status_vigente = 'EM PRODUÇÃO'
+     ORDER BY diasParado DESC, p.pecas DESC`,
     params,
   )
   const tecido = runAll<TecidoPendenteRow>(
@@ -1368,6 +1371,23 @@ export const getOficinas = cache(async (filters: DashFilters = {}) => {
      ORDER BY o.qtd_enviadas DESC LIMIT 20`,
     params,
   )
+  const pendentesAging = runAll<{
+    oficina: string
+    pedido: string | null
+    pendentes: number
+    data: string
+    prometida: string | null
+    diasParado: number | null
+  }>(
+    `SELECT o.oficina, o.pedido_norm as pedido, o.qtd_pendentes as pendentes, o.data_envio as data,
+            o.data_prometida as prometida,
+            CAST(julianday('now', 'localtime') - julianday(o.data_envio) AS INTEGER) as diasParado
+     FROM fato_oficinas o
+     WHERE ${where} AND o.qtd_pendentes > 0
+     ORDER BY diasParado DESC, o.qtd_pendentes DESC
+     LIMIT 40`,
+    params,
+  )
   const porMes = runAll<{ mes: number; enviadas: number; pendentes: number }>(
     `SELECT CAST(substr(o.data_envio, 6, 2) as INTEGER) as mes,
             COALESCE(SUM(o.qtd_enviadas), 0) as enviadas,
@@ -1383,6 +1403,7 @@ export const getOficinas = cache(async (filters: DashFilters = {}) => {
     pendentes,
     defeitos,
     semRetorno,
+    pendentesAging,
     porMes,
   }
 })

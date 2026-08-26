@@ -1,6 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import Link from 'next/link'
 import {
   Tooltip,
   TooltipContent,
@@ -49,6 +50,7 @@ export function KpiCard({
   warning = false,
   progress,
   tone = 'indigo',
+  href,
 }: {
   label: string
   value: string
@@ -58,13 +60,15 @@ export function KpiCard({
   warning?: boolean
   progress?: number
   tone?: keyof typeof TONE_BAR
+  href?: string
 }) {
   const bar = alert ? TONE_BAR.rose : warning ? TONE_BAR.amber : TONE_BAR[tone]
-  const width = Math.max(8, Math.min(100, progress ?? 62))
+  const width = progress == null ? null : Math.max(8, Math.min(100, progress))
   const tooltip = detail ?? hint
   const className = cn(
     'kpi-shine card-surface flex h-full min-h-[var(--kpi-min-h)] w-full min-w-0 flex-col gap-1 p-[var(--kpi-pad)]',
     tooltip && 'cursor-help',
+    href && 'transition hover:ring-1 hover:ring-primary/40',
     alert &&
       'bg-destructive/[0.07] shadow-[inset_3px_0_0_0_var(--destructive)] ring-1 ring-destructive/25',
     !alert &&
@@ -89,28 +93,40 @@ export function KpiCard({
       <p className="line-clamp-2 min-h-[1.15rem] text-[10px] leading-snug text-muted-foreground">
         {hint || '\u00a0'}
       </p>
-      <div className="mt-auto h-0.5 overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn(
-            'h-full rounded-full shadow-[0_0_16px_color-mix(in_oklch,var(--glow)_70%,transparent)]',
-            bar,
-          )}
-          style={{ width: `${width}%` }}
-        />
-      </div>
+      {width != null ? (
+        <div className="mt-auto h-0.5 overflow-hidden rounded-full bg-muted">
+          <div
+            className={cn(
+              'h-full rounded-full shadow-[0_0_16px_color-mix(in_oklch,var(--glow)_70%,transparent)]',
+              bar,
+            )}
+            style={{ width: `${width}%` }}
+          />
+        </div>
+      ) : (
+        <div className="mt-auto" />
+      )}
     </>
   )
 
-  if (!tooltip) return <div className={className}>{inner}</div>
+  const body = href ? (
+    <Link href={href} className={className}>
+      {inner}
+    </Link>
+  ) : (
+    <div className={className}>{inner}</div>
+  )
+
+  if (!tooltip) return body
 
   return (
     <Tooltip>
       <TooltipTrigger
         delay={160}
         className="flex h-full min-w-0"
-        render={<div className={className} />}
+        render={<div className="flex h-full min-w-0" />}
       >
-        {inner}
+        {body}
       </TooltipTrigger>
       <TooltipContent className="max-w-sm whitespace-pre-line text-left leading-snug">
         {tooltip}

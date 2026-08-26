@@ -367,6 +367,38 @@
     0 18px 44px -18px color-mix(in oklch, var(--glow) 62%, transparent);
 }
 
+[data-layout='tv'] {
+  --radius: 0.85rem;
+  --page-pad: 1.1rem;
+  --page-gap: 1rem;
+  --kpi-min-h: 8.25rem;
+  --kpi-pad: 0.9rem;
+  --chart-h: 5.4cm;
+  --header-h: 3.25rem;
+  --card-shadow:
+    0 1px 0 color-mix(in oklch, white 70%, transparent),
+    0 14px 36px -16px color-mix(in oklch, var(--glow) 55%, transparent);
+}
+
+[data-layout='tv'] .kpi-shine .font-mono {
+  font-size: 1.85rem;
+}
+
+[data-layout='tv'] .filter-bar {
+  display: none;
+}
+
+[data-layout='tv'] [data-slot='sidebar'],
+[data-layout='tv'] [data-slot='sidebar-gap'],
+[data-layout='tv'] [data-slot='sidebar-container'],
+[data-layout='tv'] [data-slot='sidebar-rail'] {
+  display: none;
+}
+
+[data-layout='tv'] table {
+  font-size: 13px;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

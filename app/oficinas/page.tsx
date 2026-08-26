@@ -5,9 +5,11 @@ import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { FilterBar } from '@/components/filter-bar'
 import { getFilterOptions, getOficinas } from '@/data/dashboard'
-import { MONTH_LABELS, formatDate, formatInt, formatMoney, formatMoneyCompact, formatNumber } from '@/lib/format'
+import { MONTH_LABELS, formatDate, formatDays, formatInt, formatMoney, formatMoneyCompact, formatNumber } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
+import { PedidoQueue } from '@/components/pedido-queue'
 import { explainOficinaRanking, explainOficinaSemRetorno } from '@/lib/table-explain'
+import { AGING_FAIXAS } from '@/lib/pedido'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Oficinas' }
@@ -114,11 +116,64 @@ export default async function OficinasPage({
       </section>
 
       <section className="flex min-w-0 flex-col gap-2">
+        <h2 className="text-sm font-medium">Pendentes por envelhecimento</h2>
+        <p className="text-xs text-muted-foreground">
+          Dias desde a Data Envio. Destaque a partir de 15 dias.
+        </p>
+        <div className="flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
+          {AGING_FAIXAS.map((faixa) => {
+            const n = oficinas.pendentesAging.filter((row) => {
+              const dias = row.diasParado
+              return dias != null && dias >= faixa.min && dias <= faixa.max
+            }).length
+            return (
+              <span key={faixa.key} className="rounded-full border border-border/80 px-2 py-0.5">
+                {faixa.label}: {formatInt(n)}
+              </span>
+            )
+          })}
+        </div>
+        <PedidoQueue
+          empty="Nenhum lote pendente neste recorte"
+          rows={oficinas.pendentesAging.map((row) => ({
+            pedido: row.pedido,
+            title: formatDays(row.diasParado, 0),
+            lines: [row.oficina, `${formatInt(row.pendentes)} pçs`, formatDate(row.data)],
+            alert: (row.diasParado ?? 0) >= 15,
+            warning: (row.diasParado ?? 0) >= 8 && (row.diasParado ?? 0) < 15,
+          }))}
+        />
+        <div className="hidden md:block">
+          <SimpleTable
+            columns={[
+              { key: 'pedido', label: 'Pedido', link: true },
+              { key: 'oficina', label: 'Oficina' },
+              { key: 'envio', label: 'Envio' },
+              { key: 'dias', label: 'Dias', numeric: true },
+              { key: 'pendentes', label: 'Pendentes', numeric: true },
+              { key: 'prometida', label: 'Prometida' },
+            ]}
+            rows={oficinas.pendentesAging.map((row) => ({
+              pedido: row.pedido,
+              oficina: row.oficina,
+              envio: formatDate(row.data),
+              dias: formatDays(row.diasParado, 0),
+              pendentes: formatInt(row.pendentes),
+              prometida: formatDate(row.prometida),
+              alert: (row.diasParado ?? 0) >= 15,
+              warning: (row.diasParado ?? 0) >= 8 && (row.diasParado ?? 0) < 15,
+            }))}
+            empty="Nenhum lote pendente neste recorte"
+          />
+        </div>
+      </section>
+
+      <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Enviadas sem retorno e sem pendente</h2>
         <SimpleTable
           columns={[
             { key: 'oficina', label: 'Oficina' },
-            { key: 'pedido', label: 'Pedido' },
+            { key: 'pedido', label: 'Pedido', link: true },
             { key: 'enviadas', label: 'Enviadas', numeric: true },
             { key: 'data', label: 'Envio' },
           ]}

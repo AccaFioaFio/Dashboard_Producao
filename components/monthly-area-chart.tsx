@@ -109,7 +109,7 @@ export function MonthlyAreaChart({
         {description ? (
           <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
         ) : null}
-        <p className="px-1 py-4 text-sm text-muted-foreground">Sem série mensal.</p>
+        <p className="px-1 py-4 text-sm text-muted-foreground">Sem série no recorte.</p>
       </section>
     )
   }
@@ -184,18 +184,23 @@ export function MonthlyAreaChart({
         ))}
 
         {labels.map((label, index) => {
+          const compact = labels.length > 14
+          const stride = compact ? Math.ceil(labels.length / 8) : 1
+          const showTick = !compact || index === 0 || index === labels.length - 1 || index % stride === 0
           const x = pad.left + index * step
           return (
-            <g key={label}>
-              <text
-                x={x}
-                y={height - 6}
-                textAnchor="middle"
-                className="fill-muted-foreground"
-                fontSize="11"
-              >
-                {label}
-              </text>
+            <g key={`${label}-${index}`}>
+              {showTick ? (
+                <text
+                  x={x}
+                  y={height - 6}
+                  textAnchor="middle"
+                  className="fill-muted-foreground"
+                  fontSize="11"
+                >
+                  {label}
+                </text>
+              ) : null}
               <rect
                 x={x - step / 2}
                 y={pad.top}
@@ -232,8 +237,9 @@ export function MonthlyAreaChart({
           )),
         )}
 
-        {labelPlacements.flatMap((group, index) =>
-          group.map((item) => (
+        {labelPlacements.flatMap((group, index) => {
+          if (labels.length > 14 && active !== index) return []
+          return group.map((item) => (
             <text
               key={`${item.key}-label-${index}`}
               x={item.x}
@@ -249,8 +255,8 @@ export function MonthlyAreaChart({
             >
               {formatInt(item.value)}
             </text>
-          )),
-        )}
+          ))
+        })}
       </svg>
     </section>
   )

@@ -132,7 +132,7 @@ export default async function RevisaoPage({
         <h2 className="text-sm font-medium">Lançamentos do dia</h2>
         <SimpleTable
           columns={[
-            { key: 'pedido', label: 'Pedido' },
+            { key: 'pedido', label: 'Pedido', link: true },
             { key: 'pecas', label: 'Peças', numeric: true },
             { key: 'responsavel', label: 'Responsável' },
             { key: 'produto', label: 'Produto' },

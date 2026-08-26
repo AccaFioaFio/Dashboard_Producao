@@ -297,7 +297,7 @@ export default async function TempoProducaoPage({
         </p>
         <SimpleTable
           columns={[
-            { key: 'pedido', label: 'Pedido' },
+            { key: 'pedido', label: 'Pedido', link: true },
             { key: 'pcp', label: 'PCP prontas' },
             { key: 'finalCorte', label: 'Final corte' },
             { key: 'revisao', label: 'Data produção' },
@@ -332,7 +332,7 @@ export default async function TempoProducaoPage({
           <h2 className="text-sm font-medium">Pedidos mais rápidos</h2>
           <SimpleTable
             columns={[
-              { key: 'pedido', label: 'Pedido' },
+              { key: 'pedido', label: 'Pedido', link: true },
               { key: 'pcp', label: 'PCP prontas' },
               { key: 'revisao', label: 'Data produção' },
               { key: 'dias', label: 'Dias', numeric: true },
@@ -356,7 +356,7 @@ export default async function TempoProducaoPage({
           </p>
           <SimpleTable
             columns={[
-              { key: 'pedido', label: 'Pedido' },
+              { key: 'pedido', label: 'Pedido', link: true },
               { key: 'pcp', label: 'PCP prontas' },
               { key: 'finalCorte', label: 'Final corte' },
               { key: 'dias', label: 'Aberto', numeric: true },
@@ -391,7 +391,7 @@ export default async function TempoProducaoPage({
           </p>
           <SimpleTable
             columns={[
-              { key: 'pedido', label: 'Pedido' },
+              { key: 'pedido', label: 'Pedido', link: true },
               { key: 'revisao', label: 'Data produção' },
               { key: 'finalCorte', label: 'Final corte' },
               { key: 'pecas', label: 'Peças', numeric: true },
@@ -416,7 +416,7 @@ export default async function TempoProducaoPage({
           </p>
           <SimpleTable
             columns={[
-              { key: 'pedido', label: 'Pedido' },
+              { key: 'pedido', label: 'Pedido', link: true },
               { key: 'pcp', label: 'PCP prontas' },
               { key: 'revisao', label: 'Data produção' },
               { key: 'dias', label: 'Dias', numeric: true },

@@ -60,6 +60,11 @@ export const LAYOUTS = [
     label: 'Vidro',
     hint: 'Glass e brilho',
   },
+  {
+    id: 'tv',
+    label: 'TV / parede',
+    hint: 'Números grandes, filas à frente',
+  },
 ] as const
 
 export type ThemeId = (typeof THEMES)[number]['id']

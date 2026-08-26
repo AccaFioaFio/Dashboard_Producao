@@ -52,7 +52,7 @@ function cellValue(cell: XLSX.CellObject | undefined) {
   if (!cell) return null
   if (cell.t === 'd' && cell.v instanceof Date) return cell.v
   if (cell.t === 'n' && typeof cell.v === 'number') return cell.v
-  if (cell.t === 's' || cell.t === 'str') return cell.v
+  if (cell.t === 's') return cell.v
   if (cell.t === 'b') return cell.v
   if (cell.t === 'e') return null
   return cell.v ?? null

@@ -3,8 +3,10 @@ import {
   Factory,
   LayoutDashboard,
   Layers,
+  ListOrdered,
   Scissors,
   Settings,
+  ShieldAlert,
   Shirt,
   Timer,
 } from 'lucide-react'
@@ -55,10 +57,22 @@ export const navigation: NavItem[] = [
     description: 'Pendentes, SLA, Lilica e lotes sem retorno.',
   },
   {
+    title: 'Pedidos',
+    href: '/pedidos',
+    icon: ListOrdered,
+    description: 'Funil por pedido e ficha 2026.',
+  },
+  {
     title: 'Tempo de produção',
     href: '/qualidade',
     icon: Timer,
     description: 'Dias de PCP prontas até a Data Produção da Revisão.',
+  },
+  {
+    title: 'Qualidade',
+    href: '/inconsistencias',
+    icon: ShieldAlert,
+    description: 'Órfãos, Lilica e sujeira do Excel.',
   },
   {
     title: 'Configurações',

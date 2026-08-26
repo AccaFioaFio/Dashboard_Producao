@@ -8,17 +8,20 @@ import { getCorteBreakdown, getFilterOptions } from '@/data/dashboard'
 import {
   MONTH_LABELS,
   formatDate,
+  formatDays,
   formatInt,
   formatMeters,
   formatTecido,
 } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
+import { PedidoQueue } from '@/components/pedido-queue'
 import {
   explainAguardandoTecido,
   explainCorteWip,
   explainMesVolume,
   explainNamedVolume,
 } from '@/lib/table-explain'
+import { AGING_FAIXAS } from '@/lib/pedido'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Corte' }
@@ -96,55 +99,99 @@ export default async function CortePage({
       <div className="grid min-w-0 gap-[var(--page-gap)] lg:grid-cols-2">
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">EM PRODUÇÃO</h2>
-          <SimpleTable
-            columns={[
-              { key: 'pedido', label: 'Pedido' },
-              { key: 'data', label: 'Data' },
-              { key: 'cliente', label: 'Cliente' },
-              { key: 'pecas', label: 'Peças', numeric: true },
-              { key: 'responsavel', label: 'Responsável' },
-            ]}
+          <p className="text-xs text-muted-foreground">
+            Dias parados = hoje menos a data do pedido (ou início/PCP). Clique no número para a
+            ficha.
+          </p>
+          <div className="flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
+            {AGING_FAIXAS.map((faixa) => {
+              const n = corte.wip.filter((row) => {
+                const dias = row.diasParado
+                return dias != null && dias >= faixa.min && dias <= faixa.max
+              }).length
+              return (
+                <span key={faixa.key} className="rounded-full border border-border/80 px-2 py-0.5">
+                  {faixa.label}: {formatInt(n)}
+                </span>
+              )
+            })}
+          </div>
+          <PedidoQueue
+            empty="Nenhum pedido em produção neste recorte"
             rows={corte.wip.map((row) => ({
               pedido: row.pedidoNorm,
-              data: formatDate(row.data),
-              cliente: row.cliente,
-              pecas: formatInt(row.pecas),
-              responsavel: row.responsavel,
-              hint: explainCorteWip(row),
+              title: formatDays(row.diasParado, 0),
+              lines: [row.cliente, `${formatInt(row.pecas)} pçs`, row.responsavel],
+              alert: (row.diasParado ?? 0) >= 15,
+              warning: (row.diasParado ?? 0) >= 8 && (row.diasParado ?? 0) < 15,
             }))}
-            empty="Nenhum pedido em produção neste recorte"
           />
+          <div className="hidden md:block">
+            <SimpleTable
+              columns={[
+                { key: 'pedido', label: 'Pedido', link: true },
+                { key: 'data', label: 'Data' },
+                { key: 'dias', label: 'Dias', numeric: true },
+                { key: 'cliente', label: 'Cliente' },
+                { key: 'pecas', label: 'Peças', numeric: true },
+                { key: 'responsavel', label: 'Responsável' },
+              ]}
+              rows={corte.wip.map((row) => ({
+                pedido: row.pedidoNorm,
+                data: formatDate(row.data),
+                dias: formatDays(row.diasParado, 0),
+                cliente: row.cliente,
+                pecas: formatInt(row.pecas),
+                responsavel: row.responsavel,
+                hint: explainCorteWip(row),
+                alert: (row.diasParado ?? 0) >= 15,
+                warning: (row.diasParado ?? 0) >= 8 && (row.diasParado ?? 0) < 15,
+              }))}
+              empty="Nenhum pedido em produção neste recorte"
+            />
+          </div>
         </section>
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">AGUARDANDO TECIDO</h2>
           <p className="text-xs text-muted-foreground">
             Produção parada no Corte por falta de tecido: pedido, tecido, metros e peças.
           </p>
-          <SimpleTable
-            columns={[
-              { key: 'pedido', label: 'Pedido' },
-              { key: 'data', label: 'Data' },
-              { key: 'cliente', label: 'Cliente' },
-              { key: 'tecido', label: 'Tecido', wrap: true },
-              { key: 'metros', label: 'Metros', numeric: true },
-              { key: 'pecas', label: 'Peças', numeric: true },
-              { key: 'responsavel', label: 'Responsável' },
-            ]}
+          <PedidoQueue
+            empty="Nenhum pedido aguardando tecido neste recorte"
             rows={corte.tecido.map((row) => ({
               pedido: row.pedidoNorm,
-              data: formatDate(row.data),
-              cliente: row.cliente,
-              tecido: formatTecido(row.codTecido, row.tecido),
-              metros: formatMeters(row.metros, row.metros >= 10 ? 0 : 1),
-              pecas: formatInt(row.pecas),
-              responsavel: row.responsavel,
-              hint: explainAguardandoTecido({
-                ...row,
-                tecido: formatTecido(row.codTecido, row.tecido),
-              }),
+              title: formatMeters(row.metros, row.metros >= 10 ? 0 : 1),
+              lines: [row.cliente, formatTecido(row.codTecido, row.tecido), `${formatInt(row.pecas)} pçs`],
+              warning: true,
             }))}
-            empty="Nenhum pedido aguardando tecido neste recorte"
           />
+          <div className="hidden md:block">
+            <SimpleTable
+              columns={[
+                { key: 'pedido', label: 'Pedido', link: true },
+                { key: 'data', label: 'Data' },
+                { key: 'cliente', label: 'Cliente' },
+                { key: 'tecido', label: 'Tecido', wrap: true },
+                { key: 'metros', label: 'Metros', numeric: true },
+                { key: 'pecas', label: 'Peças', numeric: true },
+                { key: 'responsavel', label: 'Responsável' },
+              ]}
+              rows={corte.tecido.map((row) => ({
+                pedido: row.pedidoNorm,
+                data: formatDate(row.data),
+                cliente: row.cliente,
+                tecido: formatTecido(row.codTecido, row.tecido),
+                metros: formatMeters(row.metros, row.metros >= 10 ? 0 : 1),
+                pecas: formatInt(row.pecas),
+                responsavel: row.responsavel,
+                hint: explainAguardandoTecido({
+                  ...row,
+                  tecido: formatTecido(row.codTecido, row.tecido),
+                }),
+              }))}
+              empty="Nenhum pedido aguardando tecido neste recorte"
+            />
+          </div>
         </section>
       </div>
 

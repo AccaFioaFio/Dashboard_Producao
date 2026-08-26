@@ -293,7 +293,7 @@ export default async function TecidosPage({
         </p>
         <SimpleTable
           columns={[
-            { key: 'pedido', label: 'Pedido' },
+            { key: 'pedido', label: 'Pedido', link: true },
             { key: 'cliente', label: 'Cliente' },
             { key: 'tecido', label: 'Tecido', wrap: true },
             { key: 'metros', label: 'Metros', numeric: true },

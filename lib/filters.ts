@@ -1,3 +1,5 @@
+import { isFunilSlice, type FunilSlice } from '@/lib/funil'
+
 export type DashFilters = {
   mes?: number
   canal?: string
@@ -6,6 +8,7 @@ export type DashFilters = {
   produto?: string
   oficina?: string
   q?: string
+  fatia?: FunilSlice
 }
 
 export type FilterField = Exclude<keyof DashFilters, never>
@@ -27,6 +30,7 @@ const KEYS: FilterField[] = [
   'produto',
   'oficina',
   'q',
+  'fatia',
 ]
 
 function first(value: string | string[] | undefined) {
@@ -40,6 +44,7 @@ export function parseFilters(
   const mesRaw = first(searchParams.mes)
   const mes = mesRaw ? Number(mesRaw) : undefined
   const q = first(searchParams.q)?.trim()
+  const fatiaRaw = first(searchParams.fatia)
   return {
     mes: mes && mes >= 1 && mes <= 12 ? mes : undefined,
     canal: first(searchParams.canal) || undefined,
@@ -48,6 +53,7 @@ export function parseFilters(
     produto: first(searchParams.produto) || undefined,
     oficina: first(searchParams.oficina) || undefined,
     q: q || undefined,
+    fatia: isFunilSlice(fatiaRaw) ? fatiaRaw : undefined,
   }
 }
 
@@ -60,6 +66,7 @@ export function filtersToSearch(filters: DashFilters) {
   if (filters.produto) params.set('produto', filters.produto)
   if (filters.oficina) params.set('oficina', filters.oficina)
   if (filters.q) params.set('q', filters.q)
+  if (filters.fatia) params.set('fatia', filters.fatia)
   return params
 }
 

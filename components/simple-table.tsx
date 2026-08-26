@@ -1,6 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { PedidoLink } from '@/components/pedido-link'
 import {
   Tooltip,
   TooltipContent,
@@ -19,6 +20,7 @@ export type TableColumn = {
   label: string
   numeric?: boolean
   wrap?: boolean
+  link?: boolean
 }
 
 function columnClass(col: TableColumn, header = false) {
@@ -114,7 +116,11 @@ export function SimpleTable({
                       'font-semibold text-[oklch(0.48_0.14_65)]',
                   )}
                 >
-                  {row[col.key] ?? '—'}
+                  {col.link ? (
+                    <PedidoLink pedido={row[col.key] == null ? null : String(row[col.key])} />
+                  ) : (
+                    (row[col.key] ?? '—')
+                  )}
                 </td>
               ))}
             </TonedRow>

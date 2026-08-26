@@ -13,17 +13,20 @@ import {
   getLatestCarga,
   getSerieMensal,
 } from '@/data/dashboard'
-import { formatDateTime, formatInt, formatMeters, MONTH_LABELS } from '@/lib/format'
+import { getSerieDiaria } from '@/data/pedidos'
+import { formatDate, formatDateTime, formatInt, formatMeters, MONTH_LABELS } from '@/lib/format'
+import { pedidosFatiaHref } from '@/lib/funil'
 
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = { title: 'Visão Geral' }
 
 export default async function Page() {
-  const [header, funil, serie, alertas, carga] = await Promise.all([
+  const [header, funil, serie, diaria, alertas, carga] = await Promise.all([
     getHeaderKpis(),
     getFunil(),
     getSerieMensal(),
+    getSerieDiaria(30),
     getAlertas(),
     getLatestCarga(),
   ])
@@ -43,10 +46,13 @@ export default async function Page() {
     )
   }
 
+  const costuraShare =
+    (header.pecasCosturaProd / Math.max(header.pecasCortadas, header.pecasCosturaProd, 1)) * 100
+
   return (
     <PageShell
       title="Visão Geral"
-      description={`Somente 2026. Última leitura ${formatDateTime(carga?.lidaEm)}.`}
+      description={`Somente 2026. Última leitura ${formatDateTime(carga?.lidaEm)}. Clique nos alertas, no funil ou nos cartões parados para a lista de pedidos.`}
     >
       <AlertsBanner
         wipPedidos={header.wipPedidos}
@@ -65,33 +71,29 @@ export default async function Page() {
           value={formatInt(header.pecasCortadas)}
           hint="SUM da quantidade, não contagem de linha"
           tone="indigo"
-          progress={100}
+          href="/corte"
         />
         <KpiCard
           label="Pedidos no Corte"
           value={formatInt(header.pedidosCorte)}
           hint="Nº pedido distinto; * herda o cabeçalho"
           tone="teal"
-          progress={Math.min(100, (header.pedidosCorte / Math.max(header.pedidosCorte, 1)) * 72)}
+          href={pedidosFatiaHref('corte')}
         />
         <KpiCard
           label="Costura Produção"
           value={formatInt(header.pecasCosturaProd)}
           hint="Origem = Produção (funil)"
           tone="amber"
-          progress={
-            (header.pecasCosturaProd / Math.max(header.pecasCortadas, header.pecasCosturaProd, 1)) *
-            100
-          }
+          progress={costuraShare}
+          href="/costuras"
         />
         <KpiCard
           label="Revisão limpa"
           value={formatInt(header.pecasRevisao)}
-          hint="Sem total da tabela e sem Qtd = pedido"
+          hint="Sem total da tabela e sem Qtd = pedido. Não fecha contra o corte do mês."
           tone="magenta"
-          progress={
-            (header.pecasRevisao / Math.max(header.pecasCortadas, header.pecasRevisao, 1)) * 100
-          }
+          href="/revisao"
         />
         <KpiCard
           label="WIP Corte"
@@ -99,7 +101,7 @@ export default async function Page() {
           hint="Pedidos vigentes / peças no status EM PRODUÇÃO"
           alert={header.wipPedidos > 0}
           tone="indigo"
-          progress={header.wipPedidos > 0 ? 55 : 12}
+          href={pedidosFatiaHref('wip')}
         />
         <KpiCard
           label="Aguardando tecido"
@@ -107,7 +109,7 @@ export default async function Page() {
           hint={`${formatInt(header.tecidoPecas)} pçs · detalhes na aba Tecidos`}
           alert={header.tecidoPedidos > 0}
           tone="amber"
-          progress={header.tecidoPedidos > 0 ? 48 : 10}
+          href={pedidosFatiaHref('aguardandoTecido')}
         />
         <KpiCard
           label="Oficinas pendentes"
@@ -115,60 +117,76 @@ export default async function Page() {
           hint={`Defeitos ${formatInt(header.oficinasDefeitos)}`}
           alert={header.oficinasPendentes > 0}
           tone="magenta"
-          progress={Math.min(100, header.oficinasPendentes > 0 ? 64 : 8)}
+          href="/oficinas"
         />
         <KpiCard
           label="Hoje"
           value={`${formatInt(alertas.costuraHoje)} / ${formatInt(alertas.revisaoHoje)}`}
           hint="Costura Produção / Revisão do dia"
           tone="teal"
-          progress={alertas.costuraHoje + alertas.revisaoHoje > 0 ? 70 : 15}
+          href="/costuras"
         />
       </KpiGrid>
 
-      <div className="grid min-w-0 gap-[var(--page-gap)]">
-        <MonthlyAreaChart
-          title="Corte"
-          description="Peças cortadas em 2026, mês a mês."
-          labels={serie.map((row) => MONTH_LABELS[row.mes - 1])}
-          series={[
-            {
-              key: 'corte',
-              label: 'Corte',
-              color: 'var(--chart-1)',
-              values: serie.map((row) => row.cortadas),
-            },
-          ]}
-        />
-        <MonthlyAreaChart
-          title="Costuras"
-          description="Origem = Produção. Acompanhamento, não fechamento."
-          labels={serie.map((row) => MONTH_LABELS[row.mes - 1])}
-          series={[
-            {
-              key: 'costura',
-              label: 'Produção',
-              color: 'var(--chart-2)',
-              values: serie.map((row) => row.costura),
-            },
-          ]}
-        />
-        <MonthlyAreaChart
-          title="Revisão"
-          description="Revisão limpa, mês a mês."
-          labels={serie.map((row) => MONTH_LABELS[row.mes - 1])}
-          series={[
-            {
-              key: 'revisao',
-              label: 'Revisão',
-              color: 'var(--chart-3)',
-              values: serie.map((row) => row.revisao),
-            },
-          ]}
+      <div className="grid min-w-0 gap-[var(--page-gap)] xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.9fr)]">
+        <div className="grid min-w-0 gap-[var(--page-gap)]">
+          <MonthlyAreaChart
+            title="Últimos 30 dias"
+            description="Peças por dia. Acompanhamento, não fechamento do funil."
+            labels={diaria.map((row) => formatDate(row.data).slice(0, 5))}
+            series={[
+              {
+                key: 'corte',
+                label: 'Corte',
+                color: 'var(--chart-1)',
+                values: diaria.map((row) => row.cortadas),
+              },
+              {
+                key: 'costura',
+                label: 'Costura Prod.',
+                color: 'var(--chart-2)',
+                values: diaria.map((row) => row.costura),
+              },
+              {
+                key: 'revisao',
+                label: 'Revisão',
+                color: 'var(--chart-3)',
+                values: diaria.map((row) => row.revisao),
+              },
+            ]}
+          />
+          <MonthlyAreaChart
+            title="2026 mês a mês"
+            description="As três etapas no mesmo gráfico. Revisão pode incluir pedido cortado em 2025."
+            labels={serie.map((row) => MONTH_LABELS[row.mes - 1])}
+            series={[
+              {
+                key: 'corte',
+                label: 'Corte',
+                color: 'var(--chart-1)',
+                values: serie.map((row) => row.cortadas),
+              },
+              {
+                key: 'costura',
+                label: 'Costura Prod.',
+                color: 'var(--chart-2)',
+                values: serie.map((row) => row.costura),
+              },
+              {
+                key: 'revisao',
+                label: 'Revisão',
+                color: 'var(--chart-3)',
+                values: serie.map((row) => row.revisao),
+              },
+            ]}
+          />
+        </div>
+        <FunnelCard
+          funil={funil}
+          wipPedidos={header.wipPedidos}
+          tecidoPedidos={header.tecidoPedidos}
         />
       </div>
-
-      <FunnelCard funil={funil} />
     </PageShell>
   )
 }
