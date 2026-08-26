@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
 
 export { YEAR } from '@/lib/year'
-export { CLOUD_DB_BLOB, CLOUD_SNAPSHOT_BLOB } from '@/lib/cloud/constants'
+export { CLOUD_DB_BLOB } from '@/lib/cloud/constants'
 
 export const PROJECT_ROOT = process.cwd()
 

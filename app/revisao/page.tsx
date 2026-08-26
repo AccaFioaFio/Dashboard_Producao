@@ -3,7 +3,6 @@ import { PageShell } from '@/components/page-shell'
 import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
-import { RefreshForm } from '@/components/refresh-form'
 import { FilterBar } from '@/components/filter-bar'
 import {
   getFilterOptions,
@@ -35,7 +34,6 @@ export default async function RevisaoPage({
     <PageShell
       title="Revisão"
       description="Sem linha de total da tabela e sem Qtd igual ao número do pedido."
-      actions={<RefreshForm />}
     >
       <FilterBar
         pathname="/revisao"

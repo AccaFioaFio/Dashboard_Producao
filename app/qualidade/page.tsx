@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
 import { SimpleTable } from '@/components/simple-table'
-import { RefreshForm } from '@/components/refresh-form'
 import { getQualidade } from '@/data/dashboard'
 import { formatInt } from '@/lib/format'
 
@@ -28,7 +27,6 @@ export default async function QualidadePage() {
     <PageShell
       title="Qualidade"
       description="Órfãos de 2026, limpeza da Revisão, serial de DIAS DE CORTE, status duplo, oficina vazia e baixa Signus sem Corte."
-      actions={<RefreshForm />}
     >
       <SimpleTable
         columns={[
@@ -41,7 +39,7 @@ export default async function QualidadePage() {
           count: formatInt(row.count),
           valor: formatInt(row.valor),
         }))}
-        empty="Nenhum evento de qualidade. Rode Atualizar dados."
+        empty="Nenhum evento de qualidade na carga atual."
       />
 
       <section className="flex flex-col gap-2">

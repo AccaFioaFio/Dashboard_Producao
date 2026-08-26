@@ -3,7 +3,6 @@ import { PageShell } from '@/components/page-shell'
 import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { GroupedTable } from '@/components/grouped-table'
-import { RefreshForm } from '@/components/refresh-form'
 import { FilterBar } from '@/components/filter-bar'
 import { TecidosMetrosButton } from '@/components/tecidos-valores-nav'
 import { getFilterOptions, getTecidosValores } from '@/data/dashboard'
@@ -49,12 +48,7 @@ export default async function TecidosValoresPage({
     <PageShell
       title="Valores do tecido"
       description="Valor unitário do Signus e valor unitário × quantidade baixada. Clique em + para abrir os pedidos daquele tecido."
-      actions={
-        <>
-          <TecidosMetrosButton filters={filters} />
-          <RefreshForm />
-        </>
-      }
+      actions={<TecidosMetrosButton filters={filters} />}
     >
       <FilterBar
         pathname="/tecidos/valores"
@@ -65,8 +59,8 @@ export default async function TecidosValoresPage({
 
       {!valores.hasValores || valores.movimentosComValor === 0 ? (
         <p className="card-surface px-4 py-3 text-xs text-muted-foreground">
-          Sem valor unitário na carga. Clique em Atualizar dados para reler o Signus
-          (custo bruto, valor unitário contábil e tipo de documento).
+          Sem valor unitário na carga. Depois que o publicador reler o Signus
+          (custo bruto, valor unitário contábil e tipo de documento), recarregue a página.
         </p>
       ) : null}
 

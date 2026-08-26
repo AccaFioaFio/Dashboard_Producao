@@ -4,7 +4,6 @@ import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { FunnelCard } from '@/components/funnel-card'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { AlertsBanner } from '@/components/alerts-banner'
-import { RefreshForm } from '@/components/refresh-form'
 import { SectionPlaceholder } from '@/components/section-placeholder'
 import { LayoutDashboard } from 'lucide-react'
 import {
@@ -34,12 +33,11 @@ export default async function Page() {
       <PageShell
         title="Visão Geral"
         description="Dashboard de produção 2026."
-        actions={<RefreshForm />}
       >
         <SectionPlaceholder
           icon={LayoutDashboard}
           title="Nenhuma carga 2026"
-          description="Clique em Atualizar dados para copiar as planilhas da pasta Arquivos do Excel, aplicar o recorte de 2026 e gravar os fatos."
+          description="O publicador (pnpm carga:watch) lê as planilhas neste PC e grava a carga. Recarregue a página depois da publicação."
         />
       </PageShell>
     )
@@ -49,7 +47,6 @@ export default async function Page() {
     <PageShell
       title="Visão Geral"
       description={`Somente 2026. Última leitura ${formatDateTime(carga?.lidaEm)}.`}
-      actions={<RefreshForm />}
     >
       <AlertsBanner
         wipPedidos={header.wipPedidos}

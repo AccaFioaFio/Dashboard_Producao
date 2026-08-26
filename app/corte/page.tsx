@@ -3,7 +3,6 @@ import { PageShell } from '@/components/page-shell'
 import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
-import { RefreshForm } from '@/components/refresh-form'
 import { FilterBar } from '@/components/filter-bar'
 import { getCorteBreakdown, getFilterOptions } from '@/data/dashboard'
 import {
@@ -34,7 +33,6 @@ export default async function CortePage({
     <PageShell
       title="Corte"
       description="Volume em peça e pedido. Agosto explode linha de tecido: não use contagem de linha. Consumo e baixa de tecido ficam na aba Tecidos."
-      actions={<RefreshForm />}
     >
       <FilterBar
         pathname="/corte"

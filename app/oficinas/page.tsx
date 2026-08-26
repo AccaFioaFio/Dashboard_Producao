@@ -3,7 +3,6 @@ import { PageShell } from '@/components/page-shell'
 import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
-import { RefreshForm } from '@/components/refresh-form'
 import { FilterBar } from '@/components/filter-bar'
 import { getFilterOptions, getOficinas } from '@/data/dashboard'
 import { MONTH_LABELS, formatDate, formatInt, formatMoney, formatMoneyCompact, formatNumber } from '@/lib/format'
@@ -29,7 +28,6 @@ export default async function OficinasPage({
     <PageShell
       title="Oficinas"
       description="Somente lotes com Data Envio em 2026 e oficina preenchida."
-      actions={<RefreshForm />}
     >
       <FilterBar
         pathname="/oficinas"

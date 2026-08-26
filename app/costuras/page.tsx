@@ -3,7 +3,6 @@ import { PageShell } from '@/components/page-shell'
 import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
-import { RefreshForm } from '@/components/refresh-form'
 import { FilterBar } from '@/components/filter-bar'
 import {
   getCosturas,
@@ -38,7 +37,6 @@ export default async function CosturasPage({
     <PageShell
       title="Costuras"
       description="Funil usa só Origem = Produção. Etiqueta, festonê e conserto ficam no mix de serviço."
-      actions={<RefreshForm />}
     >
       <FilterBar
         pathname="/costuras"

@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
-import { RefreshForm } from '@/components/refresh-form'
 import { getLatestCarga } from '@/data/dashboard'
 import { corteXlsxPath, oficinasXlsxPath, signusXlsPath } from '@/lib/paths'
 import { formatDateTime } from '@/lib/format'
@@ -15,7 +14,6 @@ export default async function ConfiguracoesPage() {
     <PageShell
       title="Configurações"
       description="Quem consulta o dashboard não envia planilha. Neste PC, pnpm carga:watch lê a origem e publica a carga na nuvem."
-      actions={<RefreshForm />}
     >
       <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
         Deixe o publicador ligado neste computador (terminal ou tarefa do

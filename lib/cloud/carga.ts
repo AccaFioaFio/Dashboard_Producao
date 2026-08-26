@@ -1,14 +1,11 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { gunzipSync } from 'node:zlib'
 import { checkpointSqlite, getSqlite, resetSqlite } from '@/db'
 import {
   CLOUD_DB_BLOB,
-  CLOUD_SNAPSHOT_BLOB,
   DB_PATH,
   IS_CLOUD,
   ensureDataDirs,
 } from '@/lib/paths'
-import type { SnapshotPayload } from '@/lib/etl/types'
 
 let localEtag = ''
 let inFlight: Promise<void> | null = null
@@ -82,21 +79,4 @@ export async function persistCloudDb() {
   })
   markCloudDbReady(stored.etag)
   return true
-}
-
-export async function readCloudSnapshot(): Promise<SnapshotPayload | null> {
-  if (!blobEnabled()) return null
-  try {
-    const { get } = await import('@vercel/blob')
-    const result = await get(CLOUD_SNAPSHOT_BLOB, {
-      access: 'private',
-      useCache: false,
-    })
-    if (!result || result.statusCode !== 200 || !result.stream) return null
-    const bytes = Buffer.from(await new Response(result.stream).arrayBuffer())
-    const json = gunzipSync(bytes).toString('utf8')
-    return JSON.parse(json) as SnapshotPayload
-  } catch {
-    return null
-  }
 }

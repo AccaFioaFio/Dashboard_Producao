@@ -3,7 +3,6 @@ import { PageShell } from '@/components/page-shell'
 import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
-import { RefreshForm } from '@/components/refresh-form'
 import { FilterBar } from '@/components/filter-bar'
 import { TecidosValoresButton } from '@/components/tecidos-valores-nav'
 import { getFilterOptions, getTecidos } from '@/data/dashboard'
@@ -41,12 +40,7 @@ export default async function TecidosPage({
     <PageShell
       title="Tecidos"
       description="Consumo apontado no Corte versus baixa real no Signus. Só Linha = TECIDO entra no fato Signus; a baixa oficial é Produção (insumos) + SAIDA FF/AC/TC."
-      actions={
-        <>
-          <TecidosValoresButton filters={filters} />
-          <RefreshForm />
-        </>
-      }
+      actions={<TecidosValoresButton filters={filters} />}
     >
       <FilterBar
         pathname="/tecidos"
