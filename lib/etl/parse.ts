@@ -216,7 +216,7 @@ export function parseCorte(workbook: XLSX.WorkBook) {
       qualidade.push({
         tipo: 'status_duplo',
         pedidoNorm,
-        detalhe: [...statuses].join(' + '),
+        detalhe: `OCs separadas: ${[...statuses].join(' + ')}`,
         excelRow: last.excelRow,
         valor: headers.length,
       })

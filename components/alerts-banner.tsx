@@ -34,7 +34,7 @@ export function AlertsBanner({
   if (wipPedidos) {
     items.push({
       key: 'wip',
-      text: `WIP Corte: ${formatInt(wipPedidos)} pedidos / ${formatInt(wipPecas)} pçs`,
+      text: `WIP Corte: ${formatInt(wipPedidos)} OCs / ${formatInt(wipPecas)} pçs`,
       href: pedidosFatiaHref('wip'),
       tone: 'block',
     })
@@ -42,7 +42,7 @@ export function AlertsBanner({
   if (tecidoPedidos) {
     items.push({
       key: 'tecido',
-      text: `Aguardando tecido: ${formatInt(tecidoPedidos)} pedidos / ${formatMeters(tecidoMetros)} / ${formatInt(tecidoPecas)} pçs`,
+      text: `Aguardando tecido: ${formatInt(tecidoPedidos)} OCs / ${formatMeters(tecidoMetros)} / ${formatInt(tecidoPecas)} pçs`,
       href: pedidosFatiaHref('aguardandoTecido'),
       tone: 'block',
     })

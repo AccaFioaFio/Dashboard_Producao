@@ -7,6 +7,7 @@ import { isProducaoOrigem } from '@/lib/keys'
 import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { YEAR } from '@/lib/year'
 import type { FunilKpis, HeaderKpis, SerieMensal } from '@/lib/etl/types'
+import { ocJoinLinhas, ocPecasExpr } from '@/lib/corte-oc'
 import { analyzeTempoProducao, type TempoPedidoRow } from '@/lib/etl/tempo'
 
 export type CargaInfo = {
@@ -48,6 +49,7 @@ export type TecidoPendenteRow = {
   codTecido: string | null
   responsavel: string | null
   observacao: string | null
+  excelRow: number
 }
 
 export type NamedTotal = {
@@ -66,6 +68,7 @@ export type CortePedidoRow = {
   responsavel: string | null
   observacao: string | null
   diasParado: number | null
+  excelRow: number
 }
 
 function sqlite() {
@@ -278,7 +281,9 @@ export const getHeaderKpis = cache(async (): Promise<HeaderKpis | null> => {
   ).v
   const wipPedidos = (
     db
-      .prepare("SELECT COUNT(*) as v FROM fato_corte_pedido WHERE status_vigente = 'EM PRODUÇÃO'")
+      .prepare(
+        "SELECT COUNT(*) as v FROM fato_corte_linha WHERE is_header = 1 AND status = 'EM PRODUÇÃO'",
+      )
       .get() as { v: number }
   ).v
   const wipPecas = (
@@ -289,7 +294,7 @@ export const getHeaderKpis = cache(async (): Promise<HeaderKpis | null> => {
   const tecidoPedidos = (
     db
       .prepare(
-        "SELECT COUNT(DISTINCT pedido_norm) as v FROM fato_corte_linha WHERE status = 'AGUARDANDO TECIDO'",
+        "SELECT COUNT(*) as v FROM fato_corte_linha WHERE is_header = 1 AND status = 'AGUARDANDO TECIDO'",
       )
       .get() as { v: number }
   ).v
@@ -485,26 +490,32 @@ export const getCorteBreakdown = cache(async (filters: DashFilters = {}) => {
 
   const obs = observacaoExpr()
   const wip = runAll<CortePedidoRow>(
-    `SELECT p.pedido_norm as pedidoNorm, p.data, p.status_vigente as statusVigente, p.pecas, p.canal, p.cliente, p.responsavel,
+    `SELECT h.pedido_norm as pedidoNorm, h.data, h.status as statusVigente,
+            ${ocPecasExpr('h')} as pecas, h.canal, h.cliente, h.responsavel,
             ${obs},
-            CAST(julianday('now', 'localtime') - julianday(COALESCE(p.data, p.inicio_corte, p.pcp_prontas)) AS INTEGER) as diasParado
-     FROM fato_corte_pedido p WHERE ${where} AND p.status_vigente = 'EM PRODUÇÃO'
-     ORDER BY diasParado DESC, p.pecas DESC`,
+            CAST(julianday('now', 'localtime') - julianday(COALESCE(h.data, h.inicio_corte, h.pcp_prontas)) AS INTEGER) as diasParado,
+            h.excel_row as excelRow
+     FROM fato_corte_linha h
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = h.pedido_norm
+     WHERE ${where} AND h.is_header = 1 AND h.status = 'EM PRODUÇÃO'
+     ORDER BY diasParado DESC, pecas DESC`,
     params,
   )
   const tecido = runAll<TecidoPendenteRow>(
-    `SELECT l.pedido_norm as pedidoNorm, MAX(p.data) as data, MAX(p.cliente) as cliente,
-            l.status as statusVigente,
+    `SELECT h.pedido_norm as pedidoNorm, h.data, h.cliente,
+            h.status as statusVigente,
             COALESCE(SUM(l.qtd_pecas), 0) as pecas,
             COALESCE(SUM(l.metros), 0) as metros,
             MAX(l.tecido) as tecido,
             MAX(l.cod_tecido) as codTecido,
-            MAX(p.responsavel) as responsavel,
-            ${hasObservacaoColumn() ? 'MAX(p.observacao)' : 'NULL'} as observacao
-     FROM fato_corte_linha l
-     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
-     WHERE ${where} AND l.status = 'AGUARDANDO TECIDO'
-     GROUP BY l.pedido_norm, l.status, COALESCE(l.cod_tecido, l.tecido)
+            h.responsavel as responsavel,
+            ${hasObservacaoColumn() ? 'MAX(p.observacao)' : 'NULL'} as observacao,
+            h.excel_row as excelRow
+     FROM fato_corte_linha h
+     JOIN fato_corte_linha l ON ${ocJoinLinhas('h', 'l')}
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = h.pedido_norm
+     WHERE ${where} AND h.is_header = 1 AND h.status = 'AGUARDANDO TECIDO'
+     GROUP BY h.excel_row, COALESCE(l.cod_tecido, l.tecido)
      ORDER BY metros DESC`,
     params,
   )
@@ -522,12 +533,18 @@ export const getCorteBreakdown = cache(async (filters: DashFilters = {}) => {
      LIMIT 12`,
     params,
   )
-  const resumo = runGet<{ pecas: number; pedidos: number; wipPedidos: number; wipPecas: number }>(
+  const resumo = runGet<{ pecas: number; pedidos: number }>(
     `SELECT COALESCE(SUM(p.pecas), 0) as pecas,
-            COUNT(*) as pedidos,
-            COALESCE(SUM(CASE WHEN p.status_vigente = 'EM PRODUÇÃO' THEN 1 ELSE 0 END), 0) as wipPedidos,
-            COALESCE(SUM(CASE WHEN p.status_vigente = 'EM PRODUÇÃO' THEN p.pecas ELSE 0 END), 0) as wipPecas
+            COUNT(*) as pedidos
      FROM fato_corte_pedido p WHERE ${where}`,
+    params,
+  )
+  const wipResumo = runGet<{ wipPedidos: number; wipPecas: number }>(
+    `SELECT COALESCE(SUM(CASE WHEN h.is_header = 1 AND h.status = 'EM PRODUÇÃO' THEN 1 ELSE 0 END), 0) as wipPedidos,
+            COALESCE(SUM(CASE WHEN h.status = 'EM PRODUÇÃO' THEN h.qtd_pecas ELSE 0 END), 0) as wipPecas
+     FROM fato_corte_linha h
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = h.pedido_norm
+     WHERE ${where}`,
     params,
   )
   const ocs = runGet<{ v: number }>(
@@ -538,12 +555,13 @@ export const getCorteBreakdown = cache(async (filters: DashFilters = {}) => {
     params,
   )
   const aguardando = runGet<{ pedidos: number; pecas: number; metros: number }>(
-    `SELECT COUNT(DISTINCT l.pedido_norm) as pedidos,
+    `SELECT COUNT(*) as pedidos,
             COALESCE(SUM(l.qtd_pecas), 0) as pecas,
             COALESCE(SUM(l.metros), 0) as metros
-     FROM fato_corte_linha l
-     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
-     WHERE ${where} AND l.status = 'AGUARDANDO TECIDO'`,
+     FROM fato_corte_linha h
+     JOIN fato_corte_linha l ON ${ocJoinLinhas('h', 'l')}
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = h.pedido_norm
+     WHERE ${where} AND h.is_header = 1 AND h.status = 'AGUARDANDO TECIDO'`,
     params,
   )
 
@@ -557,6 +575,7 @@ export const getCorteBreakdown = cache(async (filters: DashFilters = {}) => {
     porTecido,
     resumo: {
       ...resumo,
+      ...wipResumo,
       ocs: ocs.v,
       tecidoPedidos: aguardando.pedidos,
       tecidoPecas: aguardando.pecas,
@@ -654,7 +673,11 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
       ).v
     : 0
   const aguardando = runGet<{ pedidos: number; pecas: number; metros: number }>(
-    `SELECT COUNT(DISTINCT l.pedido_norm) as pedidos,
+    `SELECT (
+              SELECT COUNT(*) FROM fato_corte_linha h
+              LEFT JOIN fato_corte_pedido p ON p.pedido_norm = h.pedido_norm
+              WHERE ${corteWhere} AND h.is_header = 1 AND h.status = 'AGUARDANDO TECIDO'
+            ) as pedidos,
             COALESCE(SUM(l.qtd_pecas), 0) as pecas,
             COALESCE(SUM(l.metros), 0) as metros
      FROM fato_corte_linha l
@@ -797,18 +820,20 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
     : []
 
   const tecido = runAll<TecidoPendenteRow>(
-    `SELECT l.pedido_norm as pedidoNorm, MAX(p.data) as data, MAX(p.cliente) as cliente,
-            l.status as statusVigente,
+    `SELECT h.pedido_norm as pedidoNorm, h.data, h.cliente,
+            h.status as statusVigente,
             COALESCE(SUM(l.qtd_pecas), 0) as pecas,
             COALESCE(SUM(l.metros), 0) as metros,
             MAX(l.tecido) as tecido,
             MAX(l.cod_tecido) as codTecido,
-            MAX(p.responsavel) as responsavel,
-            ${hasObservacaoColumn() ? 'MAX(p.observacao)' : 'NULL'} as observacao
-     FROM fato_corte_linha l
-     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
-     WHERE ${corteWhere} AND l.status = 'AGUARDANDO TECIDO'
-     GROUP BY l.pedido_norm, l.status, COALESCE(l.cod_tecido, l.tecido)
+            h.responsavel as responsavel,
+            ${hasObservacaoColumn() ? 'MAX(p.observacao)' : 'NULL'} as observacao,
+            h.excel_row as excelRow
+     FROM fato_corte_linha h
+     JOIN fato_corte_linha l ON ${ocJoinLinhas('h', 'l')}
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = h.pedido_norm
+     WHERE ${corteWhere} AND h.is_header = 1 AND h.status = 'AGUARDANDO TECIDO'
+     GROUP BY h.excel_row, COALESCE(l.cod_tecido, l.tecido)
      ORDER BY metros DESC`,
     params,
   )

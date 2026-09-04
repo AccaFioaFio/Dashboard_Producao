@@ -98,7 +98,7 @@ export default async function Page() {
         <KpiCard
           label="WIP Corte"
           value={`${formatInt(header.wipPedidos)} / ${formatInt(header.wipPecas)}`}
-          hint="Pedidos vigentes / peças no status EM PRODUÇÃO"
+          hint="OCs / peças no status EM PRODUÇÃO. Mesmo pedido pode ter mais de uma OC."
           alert={header.wipPedidos > 0}
           tone="indigo"
           href={pedidosFatiaHref('wip')}

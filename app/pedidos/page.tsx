@@ -28,7 +28,7 @@ export default async function PedidosPage({
   return (
     <PageShell
       title="Pedidos"
-      description={`${meta.label}: ${formatInt(lista.total)} pedido${lista.total === 1 ? '' : 's'}. ${meta.hint} Clique no número para a ficha.`}
+      description={`${meta.label}: ${formatInt(lista.total)} ${lista.fatia === 'wip' || lista.fatia === 'aguardandoTecido' ? 'ordem(ns) de corte' : `pedido${lista.total === 1 ? '' : 's'}`}. ${meta.hint} Clique no número para a ficha.`}
     >
       <FilterBar
         pathname="/pedidos"

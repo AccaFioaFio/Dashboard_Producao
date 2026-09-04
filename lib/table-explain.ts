@@ -53,8 +53,8 @@ export function explainCorteWip(row: {
   return hintLines(
     [
       pedidoHead(row.pedidoNorm, [row.cliente, row.canal, row.responsavel]),
-      `Status EM PRODUÇÃO · ${formatInt(row.pecas)} peças cortadas · data ${formatDate(row.data)}.`,
-      'WIP = último cabeçalho vigente. Não é contagem de linha de tecido.',
+      `Ordem de corte EM PRODUÇÃO · ${formatInt(row.pecas)} peças deste cabeçalho · data ${formatDate(row.data)}.`,
+      'Mesmo nº pedido com outro status entra noutra fila. Não é contagem de linha de tecido.',
     ],
     row.observacao,
   )

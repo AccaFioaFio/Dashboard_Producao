@@ -71,7 +71,7 @@ export default async function CortePage({
         <KpiCard
           label="WIP"
           value={`${formatInt(corte.resumo.wipPedidos)} / ${formatInt(corte.resumo.wipPecas)}`}
-          hint="Pedidos vigentes / peças EM PRODUÇÃO"
+          hint="Pedidos vigentes / peças desta ordem de corte"
           alert={corte.resumo.wipPedidos > 0}
         />
         <KpiCard
@@ -100,8 +100,8 @@ export default async function CortePage({
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">EM PRODUÇÃO</h2>
           <p className="text-xs text-muted-foreground">
-            Dias parados = hoje menos a data do pedido (ou início/PCP). Clique no número para a
-            ficha.
+            Dias parados = hoje menos a data desta ordem. Clique no número para a
+            ficha. O mesmo pedido com outro status entra na fila ao lado.
           </p>
           <div className="flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
             {AGING_FAIXAS.map((faixa) => {
@@ -117,11 +117,11 @@ export default async function CortePage({
             })}
           </div>
           <PedidoQueue
-            empty="Nenhum pedido em produção neste recorte"
+              empty="Nenhuma ordem em produção neste recorte"
             rows={corte.wip.map((row) => ({
               pedido: row.pedidoNorm,
               title: formatDays(row.diasParado, 0),
-              lines: [row.cliente, `${formatInt(row.pecas)} pçs`, row.responsavel],
+              lines: [row.statusVigente, row.cliente, `${formatInt(row.pecas)} pçs`, row.responsavel],
               alert: (row.diasParado ?? 0) >= 15,
               warning: (row.diasParado ?? 0) >= 8 && (row.diasParado ?? 0) < 15,
             }))}
@@ -131,6 +131,7 @@ export default async function CortePage({
               columns={[
                 { key: 'pedido', label: 'Pedido', link: true },
                 { key: 'data', label: 'Data' },
+                { key: 'status', label: 'Status' },
                 { key: 'dias', label: 'Dias', numeric: true },
                 { key: 'cliente', label: 'Cliente' },
                 { key: 'pecas', label: 'Peças', numeric: true },
@@ -139,6 +140,7 @@ export default async function CortePage({
               rows={corte.wip.map((row) => ({
                 pedido: row.pedidoNorm,
                 data: formatDate(row.data),
+                status: row.statusVigente,
                 dias: formatDays(row.diasParado, 0),
                 cliente: row.cliente,
                 pecas: formatInt(row.pecas),
@@ -147,7 +149,7 @@ export default async function CortePage({
                 alert: (row.diasParado ?? 0) >= 15,
                 warning: (row.diasParado ?? 0) >= 8 && (row.diasParado ?? 0) < 15,
               }))}
-              empty="Nenhum pedido em produção neste recorte"
+            empty="Nenhuma ordem em produção neste recorte"
             />
           </div>
         </section>

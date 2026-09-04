@@ -80,13 +80,13 @@ export const FUNIL_SLICE_META: FunilSliceMeta[] = [
     id: 'wip',
     label: 'WIP Corte',
     group: 'parado',
-    hint: 'Status vigente EM PRODUÇÃO.',
+    hint: 'Cada ordem de corte (cabeçalho) com EM PRODUÇÃO. Mesmo nº pedido pode aparecer mais de uma vez.',
   },
   {
     id: 'aguardandoTecido',
     label: 'Aguardando tecido',
     group: 'parado',
-    hint: 'Linha de Corte com status AGUARDANDO TECIDO.',
+    hint: 'Cada ordem de corte (cabeçalho) com AGUARDANDO TECIDO. Mesmo nº pedido pode aparecer mais de uma vez.',
   },
 ]
 
@@ -115,10 +115,13 @@ export function funilSliceWhere(alias = 'd'): Record<FunilSlice, string> {
     revisaoSemCorte: `${alias}.no_revisao = 1 AND ${alias}.no_corte = 0`,
     oficinas: `${alias}.no_oficinas = 1`,
     oficinasOrfas: `${alias}.no_oficinas = 1 AND ${alias}.no_corte = 0`,
-    wip: `${alias}.no_corte = 1 AND p.status_vigente = 'EM PRODUÇÃO'`,
+    wip: `${alias}.no_corte = 1 AND EXISTS (
+      SELECT 1 FROM fato_corte_linha h
+      WHERE h.pedido_norm = ${alias}.pedido_norm AND h.is_header = 1 AND h.status = 'EM PRODUÇÃO'
+    )`,
     aguardandoTecido: `${alias}.no_corte = 1 AND EXISTS (
-      SELECT 1 FROM fato_corte_linha l
-      WHERE l.pedido_norm = ${alias}.pedido_norm AND l.status = 'AGUARDANDO TECIDO'
+      SELECT 1 FROM fato_corte_linha h
+      WHERE h.pedido_norm = ${alias}.pedido_norm AND h.is_header = 1 AND h.status = 'AGUARDANDO TECIDO'
     )`,
   }
 }

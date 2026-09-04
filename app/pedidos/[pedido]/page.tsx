@@ -37,7 +37,10 @@ export default async function PedidoFichaPage({
   const ficha = await getPedidoFicha(pedido)
   if (!ficha) notFound()
 
-  const status = ficha.corte?.statusVigente
+  const status =
+    ficha.ocs.length > 0
+      ? [...new Set(ficha.ocs.map((oc) => oc.status).filter(Boolean))].join(' · ')
+      : ficha.corte?.statusVigente
   const cliente = ficha.corte?.cliente
 
   return (
@@ -116,6 +119,34 @@ export default async function PedidoFichaPage({
         />
       </KpiGrid>
 
+      {ficha.ocs.length ? (
+        <section className="flex min-w-0 flex-col gap-2">
+          <h2 className="text-sm font-medium">Ordens de corte</h2>
+          <p className="text-xs text-muted-foreground">
+            Cada cabeçalho da planilha é uma OC. O mesmo nº pedido com status diferente
+            aparece em filas separadas.
+          </p>
+          <SimpleTable
+            columns={[
+              { key: 'linha', label: 'Linha Excel', numeric: true },
+              { key: 'data', label: 'Data' },
+              { key: 'status', label: 'Status' },
+              { key: 'pecas', label: 'Peças', numeric: true },
+              { key: 'responsavel', label: 'Responsável' },
+            ]}
+            rows={ficha.ocs.map((row) => ({
+              linha: row.excelRow,
+              data: formatDate(row.data),
+              status: row.status,
+              pecas: formatInt(row.pecas),
+              responsavel: row.responsavel,
+              alert: row.status === 'EM PRODUÇÃO',
+              warning: row.status === 'AGUARDANDO TECIDO',
+            }))}
+          />
+        </section>
+      ) : null}
+
       {ficha.linhas.length ? (
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Tecido no Corte</h2>
@@ -125,6 +156,7 @@ export default async function PedidoFichaPage({
           </p>
           <SimpleTable
             columns={[
+              { key: 'linha', label: 'Linha', numeric: true },
               { key: 'tecido', label: 'Tecido', wrap: true },
               { key: 'metros', label: 'Metros', numeric: true },
               { key: 'economia', label: 'Economia', numeric: true },
@@ -132,6 +164,7 @@ export default async function PedidoFichaPage({
               { key: 'status', label: 'Status' },
             ]}
             rows={ficha.linhas.map((row) => ({
+              linha: row.excelRow,
               tecido: formatTecido(row.codTecido, row.tecido),
               metros: row.metros != null ? formatMeters(row.metros, row.metros >= 10 ? 0 : 1) : '—',
               economia:
@@ -140,6 +173,8 @@ export default async function PedidoFichaPage({
                   : '—',
               pecas: row.pecas != null ? formatInt(row.pecas) : '—',
               status: row.status,
+              alert: row.isHeader && row.status === 'EM PRODUÇÃO',
+              warning: row.isHeader && row.status === 'AGUARDANDO TECIDO',
             }))}
           />
         </section>

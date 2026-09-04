@@ -36,11 +36,13 @@ export function computeHeaderKpis(snapshot: Snapshot): HeaderKpis {
     pecasRevisao: round1(
       snapshot.revisao.reduce((sum, row) => sum + row.qtdPecas, 0),
     ),
-    wipPedidos: snapshot.cortePedidos.filter(
-      (row) => row.statusVigente === 'EM PRODUÇÃO',
+    wipPedidos: snapshot.corteLinhas.filter(
+      (row) => row.isHeader && row.status === 'EM PRODUÇÃO',
     ).length,
     wipPecas: round1(wipLinhas.reduce((sum, row) => sum + (row.qtdPecas ?? 0), 0)),
-    tecidoPedidos: new Set(tecidoLinhas.map((row) => row.pedidoNorm)).size,
+    tecidoPedidos: snapshot.corteLinhas.filter(
+      (row) => row.isHeader && row.status === 'AGUARDANDO TECIDO',
+    ).length,
     tecidoPecas: round1(
       tecidoLinhas.reduce((sum, row) => sum + (row.qtdPecas ?? 0), 0),
     ),

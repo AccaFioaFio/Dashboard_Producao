@@ -6,6 +6,7 @@ import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { leadTimeDays } from '@/lib/dates'
 import type { DashFilters } from '@/lib/filters'
 import { funilSliceWhere, type FunilSlice } from '@/lib/funil'
+import { ocPecasExpr } from '@/lib/corte-oc'
 import { pedidoDigits, parsePedidoParam } from '@/lib/pedido'
 
 export type PedidoListaRow = {
@@ -24,6 +25,7 @@ export type PedidoListaRow = {
   noOficinas: boolean
   noSignus: boolean
   responsavel: string | null
+  excelRow: number | null
 }
 
 export type PedidoFicha = {
@@ -53,6 +55,15 @@ export type PedidoFicha = {
     leadTimeDias: number | null
     statusDuplo: boolean
   } | null
+  ocs: {
+    excelRow: number
+    data: string | null
+    status: string | null
+    pecas: number
+    cliente: string | null
+    canal: string | null
+    responsavel: string | null
+  }[]
   linhas: {
     tecido: string | null
     codTecido: string | null
@@ -60,6 +71,8 @@ export type PedidoFicha = {
     economia: number | null
     pecas: number | null
     status: string | null
+    excelRow: number
+    isHeader: boolean
   }[]
   costura: {
     dataProducao: string
@@ -169,28 +182,49 @@ function sliceDateExpr(fatia: FunilSlice) {
   if (fatia === 'oficinas' || fatia === 'oficinasOrfas') {
     return `(SELECT MIN(o.data_envio) FROM fato_oficinas o WHERE o.pedido_norm = d.pedido_norm)`
   }
+  if (fatia === 'wip' || fatia === 'aguardandoTecido') return 'h.data'
   return 'p.data'
+}
+
+function isOcFatia(fatia: FunilSlice) {
+  return fatia === 'wip' || fatia === 'aguardandoTecido'
 }
 
 export const getPedidosLista = cache(async (filters: DashFilters = {}) => {
   await ensureCloudDatabase()
   const fatia: FunilSlice = filters.fatia ?? 'corte'
-  const clauses = [funilSliceWhere('d')[fatia]]
+  const oc = isOcFatia(fatia)
+  const clauses = oc
+    ? [
+        'h.is_header = 1',
+        fatia === 'wip'
+          ? "h.status = 'EM PRODUÇÃO'"
+          : "h.status = 'AGUARDANDO TECIDO'",
+      ]
+    : [funilSliceWhere('d')[fatia]]
   const params: Record<string, unknown> = {}
   if (filters.q) {
-    clauses.push('d.pedido_norm LIKE @q')
+    clauses.push((oc ? 'h' : 'd') + '.pedido_norm LIKE @q')
     params.q = likeContains(filters.q)
   }
   if (filters.canal) {
-    clauses.push('COALESCE(p.canal, d.canal) = @canal')
+    clauses.push(
+      oc
+        ? 'COALESCE(h.canal, d.canal) = @canal'
+        : 'COALESCE(p.canal, d.canal) = @canal',
+    )
     params.canal = filters.canal
   }
   if (filters.cliente) {
-    clauses.push('COALESCE(p.cliente, d.cliente) = @cliente')
+    clauses.push(
+      oc
+        ? 'COALESCE(h.cliente, d.cliente) = @cliente'
+        : 'COALESCE(p.cliente, d.cliente) = @cliente',
+    )
     params.cliente = filters.cliente
   }
   if (filters.responsavel) {
-    clauses.push('p.responsavel = @responsavel')
+    clauses.push((oc ? 'h' : 'p') + '.responsavel = @responsavel')
     params.responsavel = filters.responsavel
   }
   if (filters.mes) {
@@ -198,24 +232,14 @@ export const getPedidosLista = cache(async (filters: DashFilters = {}) => {
     params.mes = filters.mes
   }
   const where = clauses.join(' AND ')
-  const stmt = sqlite().prepare(
-    `SELECT d.pedido_norm as pedidoNorm,
-              COALESCE(p.cliente, d.cliente) as cliente,
-              COALESCE(p.canal, d.canal) as canal,
-              p.status_vigente as statusVigente,
-              p.data as data,
-              COALESCE(p.pecas, 0) as pecas,
-              COALESCE(cs.pecas, 0) as pecasCosturaProd,
-              COALESCE(rv.pecas, 0) as pecasRevisao,
-              COALESCE(ofc.pendentes, 0) as oficinasPendentes,
-              d.no_corte as noCorte,
-              d.no_costura_prod as noCosturaProd,
-              d.no_revisao as noRevisao,
-              d.no_oficinas as noOficinas,
-              d.no_signus as noSignus,
-              p.responsavel as responsavel
+  const fromOc = `
+       FROM fato_corte_linha h
+       JOIN dim_pedido d ON d.pedido_norm = h.pedido_norm
+       LEFT JOIN fato_corte_pedido p ON p.pedido_norm = h.pedido_norm`
+  const fromPedido = `
        FROM dim_pedido d
-       LEFT JOIN fato_corte_pedido p ON p.pedido_norm = d.pedido_norm
+       LEFT JOIN fato_corte_pedido p ON p.pedido_norm = d.pedido_norm`
+  const joinsLaterais = `
        LEFT JOIN (
          SELECT pedido_norm, SUM(qtd_pecas) as pecas
          FROM fato_costura WHERE origem_norm = 'Producao' GROUP BY pedido_norm
@@ -227,7 +251,51 @@ export const getPedidosLista = cache(async (filters: DashFilters = {}) => {
        LEFT JOIN (
          SELECT pedido_norm, SUM(qtd_pendentes) as pendentes
          FROM fato_oficinas GROUP BY pedido_norm
-       ) ofc ON ofc.pedido_norm = d.pedido_norm
+       ) ofc ON ofc.pedido_norm = d.pedido_norm`
+  const stmt = sqlite().prepare(
+    oc
+      ? `SELECT h.pedido_norm as pedidoNorm,
+              COALESCE(h.cliente, d.cliente) as cliente,
+              COALESCE(h.canal, d.canal) as canal,
+              h.status as statusVigente,
+              h.data as data,
+              ${ocPecasExpr('h')} as pecas,
+              COALESCE(cs.pecas, 0) as pecasCosturaProd,
+              COALESCE(rv.pecas, 0) as pecasRevisao,
+              COALESCE(ofc.pendentes, 0) as oficinasPendentes,
+              d.no_corte as noCorte,
+              d.no_costura_prod as noCosturaProd,
+              d.no_revisao as noRevisao,
+              d.no_oficinas as noOficinas,
+              d.no_signus as noSignus,
+              h.responsavel as responsavel,
+              h.excel_row as excelRow
+       ${fromOc}
+       ${joinsLaterais}
+       WHERE ${where}
+       ORDER BY COALESCE(h.data, '0000-00-00') DESC, h.pedido_norm, h.excel_row
+       LIMIT 800`
+      : `SELECT d.pedido_norm as pedidoNorm,
+              COALESCE(p.cliente, d.cliente) as cliente,
+              COALESCE(p.canal, d.canal) as canal,
+              (SELECT group_concat(DISTINCT h.status)
+               FROM fato_corte_linha h
+               WHERE h.pedido_norm = d.pedido_norm AND h.is_header = 1 AND h.status IS NOT NULL
+              ) as statusVigente,
+              p.data as data,
+              COALESCE(p.pecas, 0) as pecas,
+              COALESCE(cs.pecas, 0) as pecasCosturaProd,
+              COALESCE(rv.pecas, 0) as pecasRevisao,
+              COALESCE(ofc.pendentes, 0) as oficinasPendentes,
+              d.no_corte as noCorte,
+              d.no_costura_prod as noCosturaProd,
+              d.no_revisao as noRevisao,
+              d.no_oficinas as noOficinas,
+              d.no_signus as noSignus,
+              p.responsavel as responsavel,
+              NULL as excelRow
+       ${fromPedido}
+       ${joinsLaterais}
        WHERE ${where}
        ORDER BY COALESCE(p.data, '0000-00-00') DESC, d.pedido_norm
        LIMIT 800`,
@@ -237,10 +305,9 @@ export const getPedidosLista = cache(async (filters: DashFilters = {}) => {
   ) as PedidoListaRow[]
 
   const countStmt = sqlite().prepare(
-    `SELECT COUNT(*) as v
-         FROM dim_pedido d
-         LEFT JOIN fato_corte_pedido p ON p.pedido_norm = d.pedido_norm
-         WHERE ${where}`,
+    oc
+      ? `SELECT COUNT(*) as v ${fromOc} WHERE ${where}`
+      : `SELECT COUNT(*) as v ${fromPedido} WHERE ${where}`,
   )
   const total = (
     (Object.keys(params).length ? countStmt.get(params) : countStmt.get()) as { v: number }
@@ -251,6 +318,7 @@ export const getPedidosLista = cache(async (filters: DashFilters = {}) => {
     total,
     rows: rows.map((row) => ({
       ...row,
+      statusVigente: row.statusVigente?.replaceAll(',', ' · ') ?? null,
       noCorte: Boolean(row.noCorte),
       noCosturaProd: Boolean(row.noCosturaProd),
       noRevisao: Boolean(row.noRevisao),
@@ -314,11 +382,23 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
     )
     .get(pedidoNorm) as PedidoFicha['corte'] | undefined
 
+  const ocs = db
+    .prepare(
+      `SELECT h.excel_row as excelRow, h.data, h.status,
+              ${ocPecasExpr('h')} as pecas,
+              h.cliente, h.canal, h.responsavel
+       FROM fato_corte_linha h
+       WHERE h.pedido_norm = ? AND h.is_header = 1
+       ORDER BY h.excel_row`,
+    )
+    .all(pedidoNorm) as PedidoFicha['ocs']
+
   const linhas = db
     .prepare(
-      `SELECT tecido, cod_tecido as codTecido, metros, economia, qtd_pecas as pecas, status
+      `SELECT tecido, cod_tecido as codTecido, metros, economia, qtd_pecas as pecas, status,
+              excel_row as excelRow, is_header as isHeader
        FROM fato_corte_linha
-       WHERE pedido_norm = ? AND (metros IS NOT NULL OR qtd_pecas IS NOT NULL OR tecido IS NOT NULL)
+       WHERE pedido_norm = ? AND (metros IS NOT NULL OR qtd_pecas IS NOT NULL OR tecido IS NOT NULL OR is_header = 1)
        ORDER BY excel_row`,
     )
     .all(pedidoNorm) as PedidoFicha['linhas']
@@ -387,7 +467,8 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
     corte: corte
       ? { ...corte, statusDuplo: Boolean(corte.statusDuplo) }
       : null,
-    linhas,
+    ocs,
+    linhas: linhas.map((row) => ({ ...row, isHeader: Boolean(row.isHeader) })),
     costura,
     revisao,
     oficinas,

@@ -1,7 +1,8 @@
 import type { FunilKpis, HeaderKpis, SerieMensal } from '@/lib/etl/types'
 
 /** Snapshot dourado da carga atual em 24/08/2026.
- * Tecido: 3 pedidos com bloco AGUARDANDO TECIDO (23526 também tem cabeçalho CORTADO).
+ * Tecido/WIP nas filas = cabeçalhos (OCs), não último status do pedido.
+ * Tecido na carga 24/08: 3 pedidos com bloco AGUARDANDO TECIDO (23526 também tem cabeçalho CORTADO).
  * Defeitos de oficina (524) divergem do PDR escrito mais cedo (479): o Excel muda o dia inteiro.
  * Corte, costura Produção, revisão e WIP fecham com o PDR.
  */

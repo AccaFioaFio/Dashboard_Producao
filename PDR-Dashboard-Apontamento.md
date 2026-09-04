@@ -66,7 +66,7 @@ Status 2026 (a soma das peças fecha 71.887):
 | EM PRODUÇÃO | 10 | 2.262 | 7.264 |
 | AGUARDANDO TECIDO | 4 | 794 | 4 |
 
-Três pedidos aparecem com status em mais de uma linha de cabeçalho (614+10+4 = 628 vs 625 distintos). O dashboard usa o **último cabeçalho** como status vigente e lista os 3 na tela de qualidade.
+Três pedidos aparecem com status em mais de uma linha de cabeçalho (614+10+4 = 628 vs 625 distintos). **Filas (WIP e aguardando tecido) contam cada ordem de corte (cabeçalho), não o último status do pedido.** O mesmo nº pedido com status diferente entra em filas separadas. O KPI “Pedidos no Corte” continua sendo DISTINCT. A tela de qualidade lista os pedidos com mais de um status nas OCs.
 
 ### 2.2 `FATURAMENTO` é canal, não dinheiro
 
@@ -201,7 +201,7 @@ Na carga inspecionada, a baixa oficial (produção + canal) fica perto de **95 m
 | Pedidos no corte | distinct pedido | **625** |
 | Peças costuradas | `SUM(Qtd. Peças)` Origem=Produção | **25.162** |
 | Peças revisadas | soma limpa | **75.834** |
-| WIP corte | status EM PRODUÇÃO | **10 pedidos / 2.262 pçs** |
+| WIP corte | cabeçalhos EM PRODUÇÃO | **10 pedidos / 2.262 pçs** (ref. 24/08; hoje a fila é por OC) |
 | Aguardando tecido | status AGUARDANDO TECIDO | **4 pedidos / 794 pçs** |
 | Pendente oficinas | `SUM(Qtd pçs Pendetente)` envio 2026 | **4.060** |
 | Defeitos oficinas | soma | **479** |

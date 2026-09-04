@@ -20,7 +20,7 @@ export const QUALIDADE_TIPO_LABEL: Record<string, string> = {
   revisao_total: 'Linha de total da Revisão',
   revisao_qtd_eq_pedido: 'Qtd = número do pedido',
   dias_corte_serial: 'DIAS DE CORTE serial',
-  status_duplo: 'Status em dois cabeçalhos',
+  status_duplo: 'Mesmo pedido com status diferentes nas ordens de corte',
   oficina_vazia: 'Linha sem oficina',
   lilica: 'Lilica sem retorno',
   orfao_costura: 'Costura Produção sem Corte 2026',
