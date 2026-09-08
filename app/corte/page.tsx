@@ -97,12 +97,12 @@ export default async function CortePage({
         ]}
       />
 
-      <div className="grid min-w-0 gap-[var(--page-gap)] lg:grid-cols-2">
+      <div className="flex min-w-0 flex-col gap-[var(--page-gap)]">
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">EM PRODUÇÃO</h2>
           <p className="text-xs text-muted-foreground">
             Dias parados = hoje menos a data desta ordem. Clique no número para a
-            ficha. O mesmo pedido com outro status entra na fila ao lado.
+            ficha. O mesmo pedido com outro status entra na fila abaixo.
           </p>
           <div className="flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
             {AGING_FAIXAS.map((faixa) => {
