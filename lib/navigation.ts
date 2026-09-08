@@ -1,6 +1,7 @@
 import {
   ClipboardCheck,
   Factory,
+  Handshake,
   LayoutDashboard,
   Layers,
   ListOrdered,
@@ -31,6 +32,12 @@ export const navigation: NavItem[] = [
     href: '/corte',
     icon: Scissors,
     description: 'Peças, canal, responsável e pedidos parados.',
+  },
+  {
+    title: 'Ação Comercial',
+    href: '/corte/acao-comercial',
+    icon: Handshake,
+    description: 'Saldo de aproveitamento: cortadas menos peças já aproveitadas.',
   },
   {
     title: 'Tecidos',

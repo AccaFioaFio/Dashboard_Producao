@@ -16,6 +16,7 @@ import {
 } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
 import { PedidoQueue } from '@/components/pedido-queue'
+import { CorteAcaoButton } from '@/components/corte-acao-nav'
 import {
   explainAguardandoTecido,
   explainCorteWip,
@@ -43,6 +44,7 @@ export default async function CortePage({
     <PageShell
       title="Corte"
       description="Volume em peça e pedido. Agosto explode linha de tecido: não use contagem de linha. Consumo e baixa de tecido ficam na aba Tecidos."
+      actions={<CorteAcaoButton filters={filters} />}
     >
       <FilterBar
         pathname="/corte"

@@ -196,6 +196,28 @@ export const fatoTecidoSignus = sqliteTable(
   ],
 )
 
+export const fatoAproveitamento = sqliteTable(
+  'fato_aproveitamento',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    tipo: text('tipo').notNull(),
+    pedido: text('pedido'),
+    cliente: text('cliente'),
+    data: text('data'),
+    codProduto: text('cod_produto'),
+    tecido: text('tecido'),
+    modelo: text('modelo'),
+    qtd: real('qtd').notNull().default(0),
+    excelRow: integer('excel_row').notNull(),
+  },
+  (table) => [
+    index('idx_aproveitamento_tipo').on(table.tipo),
+    index('idx_aproveitamento_data').on(table.data),
+    index('idx_aproveitamento_modelo').on(table.modelo),
+    index('idx_aproveitamento_cod').on(table.codProduto),
+  ],
+)
+
 export const qualidadeEvento = sqliteTable('qualidade_evento', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   tipo: text('tipo').notNull(),

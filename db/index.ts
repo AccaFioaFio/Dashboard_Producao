@@ -32,6 +32,7 @@ function applyMigrations(connection: Database.Database) {
     '0004_pcp_prontas.sql',
     '0005_observacao.sql',
     '0006_corte_linha_observacao.sql',
+    '0007_aproveitamento.sql',
   ]
   for (const file of files) {
     if (applied.has(file)) continue
@@ -53,11 +54,12 @@ function applyMigrations(connection: Database.Database) {
 }
 
 export function getSqlite() {
-  if (sqlite) return sqlite
-  ensureDataDirs()
-  sqlite = new Database(DB_PATH)
-  sqlite.pragma('journal_mode = WAL')
-  sqlite.pragma('foreign_keys = ON')
+  if (!sqlite) {
+    ensureDataDirs()
+    sqlite = new Database(DB_PATH)
+    sqlite.pragma('journal_mode = WAL')
+    sqlite.pragma('foreign_keys = ON')
+  }
   applyMigrations(sqlite)
   return sqlite
 }

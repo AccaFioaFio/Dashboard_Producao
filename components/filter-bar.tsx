@@ -28,9 +28,16 @@ type FilterBarProps = {
   values: DashFilters
   options: FilterOptions
   fields: FilterField[]
+  className?: string
 }
 
-export function FilterBar({ pathname, values, options, fields }: FilterBarProps) {
+export function FilterBar({
+  pathname,
+  values,
+  options,
+  fields,
+  className,
+}: FilterBarProps) {
   const router = useRouter()
   const active = countActiveFilters(values)
 
@@ -43,8 +50,19 @@ export function FilterBar({ pathname, values, options, fields }: FilterBarProps)
     push({ ...values, [key]: value || undefined })
   }
 
+  const selectFields = fields.filter((field) => field !== 'mes')
+  const fieldGridClass =
+    selectFields.length <= 2
+      ? 'grid gap-2'
+      : 'grid gap-2 sm:grid-cols-2 xl:grid-cols-4'
+
   return (
-    <section className="filter-bar card-surface flex flex-col gap-2 p-2.5">
+    <section
+      className={cn(
+        'filter-bar card-surface flex flex-col gap-2 p-2.5',
+        className,
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-medium">
           <span className="flex size-7 items-center justify-center rounded-lg bg-primary/12 text-primary">
@@ -96,7 +114,7 @@ export function FilterBar({ pathname, values, options, fields }: FilterBarProps)
         </div>
       ) : null}
 
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={fieldGridClass}>
         {fields.includes('q') ? (
           <label className="flex min-w-0 flex-col gap-1">
             <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">

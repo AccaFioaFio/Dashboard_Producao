@@ -43,6 +43,46 @@ export function asTecidoCode(value: unknown): string | null {
   return compact || null
 }
 
+/** Separa "1101018890 - TECIDO PERCAL..." ou "1107225841_TECIDO..." em código e descrição. */
+export function splitCodigoDescricao(value: unknown): {
+  cod: string | null
+  nome: string | null
+} {
+  const text = asText(value)
+  if (!text) return { cod: null, nome: null }
+  const cleaned = text.replace(/\s+/g, ' ').trim()
+
+  const dash = cleaned.match(/^(\d[\w.]*)\s*[-–—]\s*(.+)$/i)
+  if (dash) {
+    return {
+      cod: asTecidoCode(dash[1]),
+      nome: dash[2].trim() || null,
+    }
+  }
+
+  const underscored = cleaned.match(/^(\d{6,})[_ ]+(.+)$/i)
+  if (underscored) {
+    return {
+      cod: asTecidoCode(underscored[1]),
+      nome: underscored[2].replace(/[_]+/g, ' ').trim() || null,
+    }
+  }
+
+  const leadingCode = cleaned.match(/^(\d{6,})\s+(.+)$/)
+  if (leadingCode) {
+    return {
+      cod: asTecidoCode(leadingCode[1]),
+      nome: leadingCode[2].trim() || null,
+    }
+  }
+
+  if (/^\d[\w.]*$/.test(cleaned)) {
+    return { cod: asTecidoCode(cleaned), nome: null }
+  }
+
+  return { cod: null, nome: cleaned }
+}
+
 export function isStarPedido(value: unknown) {
   const text = asText(value)
   return text === STAR

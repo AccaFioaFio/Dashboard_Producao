@@ -24,6 +24,7 @@ export function replaceSnapshot(
   const insertMany = sqlite.transaction(() => {
     sqlite.exec(`
       DELETE FROM qualidade_evento;
+      DELETE FROM fato_aproveitamento;
       DELETE FROM fato_tecido_signus;
       DELETE FROM fato_oficinas;
       DELETE FROM fato_revisao;
@@ -135,6 +136,7 @@ export function replaceSnapshot(
       if (row.produto) produtos.add(row.produto)
     }
     for (const row of snapshot.tecidosSignus) addDate(row.data)
+    for (const row of snapshot.aproveitamento) addDate(row.data)
 
     const insertDimPedido = sqlite.prepare(`
       INSERT INTO dim_pedido (
@@ -268,6 +270,17 @@ export function replaceSnapshot(
           isBaixa: row.isBaixa ? 1 : 0,
         })
       }
+    }
+
+    const insertAproveitamento = sqlite.prepare(`
+      INSERT INTO fato_aproveitamento (
+        tipo, pedido, cliente, data, cod_produto, tecido, modelo, qtd, excel_row
+      ) VALUES (
+        @tipo, @pedido, @cliente, @data, @codProduto, @tecido, @modelo, @qtd, @excelRow
+      )
+    `)
+    for (const group of chunk(snapshot.aproveitamento)) {
+      for (const row of group) insertAproveitamento.run(row)
     }
 
     const insertQualidade = sqlite.prepare(`

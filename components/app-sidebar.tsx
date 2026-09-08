@@ -14,10 +14,11 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from '@/components/ui/sidebar'
-import { navigation } from '@/lib/navigation'
+import { findNavItem, navigation } from '@/lib/navigation'
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const activeHref = findNavItem(pathname)?.href
 
   return (
     <Sidebar collapsible="icon">
@@ -47,10 +48,7 @@ export function AppSidebar() {
               {navigation.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
-                    isActive={
-                      pathname === item.href ||
-                      (item.href !== '/' && pathname.startsWith(`${item.href}/`))
-                    }
+                    isActive={activeHref === item.href}
                     tooltip={item.title}
                     className="h-9 rounded-lg px-2.5 text-[13px] font-medium"
                     render={<Link href={item.href} />}

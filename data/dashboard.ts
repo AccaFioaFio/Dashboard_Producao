@@ -3,7 +3,7 @@ import 'server-only'
 import { cache } from 'react'
 import { getSqlite } from '@/db'
 import type { DashFilters, FilterOptions } from '@/lib/filters'
-import { isProducaoOrigem } from '@/lib/keys'
+import { isProducaoOrigem, splitCodigoDescricao } from '@/lib/keys'
 import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { YEAR } from '@/lib/year'
 import type { FunilKpis, HeaderKpis, SerieMensal } from '@/lib/etl/types'
@@ -203,9 +203,22 @@ function runGet<T>(sql: string, params: Record<string, unknown>) {
   return (Object.keys(params).length ? stmt.get(params) : stmt.get()) as T
 }
 
+function hasAproveitamentoTable() {
+  return Boolean(
+    sqlite()
+      .prepare(
+        `SELECT 1 as v FROM sqlite_master WHERE type = 'table' AND name = 'fato_aproveitamento'`,
+      )
+      .get(),
+  )
+}
+
 export const getFilterOptions = cache(async (): Promise<FilterOptions> => {
   await ensureCloudDatabase()
   const db = sqlite()
+  const aproveitamentoUnion = hasAproveitamentoTable()
+    ? 'UNION SELECT data FROM fato_aproveitamento'
+    : ''
   const mesesRows = db
     .prepare(
       `SELECT DISTINCT CAST(substr(data, 6, 2) as INTEGER) as mes
@@ -214,6 +227,7 @@ export const getFilterOptions = cache(async (): Promise<FilterOptions> => {
          UNION SELECT data_producao FROM fato_costura
          UNION SELECT data_producao FROM fato_revisao
          UNION SELECT data_envio FROM fato_oficinas
+         ${aproveitamentoUnion}
        )
        WHERE data IS NOT NULL
        ORDER BY mes`,
@@ -1507,6 +1521,158 @@ export const getTempoProducao = cache(async (filters: DashFilters = {}) => {
     mes: filters.mes,
     hoje: todayIso(),
   })
+})
+
+export type AcaoMesRow = {
+  mes: number
+  cortadas: number
+  aproveitadas: number
+}
+
+export type AcaoProdutoRow = {
+  codigo: string
+  descricao: string
+  modelo: string
+  entrada: number
+  saida: number
+  saldo: number
+}
+
+/** Separa código e descrição quando vêm grudados (ex.: "1107…_TECIDO…" ou "1107… - TECIDO…"). */
+function resolveAcaoCodigoDescricao(
+  codProduto: string | null,
+  tecido: string | null,
+): { codigo: string; descricao: string } {
+  const fromCod = splitCodigoDescricao(codProduto)
+  const fromTec = splitCodigoDescricao(tecido)
+
+  if (fromCod.cod && fromCod.nome) {
+    return {
+      codigo: fromCod.cod,
+      descricao: fromTec.nome ?? fromCod.nome,
+    }
+  }
+  if (fromTec.cod && fromTec.nome) {
+    return {
+      codigo: fromCod.cod ?? fromTec.cod,
+      descricao: fromTec.nome,
+    }
+  }
+  return {
+    codigo: fromCod.cod ?? fromTec.cod ?? '—',
+    descricao: fromTec.nome ?? fromCod.nome ?? '(sem descrição)',
+  }
+}
+
+export const getAcaoComercial = cache(async (filters: DashFilters = {}) => {
+  await ensureCloudDatabase()
+  const empty = {
+    loaded: false,
+    pecasCortadas: 0,
+    pecasAproveitadas: 0,
+    saldo: 0,
+    pctAproveitamento: 0,
+    porMes: [] as AcaoMesRow[],
+    produtos: [] as AcaoProdutoRow[],
+  }
+  if (!hasAproveitamentoTable()) return empty
+
+  const filter = emptyFilter()
+  if (filters.mes) {
+    filter.clauses.push(`CAST(substr(a.data, 6, 2) as INTEGER) = @mes`)
+    filter.params.mes = filters.mes
+  }
+  if (filters.q) {
+    filter.clauses.push(
+      `(COALESCE(a.pedido, '') LIKE @q OR COALESCE(a.cliente, '') LIKE @q OR COALESCE(a.modelo, '') LIKE @q OR COALESCE(a.cod_produto, '') LIKE @q OR COALESCE(a.tecido, '') LIKE @q)`,
+    )
+    filter.params.q = likeContains(filters.q)
+  }
+  const where = whereSql(filter)
+  const { params } = filter
+
+  const totais = runGet<{ cortadas: number; aproveitadas: number }>(
+    `SELECT
+        COALESCE(SUM(CASE WHEN a.tipo = 'entrada' THEN a.qtd ELSE 0 END), 0) as cortadas,
+        COALESCE(SUM(CASE WHEN a.tipo = 'saida' THEN a.qtd ELSE 0 END), 0) as aproveitadas
+     FROM fato_aproveitamento a
+     WHERE ${where}`,
+    params,
+  )
+  const pecasCortadas = totais.cortadas
+  const pecasAproveitadas = totais.aproveitadas
+  const saldo = pecasCortadas - pecasAproveitadas
+  const pctAproveitamento = pecasCortadas > 0 ? (pecasAproveitadas / pecasCortadas) * 100 : 0
+
+  const mesRows = runAll<{ mes: number; cortadas: number; aproveitadas: number }>(
+    `SELECT CAST(substr(a.data, 6, 2) as INTEGER) as mes,
+            COALESCE(SUM(CASE WHEN a.tipo = 'entrada' THEN a.qtd ELSE 0 END), 0) as cortadas,
+            COALESCE(SUM(CASE WHEN a.tipo = 'saida' THEN a.qtd ELSE 0 END), 0) as aproveitadas
+     FROM fato_aproveitamento a
+     WHERE ${where} AND a.data IS NOT NULL
+     GROUP BY mes
+     ORDER BY mes`,
+    params,
+  )
+  const porMes: AcaoMesRow[] = mesRows.filter((row) => row.mes >= 1 && row.mes <= 12)
+
+  const rawProdutos = runAll<{
+    codProduto: string | null
+    tecido: string | null
+    modelo: string | null
+    entrada: number
+    saida: number
+  }>(
+    `SELECT
+        a.cod_produto as codProduto,
+        a.tecido,
+        a.modelo,
+        COALESCE(SUM(CASE WHEN a.tipo = 'entrada' THEN a.qtd ELSE 0 END), 0) as entrada,
+        COALESCE(SUM(CASE WHEN a.tipo = 'saida' THEN a.qtd ELSE 0 END), 0) as saida
+     FROM fato_aproveitamento a
+     GROUP BY a.cod_produto, a.tecido, a.modelo`,
+    {},
+  )
+
+  const byKey = new Map<string, AcaoProdutoRow>()
+  for (const row of rawProdutos) {
+    const { codigo, descricao } = resolveAcaoCodigoDescricao(
+      row.codProduto,
+      row.tecido,
+    )
+    const modelo = row.modelo?.replace(/\s+/g, ' ').trim() || '—'
+    const key = `${codigo}||${descricao}||${modelo}`
+    const current = byKey.get(key) ?? {
+      codigo,
+      descricao,
+      modelo,
+      entrada: 0,
+      saida: 0,
+      saldo: 0,
+    }
+    current.entrada += row.entrada
+    current.saida += row.saida
+    current.saldo = current.entrada - current.saida
+    byKey.set(key, current)
+  }
+
+  const produtos = [...byKey.values()].sort(
+    (a, b) =>
+      b.saldo - a.saldo ||
+      a.codigo.localeCompare(b.codigo, 'pt-BR') ||
+      a.descricao.localeCompare(b.descricao, 'pt-BR') ||
+      a.modelo.localeCompare(b.modelo, 'pt-BR'),
+  )
+
+  return {
+    loaded: true,
+    pecasCortadas,
+    pecasAproveitadas,
+    saldo,
+    pctAproveitamento,
+    porMes,
+    produtos,
+  }
 })
 
 export { isProducaoOrigem }

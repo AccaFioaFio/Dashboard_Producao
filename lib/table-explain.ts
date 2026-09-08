@@ -328,6 +328,21 @@ export function explainOficinaMes(args: {
   ])
 }
 
+export function explainAcaoSaldo(row: {
+  codigo: string
+  descricao: string
+  modelo?: string
+  entrada: number
+  saida: number
+  saldo: number
+}) {
+  return hintLines([
+    `${row.codigo} · ${row.descricao}${row.modelo && row.modelo !== '—' ? ` · ${row.modelo}` : ''}.`,
+    `Cortadas ${formatInt(row.entrada)} − aproveitadas ${formatInt(row.saida)} = saldo ${formatInt(row.saldo)}.`,
+    'Saldo = TAB_ENTRADA (QTD CORTADO) menos TAB_SAIDA (QTD APROVEITAMENTO). Lista completa, sem recorte de mês.',
+  ])
+}
+
 export function tipoTecidoHint(tipoNorm: string) {
   const map: Record<string, string> = {
     baixa_producao: 'Baixa BOM de produção. Entra no KPI oficial de metros.',

@@ -139,6 +139,20 @@ export type SignusTecidoMovimento = {
   tipoDocumentoSigla: string | null
 }
 
+export type AproveitamentoTipo = 'entrada' | 'saida'
+
+export type AproveitamentoMovimento = {
+  excelRow: number
+  tipo: AproveitamentoTipo
+  pedido: string | null
+  cliente: string | null
+  data: string | null
+  codProduto: string | null
+  tecido: string | null
+  modelo: string | null
+  qtd: number
+}
+
 export type Snapshot = {
   corteLinhas: CorteLinha[]
   cortePedidos: CortePedido[]
@@ -147,6 +161,7 @@ export type Snapshot = {
   oficinas: OficinaLote[]
   tecidosSignus: SignusTecidoMovimento[]
   qualidade: QualidadeEvento[]
+  aproveitamento: AproveitamentoMovimento[]
 }
 
 export type HeaderKpis = {

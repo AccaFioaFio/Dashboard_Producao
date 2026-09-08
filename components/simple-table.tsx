@@ -20,17 +20,23 @@ export type TableColumn = {
   label: string
   numeric?: boolean
   wrap?: boolean
+  nowrap?: boolean
   link?: boolean
 }
 
-function columnClass(col: TableColumn, header = false) {
+function columnClass(col: TableColumn, header = false, comfortable = false) {
   return cn(
-    'px-1.5 py-1',
+    comfortable ? 'px-2.5 py-1.5' : 'px-1.5 py-1',
     col.numeric
       ? 'w-px whitespace-nowrap text-right'
-      : col.wrap
-        ? 'min-w-[12rem] whitespace-normal break-words leading-snug'
-        : 'min-w-0 whitespace-normal break-words leading-snug',
+      : col.nowrap
+        ? 'whitespace-nowrap'
+        : col.wrap
+          ? cn(
+              'whitespace-normal break-words leading-snug',
+              comfortable ? 'min-w-[16rem]' : 'min-w-[12rem]',
+            )
+          : 'min-w-0 whitespace-normal break-words leading-snug',
     !header && col.numeric && 'font-medium tabular-nums',
   )
 }
@@ -74,10 +80,12 @@ export function SimpleTable({
   columns,
   rows,
   empty = 'Nenhum registro',
+  comfortable = false,
 }: {
   columns: TableColumn[]
   rows: TableRow[]
   empty?: string
+  comfortable?: boolean
 }) {
   if (!rows.length) {
     return (
@@ -89,11 +97,21 @@ export function SimpleTable({
 
   return (
     <div className="card-surface table-surface min-w-0 overflow-x-auto">
-      <table className="w-full text-left text-[10px] leading-snug">
-        <thead className="bg-muted/50 text-[9px] font-semibold tracking-wide text-muted-foreground uppercase">
+      <table
+        className={cn(
+          'w-full text-left leading-snug',
+          comfortable ? 'text-xs' : 'text-[10px]',
+        )}
+      >
+        <thead
+          className={cn(
+            'bg-muted/50 font-semibold tracking-wide text-muted-foreground uppercase',
+            comfortable ? 'text-[10px]' : 'text-[9px]',
+          )}
+        >
           <tr>
             {columns.map((col) => (
-              <th key={col.key} className={columnClass(col, true)}>
+              <th key={col.key} className={columnClass(col, true, comfortable)}>
                 {col.label}
               </th>
             ))}
@@ -106,7 +124,7 @@ export function SimpleTable({
                 <td
                   key={col.key}
                   className={cn(
-                    columnClass(col),
+                    columnClass(col, false, comfortable),
                     row.alert &&
                       col.key === 'defeitos' &&
                       'font-semibold text-destructive',
