@@ -10,6 +10,7 @@ import {
   normalizeStatus,
 } from '@/lib/keys'
 import { YEAR } from '@/lib/year'
+import { pendentesOficina } from '@/lib/oficinas-qty'
 import { asNumber, headerIndex, sheetNameFold } from '@/lib/etl/excel'
 import type {
   CorteLinha,
@@ -392,18 +393,24 @@ export function parseOficinas(workbook: XLSX.WorkBook) {
       continue
     }
 
+    const qtdEnviadas = asNumber(cell(values, colEnviadas)) ?? 0
+    const qtdRetornadas = asNumber(cell(values, colRetornadas)) ?? 0
+    const qtdPendentesExcel = asNumber(cell(values, colPendentes)) ?? 0
     const lote: OficinaLote = {
       excelRow: i + 1,
       pedidoNorm: normalizePedido(cell(values, colPedido)),
       oficina: oficinaRaw,
       dataEnvio,
-      qtdEnviadas: asNumber(cell(values, colEnviadas)) ?? 0,
-      qtdRetornadas: asNumber(cell(values, colRetornadas)) ?? 0,
-      qtdPendentes: asNumber(cell(values, colPendentes)) ?? 0,
+      qtdEnviadas,
+      qtdRetornadas,
+      // Saldo real: não confiar na coluna Excel (pode ficar desatualizada após retorno).
+      qtdPendentes: pendentesOficina(qtdEnviadas, qtdRetornadas),
       qtdDefeitos: asNumber(cell(values, colDefeitos)) ?? 0,
       statusEntrega: asText(cell(values, colStatus)),
       dataPrometida: toIsoDate(cell(values, colPrometida)),
-      dataRetorno: toIsoDate(cell(values, colRetorno)),
+      // Data Retorno no Excel costuma ser =TODAY(); só vale se houve retorno na linha.
+      dataRetorno:
+        qtdRetornadas > 0 ? toIsoDate(cell(values, colRetorno)) : null,
       produto: asText(cell(values, colProduto)),
       valorTotal: asNumber(cell(values, colValor)),
     }
@@ -411,16 +418,16 @@ export function parseOficinas(workbook: XLSX.WorkBook) {
 
     if (
       foldSafe(oficinaRaw) === 'LILICA' &&
-      lote.qtdEnviadas > 0 &&
-      lote.qtdRetornadas === 0 &&
-      lote.qtdPendentes === 0
+      qtdEnviadas > 0 &&
+      qtdRetornadas === 0 &&
+      qtdPendentesExcel === 0
     ) {
       qualidade.push({
         tipo: 'lilica',
         pedidoNorm: lote.pedidoNorm,
         detalhe: 'Lilica: enviadas sem retorno e sem pendente',
         excelRow: i + 1,
-        valor: lote.qtdEnviadas,
+        valor: qtdEnviadas,
       })
     }
   }

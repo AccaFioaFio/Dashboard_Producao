@@ -5,7 +5,7 @@ import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { FilterBar } from '@/components/filter-bar'
 import { getFilterOptions, getOficinas } from '@/data/dashboard'
-import { MONTH_LABELS, formatDate, formatDays, formatInt, formatMoney, formatMoneyCompact, formatNumber } from '@/lib/format'
+import { MONTH_LABELS, formatDate, formatDays, formatInt, formatMoney, formatMoneyCompact, formatNumber, formatProduto } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
 import { PedidoQueue } from '@/components/pedido-queue'
 import { explainOficinaRanking, explainOficinaSemRetorno } from '@/lib/table-explain'
@@ -138,7 +138,12 @@ export default async function OficinasPage({
           rows={oficinas.pendentesAging.map((row) => ({
             pedido: row.pedido,
             title: formatDays(row.diasParado, 0),
-            lines: [row.oficina, `${formatInt(row.pendentes)} pçs`, formatDate(row.data)],
+            lines: [
+              row.oficina,
+              formatProduto(row) === '—' ? null : formatProduto(row),
+              `${formatInt(row.pendentes)} pçs`,
+              formatDate(row.data),
+            ],
             alert: (row.diasParado ?? 0) >= 15,
             warning: (row.diasParado ?? 0) >= 8 && (row.diasParado ?? 0) < 15,
           }))}
@@ -148,6 +153,7 @@ export default async function OficinasPage({
             columns={[
               { key: 'pedido', label: 'Pedido', link: true },
               { key: 'oficina', label: 'Oficina' },
+              { key: 'produto', label: 'Produto', wrap: true },
               { key: 'envio', label: 'Envio' },
               { key: 'dias', label: 'Dias', numeric: true },
               { key: 'pendentes', label: 'Pendentes', numeric: true },
@@ -156,6 +162,7 @@ export default async function OficinasPage({
             rows={oficinas.pendentesAging.map((row) => ({
               pedido: row.pedido,
               oficina: row.oficina,
+              produto: formatProduto(row),
               envio: formatDate(row.data),
               dias: formatDays(row.diasParado, 0),
               pendentes: formatInt(row.pendentes),
@@ -174,12 +181,14 @@ export default async function OficinasPage({
           columns={[
             { key: 'oficina', label: 'Oficina' },
             { key: 'pedido', label: 'Pedido', link: true },
+            { key: 'produto', label: 'Produto', wrap: true },
             { key: 'enviadas', label: 'Enviadas', numeric: true },
             { key: 'data', label: 'Envio' },
           ]}
           rows={oficinas.semRetorno.map((row) => ({
             oficina: row.oficina,
             pedido: row.pedido,
+            produto: formatProduto(row),
             enviadas: formatInt(row.enviadas),
             data: formatDate(row.data),
             hint: explainOficinaSemRetorno(row),

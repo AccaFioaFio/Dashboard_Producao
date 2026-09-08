@@ -1,13 +1,15 @@
-import { formatDate, formatDays, formatInt } from '@/lib/format'
+import { formatDate, formatDays, formatInt, formatProduto } from '@/lib/format'
 import { hintLines } from '@/lib/obs'
 import type { TempoMedido, TempoPedidoRow } from '@/lib/etl/tempo'
 
 function cabeçalho(row: TempoPedidoRow) {
+  const produto = formatProduto(row)
   return [
     `Pedido ${row.pedidoNorm}`,
     row.cliente,
     row.canal,
     row.statusVigente,
+    produto !== '—' ? produto : null,
   ]
     .filter(Boolean)
     .join(' · ')

@@ -196,11 +196,11 @@ export function replaceSnapshot(
       INSERT INTO fato_corte_linha (
         pedido_norm, data, is_header, is_star, qtd_pecas, qtd_terceiros,
         qtd_estoque, metros, economia, tecido, cod_tecido, status, responsavel, canal,
-        cliente, inicio_corte, final_corte, pcp_prontas, dias_de_corte_raw, excel_row
+        cliente, inicio_corte, final_corte, pcp_prontas, observacao, dias_de_corte_raw, excel_row
       ) VALUES (
         @pedidoNorm, @data, @isHeader, @isStar, @qtdPecas, @qtdTerceiros,
         @qtdEstoque, @metros, @economia, @tecido, @codTecido, @status, @responsavel, @canal,
-        @cliente, @inicioCorte, @finalCorte, @pcpProntas, @diasDeCorteRaw, @excelRow
+        @cliente, @inicioCorte, @finalCorte, @pcpProntas, @observacao, @diasDeCorteRaw, @excelRow
       )
     `)
     for (const group of chunk(snapshot.corteLinhas)) {

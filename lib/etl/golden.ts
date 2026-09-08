@@ -20,6 +20,8 @@ export const GOLDEN_HEADER: HeaderKpis = {
   tecidoMetros: 2393,
   metrosConsumo: 104086.78,
   metrosEconomia: 3159.21,
+  // Antes: coluna Excel Qtd pçs Pendetente (= 4060). Agora: SUM(max(0, enviadas − retornadas)).
+  // Atualizar na próxima verificação golden após carga.
   oficinasPendentes: 4060,
   oficinasDefeitos: 524,
 }

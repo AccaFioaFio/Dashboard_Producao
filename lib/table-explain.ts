@@ -48,12 +48,14 @@ export function explainCorteWip(row: {
   canal: string | null
   pecas: number
   responsavel: string | null
+  tecido?: string | null
   observacao?: string | null
 }) {
   return hintLines(
     [
       pedidoHead(row.pedidoNorm, [row.cliente, row.canal, row.responsavel]),
-      `Ordem de corte EM PRODUÇÃO · ${formatInt(row.pecas)} peças deste cabeçalho · data ${formatDate(row.data)}.`,
+      row.tecido ? `EM PRODUÇÃO · ${row.tecido}.` : 'Ordem de corte EM PRODUÇÃO.',
+      `${formatInt(row.pecas)} peças deste cabeçalho · data ${formatDate(row.data)}.`,
       'Mesmo nº pedido com outro status entra noutra fila. Não é contagem de linha de tecido.',
     ],
     row.observacao,
@@ -141,11 +143,12 @@ export function explainOficinaSemRetorno(row: {
   pedido: string | null
   enviadas: number
   data: string
+  produto?: string | null
   observacao?: string | null
 }) {
   return hintLines(
     [
-      pedidoHead(row.pedido, [row.oficina]),
+      pedidoHead(row.pedido, [row.oficina, row.produto]),
       `${formatInt(row.enviadas)} peças enviadas em ${formatDate(row.data)}, 0 retornadas e 0 pendentes.`,
       'O lote não fecha o saldo — costuma ser cadastro incompleto (ex.: Lilica).',
     ],
@@ -321,7 +324,7 @@ export function explainOficinaMes(args: {
 }) {
   return hintLines([
     `${args.mes}: ${formatInt(args.enviadas)} peças enviadas · ${formatInt(args.pendentes)} ainda pendentes.`,
-    'Pendente = Qtd pçs Pendente dos lotes com Data Envio no mês.',
+    'Pendente = enviadas − retornadas (saldo do lote com Data Envio no mês).',
   ])
 }
 

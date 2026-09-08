@@ -25,6 +25,8 @@ export type TempoPedidoRow = {
   dataRevisaoUltima: string | null
   pecasRevisao: number
   observacao: string | null
+  tecido: string | null
+  codTecido: string | null
 }
 
 export type TempoMedido = TempoPedidoRow & {

@@ -47,9 +47,26 @@ export function formatTecido(
 ) {
   const code = (cod ?? '').replace(/\s+/g, ' ').trim()
   const name = shortTecido(nome)
+  if (name !== '—' && code && name.replace(/\s+/g, '').includes(code.replace(/\s+/g, ''))) {
+    return name
+  }
   if (code && code !== '(sem código)' && name !== '—') return `${code} · ${name}`
   if (name !== '—') return name
   return code || '—'
+}
+
+export function formatProduto(row: {
+  produto?: string | null
+  observacao?: string | null
+  tecido?: string | null
+  codTecido?: string | null
+}) {
+  const produto = (row.produto ?? '').replace(/\s+/g, ' ').trim()
+  if (produto) return produto
+  const tecido = formatTecido(row.codTecido, row.tecido)
+  if (tecido !== '—') return tecido
+  const obs = (row.observacao ?? '').replace(/\s+/g, ' ').trim()
+  return obs || '—'
 }
 
 export function formatDate(iso: string | null | undefined) {

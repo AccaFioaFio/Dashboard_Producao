@@ -12,6 +12,7 @@ import {
   formatInt,
   formatMeters,
   formatMoney,
+  formatProduto,
   formatTecido,
   TIPO_TECIDO_LABEL,
 } from '@/lib/format'
@@ -123,13 +124,15 @@ export default async function PedidoFichaPage({
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Ordens de corte</h2>
           <p className="text-xs text-muted-foreground">
-            Cada cabeçalho da planilha é uma OC. O mesmo nº pedido com status diferente
-            aparece em filas separadas.
+            Cada cabeçalho da planilha é uma OC. Quando o pedido gera várias OCs,
+            o status e o produto/tecido mostram o que já foi cortado e o que
+            ainda aguarda tecido.
           </p>
           <SimpleTable
             columns={[
               { key: 'linha', label: 'Linha Excel', numeric: true },
               { key: 'data', label: 'Data' },
+              { key: 'produto', label: 'Produto / observação', wrap: true },
               { key: 'status', label: 'Status' },
               { key: 'pecas', label: 'Peças', numeric: true },
               { key: 'responsavel', label: 'Responsável' },
@@ -137,6 +140,7 @@ export default async function PedidoFichaPage({
             rows={ficha.ocs.map((row) => ({
               linha: row.excelRow,
               data: formatDate(row.data),
+              produto: formatProduto(row),
               status: row.status,
               pecas: formatInt(row.pecas),
               responsavel: row.responsavel,
@@ -189,14 +193,14 @@ export default async function PedidoFichaPage({
               { key: 'origem', label: 'Origem' },
               { key: 'pecas', label: 'Peças', numeric: true },
               { key: 'responsavel', label: 'Responsável' },
-              { key: 'produto', label: 'Produto' },
+              { key: 'produto', label: 'Produto', wrap: true },
             ]}
             rows={ficha.costura.map((row) => ({
               data: formatDate(row.dataProducao),
               origem: row.origem,
               pecas: formatInt(row.pecas),
               responsavel: row.responsavel,
-              produto: row.produto,
+              produto: formatProduto(row),
               warning: row.origemNorm !== 'Producao',
             }))}
           />
@@ -213,13 +217,13 @@ export default async function PedidoFichaPage({
               { key: 'data', label: 'Data' },
               { key: 'pecas', label: 'Peças', numeric: true },
               { key: 'responsavel', label: 'Responsável' },
-              { key: 'produto', label: 'Produto' },
+              { key: 'produto', label: 'Produto', wrap: true },
             ]}
             rows={ficha.revisao.map((row) => ({
               data: formatDate(row.dataProducao),
               pecas: formatInt(row.pecas),
               responsavel: row.responsavel,
-              produto: row.produto,
+              produto: formatProduto(row),
             }))}
           />
         </section>
@@ -230,21 +234,29 @@ export default async function PedidoFichaPage({
       {ficha.oficinas.length ? (
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Oficinas</h2>
+          <p className="text-xs text-muted-foreground">
+            Cada linha é um lote com a descrição do produto. Pendentes ainda na
+            oficina; retornadas já voltaram para a produção.
+          </p>
           <SimpleTable
             columns={[
               { key: 'oficina', label: 'Oficina' },
+              { key: 'produto', label: 'Produto', wrap: true },
               { key: 'envio', label: 'Envio' },
               { key: 'retorno', label: 'Retorno' },
               { key: 'enviadas', label: 'Enviadas', numeric: true },
+              { key: 'retornadas', label: 'Retornadas', numeric: true },
               { key: 'pendentes', label: 'Pendentes', numeric: true },
               { key: 'defeitos', label: 'Defeitos', numeric: true },
               { key: 'valor', label: 'Valor', numeric: true },
             ]}
             rows={ficha.oficinas.map((row) => ({
               oficina: row.oficina,
+              produto: formatProduto(row),
               envio: formatDate(row.dataEnvio),
               retorno: formatDate(row.dataRetorno),
               enviadas: formatInt(row.enviadas),
+              retornadas: formatInt(row.retornadas),
               pendentes: formatInt(row.pendentes),
               defeitos: formatInt(row.defeitos),
               valor: row.valorTotal != null ? formatMoney(row.valorTotal) : '—',

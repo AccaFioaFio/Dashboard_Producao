@@ -31,6 +31,7 @@ function applyMigrations(connection: Database.Database) {
     '0003_signus_valores.sql',
     '0004_pcp_prontas.sql',
     '0005_observacao.sql',
+    '0006_corte_linha_observacao.sql',
   ]
   for (const file of files) {
     if (applied.has(file)) continue

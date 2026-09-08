@@ -57,6 +57,7 @@ export const fatoCorteLinha = sqliteTable(
     inicioCorte: text('inicio_corte'),
     finalCorte: text('final_corte'),
     pcpProntas: text('pcp_prontas'),
+    observacao: text('observacao'),
     diasDeCorteRaw: real('dias_de_corte_raw'),
     excelRow: integer('excel_row').notNull(),
   },

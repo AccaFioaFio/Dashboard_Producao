@@ -8,7 +8,7 @@ import { getFilterOptions } from '@/data/dashboard'
 import { getPedidosLista } from '@/data/pedidos'
 import { funilSliceMeta } from '@/lib/funil'
 import { parseFilters } from '@/lib/filters'
-import { formatDate, formatInt } from '@/lib/format'
+import { formatDate, formatInt, formatProduto } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Pedidos' }
@@ -24,11 +24,12 @@ export default async function PedidosPage({
     getFilterOptions(),
   ])
   const meta = funilSliceMeta(lista.fatia)
+  const ocFatia = lista.fatia === 'wip' || lista.fatia === 'aguardandoTecido'
 
   return (
     <PageShell
       title="Pedidos"
-      description={`${meta.label}: ${formatInt(lista.total)} ${lista.fatia === 'wip' || lista.fatia === 'aguardandoTecido' ? 'ordem(ns) de corte' : `pedido${lista.total === 1 ? '' : 's'}`}. ${meta.hint} Clique no número para a ficha.`}
+      description={`${meta.label}: ${formatInt(lista.total)} ${ocFatia ? 'ordem(ns) de corte' : `pedido${lista.total === 1 ? '' : 's'}`}. ${meta.hint} Clique no número para a ficha.`}
     >
       <FilterBar
         pathname="/pedidos"
@@ -46,50 +47,84 @@ export default async function PedidosPage({
           lines: [
             row.cliente,
             row.canal,
-            row.pecas ? `${formatInt(row.pecas)} pçs corte` : null,
+            formatProduto(row) === '—' ? null : formatProduto(row),
+            row.pecas
+              ? `${formatInt(row.pecas)} pçs ${ocFatia ? 'OC' : 'corte'}`
+              : null,
             formatDate(row.data),
           ],
-          warning: row.statusVigente === 'AGUARDANDO TECIDO',
-          alert: row.statusVigente === 'EM PRODUÇÃO',
+          warning:
+            row.statusVigente === 'AGUARDANDO TECIDO' ||
+            Boolean(row.statusVigente?.includes('AGUARDANDO TECIDO')),
+          alert:
+            row.statusVigente === 'EM PRODUÇÃO' ||
+            Boolean(row.statusVigente?.includes('EM PRODUÇÃO')),
         }))}
       />
 
       <div className="hidden md:block">
         <SimpleTable
-          columns={[
-            { key: 'pedido', label: 'Pedido', link: true },
-            { key: 'data', label: 'Data' },
-            { key: 'status', label: 'Status' },
-            { key: 'cliente', label: 'Cliente' },
-            { key: 'canal', label: 'Canal' },
-            { key: 'pecas', label: 'Corte', numeric: true },
-            { key: 'costura', label: 'Costura Prod.', numeric: true },
-            { key: 'revisao', label: 'Revisão', numeric: true },
-            { key: 'oficina', label: 'Of. pend.', numeric: true },
-            { key: 'passou', label: 'Passou por' },
-          ]}
-          rows={lista.rows.map((row) => ({
-            pedido: row.pedidoNorm,
-            data: formatDate(row.data),
-            status: row.statusVigente,
-            cliente: row.cliente,
-            canal: row.canal,
-            pecas: row.pecas ? formatInt(row.pecas) : '—',
-            costura: row.pecasCosturaProd ? formatInt(row.pecasCosturaProd) : '—',
-            revisao: row.pecasRevisao ? formatInt(row.pecasRevisao) : '—',
-            oficina: row.oficinasPendentes ? formatInt(row.oficinasPendentes) : '—',
-            passou: [
-              row.noCorte ? 'Corte' : null,
-              row.noCosturaProd ? 'Costura' : null,
-              row.noRevisao ? 'Revisão' : null,
-              row.noOficinas ? 'Oficina' : null,
-              row.noSignus ? 'Signus' : null,
-            ]
-              .filter(Boolean)
-              .join(' · '),
-            warning: row.statusVigente === 'AGUARDANDO TECIDO',
-            alert: row.statusVigente === 'EM PRODUÇÃO',
-          }))}
+          columns={
+            ocFatia
+              ? [
+                  { key: 'pedido', label: 'Pedido', link: true },
+                  { key: 'data', label: 'Data' },
+                  { key: 'status', label: 'Status OC' },
+                  { key: 'cliente', label: 'Cliente' },
+                  { key: 'canal', label: 'Canal' },
+                  { key: 'produto', label: 'Produto', wrap: true },
+                  { key: 'pecas', label: 'Peças OC', numeric: true },
+                ]
+              : [
+                  { key: 'pedido', label: 'Pedido', link: true },
+                  { key: 'data', label: 'Data' },
+                  { key: 'status', label: 'Status' },
+                  { key: 'cliente', label: 'Cliente' },
+                  { key: 'canal', label: 'Canal' },
+                  { key: 'produto', label: 'Produto', wrap: true },
+                  { key: 'pecas', label: 'Corte', numeric: true },
+                  { key: 'costura', label: 'Costura Prod.', numeric: true },
+                  { key: 'revisao', label: 'Revisão', numeric: true },
+                  { key: 'oficina', label: 'Of. pend.', numeric: true },
+                  { key: 'passou', label: 'Passou por' },
+                ]
+          }
+          rows={lista.rows.map((row) => {
+            const produto = formatProduto(row)
+            const warning = ocFatia
+              ? row.statusVigente === 'AGUARDANDO TECIDO'
+              : Boolean(row.statusVigente?.includes('AGUARDANDO TECIDO'))
+            const alert = ocFatia
+              ? row.statusVigente === 'EM PRODUÇÃO'
+              : Boolean(row.statusVigente?.includes('EM PRODUÇÃO'))
+            return {
+              pedido: row.pedidoNorm,
+              data: formatDate(row.data),
+              status: row.statusVigente,
+              cliente: row.cliente,
+              canal: row.canal,
+              produto,
+              pecas: row.pecas ? formatInt(row.pecas) : '—',
+              costura: row.pecasCosturaProd
+                ? formatInt(row.pecasCosturaProd)
+                : '—',
+              revisao: row.pecasRevisao ? formatInt(row.pecasRevisao) : '—',
+              oficina: row.oficinasPendentes
+                ? formatInt(row.oficinasPendentes)
+                : '—',
+              passou: [
+                row.noCorte ? 'Corte' : null,
+                row.noCosturaProd ? 'Costura' : null,
+                row.noRevisao ? 'Revisão' : null,
+                row.noOficinas ? 'Oficina' : null,
+                row.noSignus ? 'Signus' : null,
+              ]
+                .filter(Boolean)
+                .join(' · '),
+              warning,
+              alert,
+            }
+          })}
           empty="Nenhum pedido nesta fatia"
         />
       </div>

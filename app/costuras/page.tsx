@@ -10,7 +10,7 @@ import {
   getFunil,
   getSerieMensal,
 } from '@/data/dashboard'
-import { MONTH_LABELS, formatDate, formatInt } from '@/lib/format'
+import { MONTH_LABELS, formatDate, formatInt, formatProduto } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
 import {
   explainCosturaOrigem,
@@ -178,13 +178,13 @@ export default async function CosturasPage({
             { key: 'pedido', label: 'Pedido', link: true },
             { key: 'pecas', label: 'Peças', numeric: true },
             { key: 'responsavel', label: 'Responsável' },
-            { key: 'produto', label: 'Produto' },
+            { key: 'produto', label: 'Produto', wrap: true },
           ]}
           rows={costuras.doDia.map((row) => ({
             pedido: row.pedido,
             pecas: formatInt(row.pecas),
             responsavel: row.responsavel,
-            produto: row.produto,
+            produto: formatProduto(row),
             hint: explainLancamentoDia({
               ...row,
               etapa: 'Costura Produção',

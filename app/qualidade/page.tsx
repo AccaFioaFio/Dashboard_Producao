@@ -12,6 +12,7 @@ import {
   formatDays,
   formatInt,
   formatNumber,
+  formatProduto,
 } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
 import {
@@ -306,6 +307,7 @@ export default async function TempoProducaoPage({
             { key: 'pos', label: 'Corte → revisão', numeric: true },
             { key: 'pecas', label: 'Peças', numeric: true },
             { key: 'cliente', label: 'Cliente' },
+            { key: 'produto', label: 'Produto', wrap: true },
             { key: 'canal', label: 'Canal' },
           ]}
           rows={tempo.maisLentos.map((row) => ({
@@ -318,6 +320,7 @@ export default async function TempoProducaoPage({
             pos: formatDays(row.diasFinalAteRevisao, 0),
             pecas: formatInt(row.pecas),
             cliente: row.cliente,
+            produto: formatProduto(row),
             canal: row.canal,
             hint: explainTempoCiclo(row),
             warning: row.diasTotal >= 45 && row.diasTotal < 60,
@@ -337,6 +340,7 @@ export default async function TempoProducaoPage({
               { key: 'revisao', label: 'Data produção' },
               { key: 'dias', label: 'Dias', numeric: true },
               { key: 'cliente', label: 'Cliente' },
+              { key: 'produto', label: 'Produto', wrap: true },
             ]}
             rows={tempo.maisRapidos.map((row) => ({
               pedido: row.pedidoNorm,
@@ -344,6 +348,7 @@ export default async function TempoProducaoPage({
               revisao: formatDate(row.dataRevisaoUltima),
               dias: formatDays(row.diasTotal, 0),
               cliente: row.cliente,
+              produto: formatProduto(row),
               hint: explainTempoCiclo(row),
             }))}
             empty="Nenhum ciclo medido neste recorte."
@@ -362,6 +367,7 @@ export default async function TempoProducaoPage({
               { key: 'dias', label: 'Aberto', numeric: true },
               { key: 'status', label: 'Status' },
               { key: 'cliente', label: 'Cliente' },
+              { key: 'produto', label: 'Produto', wrap: true },
             ]}
             rows={tempo.abertos.map((row) => ({
               pedido: row.pedidoNorm,
@@ -370,6 +376,7 @@ export default async function TempoProducaoPage({
               dias: formatDays(row.diasAberto, 0),
               status: row.statusVigente,
               cliente: row.cliente,
+              produto: formatProduto(row),
               hint: explainTempoAberto(row),
               warning:
                 row.diasAberto != null &&
@@ -396,6 +403,7 @@ export default async function TempoProducaoPage({
               { key: 'finalCorte', label: 'Final corte' },
               { key: 'pecas', label: 'Peças', numeric: true },
               { key: 'cliente', label: 'Cliente' },
+              { key: 'produto', label: 'Produto', wrap: true },
             ]}
             rows={tempo.semPcp.map((row) => ({
               pedido: row.pedidoNorm,
@@ -403,6 +411,7 @@ export default async function TempoProducaoPage({
               finalCorte: formatDate(row.finalCorte),
               pecas: formatInt(row.pecas),
               cliente: row.cliente,
+              produto: formatProduto(row),
               hint: explainTempoSemPcp(row),
               warning: true,
             }))}
@@ -421,6 +430,7 @@ export default async function TempoProducaoPage({
               { key: 'revisao', label: 'Data produção' },
               { key: 'dias', label: 'Dias', numeric: true },
               { key: 'cliente', label: 'Cliente' },
+              { key: 'produto', label: 'Produto', wrap: true },
             ]}
             rows={tempo.datasInvertidas.map((row) => ({
               pedido: row.pedidoNorm,
@@ -428,6 +438,7 @@ export default async function TempoProducaoPage({
               revisao: formatDate(row.dataRevisaoUltima),
               dias: formatDays(row.diasTotal, 0),
               cliente: row.cliente,
+              produto: formatProduto(row),
               hint: explainTempoInvertido(row),
               alert: true,
             }))}

@@ -9,6 +9,7 @@ import { YEAR } from '@/lib/year'
 import type { FunilKpis, HeaderKpis, SerieMensal } from '@/lib/etl/types'
 import { ocJoinLinhas, ocPecasExpr } from '@/lib/corte-oc'
 import { analyzeTempoProducao, type TempoPedidoRow } from '@/lib/etl/tempo'
+import { sqlPendentesOficina } from '@/lib/oficinas-qty'
 
 export type CargaInfo = {
   id: number
@@ -67,6 +68,8 @@ export type CortePedidoRow = {
   cliente: string | null
   responsavel: string | null
   observacao: string | null
+  tecido: string | null
+  codTecido: string | null
   diasParado: number | null
   excelRow: number
 }
@@ -85,8 +88,23 @@ function hasObservacaoColumn() {
   )
 }
 
+function hasCorteLinhaObservacaoColumn() {
+  return Boolean(
+    sqlite()
+      .prepare(
+        `SELECT 1 as v FROM pragma_table_info('fato_corte_linha') WHERE name = 'observacao'`,
+      )
+      .get(),
+  )
+}
+
 function observacaoExpr(alias = 'p') {
   return hasObservacaoColumn() ? `${alias}.observacao` : 'NULL as observacao'
+}
+
+function ocObservacaoExpr() {
+  if (hasCorteLinhaObservacaoColumn()) return 'h.observacao as observacao'
+  return observacaoExpr()
 }
 
 type SqlFilter = {
@@ -316,7 +334,9 @@ export const getHeaderKpis = cache(async (): Promise<HeaderKpis | null> => {
     )
     .get() as { metros: number; economia: number }
   const oficinasPendentes = (
-    db.prepare('SELECT COALESCE(SUM(qtd_pendentes), 0) as v FROM fato_oficinas').get() as { v: number }
+    db
+      .prepare(`SELECT COALESCE(SUM(${sqlPendentesOficina()}), 0) as v FROM fato_oficinas`)
+      .get() as { v: number }
   ).v
   const oficinasDefeitos = (
     db.prepare('SELECT COALESCE(SUM(qtd_defeitos), 0) as v FROM fato_oficinas').get() as { v: number }
@@ -488,11 +508,20 @@ export const getCorteBreakdown = cache(async (filters: DashFilters = {}) => {
     params,
   )
 
-  const obs = observacaoExpr()
   const wip = runAll<CortePedidoRow>(
     `SELECT h.pedido_norm as pedidoNorm, h.data, h.status as statusVigente,
             ${ocPecasExpr('h')} as pecas, h.canal, h.cliente, h.responsavel,
-            ${obs},
+            ${ocObservacaoExpr()},
+            COALESCE(NULLIF(trim(h.tecido), ''), (
+              SELECT l.tecido FROM fato_corte_linha l
+              WHERE ${ocJoinLinhas('h', 'l')} AND l.tecido IS NOT NULL AND trim(l.tecido) != ''
+              ORDER BY l.excel_row LIMIT 1
+            )) as tecido,
+            COALESCE(NULLIF(trim(h.cod_tecido), ''), (
+              SELECT l.cod_tecido FROM fato_corte_linha l
+              WHERE ${ocJoinLinhas('h', 'l')} AND l.cod_tecido IS NOT NULL AND trim(l.cod_tecido) != ''
+              ORDER BY l.excel_row LIMIT 1
+            )) as codTecido,
             CAST(julianday('now', 'localtime') - julianday(COALESCE(h.data, h.inicio_corte, h.pcp_prontas)) AS INTEGER) as diasParado,
             h.excel_row as excelRow
      FROM fato_corte_linha h
@@ -555,13 +584,12 @@ export const getCorteBreakdown = cache(async (filters: DashFilters = {}) => {
     params,
   )
   const aguardando = runGet<{ pedidos: number; pecas: number; metros: number }>(
-    `SELECT COUNT(*) as pedidos,
-            COALESCE(SUM(l.qtd_pecas), 0) as pecas,
-            COALESCE(SUM(l.metros), 0) as metros
+    `SELECT COALESCE(SUM(CASE WHEN h.is_header = 1 AND h.status = 'AGUARDANDO TECIDO' THEN 1 ELSE 0 END), 0) as pedidos,
+            COALESCE(SUM(CASE WHEN h.status = 'AGUARDANDO TECIDO' THEN h.qtd_pecas ELSE 0 END), 0) as pecas,
+            COALESCE(SUM(CASE WHEN h.status = 'AGUARDANDO TECIDO' THEN h.metros ELSE 0 END), 0) as metros
      FROM fato_corte_linha h
-     JOIN fato_corte_linha l ON ${ocJoinLinhas('h', 'l')}
      LEFT JOIN fato_corte_pedido p ON p.pedido_norm = h.pedido_norm
-     WHERE ${where} AND h.is_header = 1 AND h.status = 'AGUARDANDO TECIDO'`,
+     WHERE ${where}`,
     params,
   )
 
@@ -1253,7 +1281,8 @@ export const getCosturas = cache(async (filters: DashFilters = {}) => {
     params,
   )
   const porResponsavel = runAll<NamedTotal>(
-    `SELECT COALESCE(c.responsavel, '(sem)') as nome, COALESCE(SUM(c.qtd_pecas), 0) as pecas, COUNT(*) as pedidos
+    `SELECT COALESCE(c.responsavel, '(sem)') as nome, COALESCE(SUM(c.qtd_pecas), 0) as pecas,
+            COUNT(DISTINCT c.pedido_norm) as pedidos
      FROM fato_costura c WHERE ${where} AND c.origem_norm = 'Producao'
      GROUP BY c.responsavel ORDER BY pecas DESC`,
     params,
@@ -1295,7 +1324,8 @@ export const getRevisao = cache(async (filters: DashFilters = {}) => {
   const where = whereSql(filter)
   const { params } = filter
   const porResponsavel = runAll<NamedTotal>(
-    `SELECT COALESCE(r.responsavel, '(sem)') as nome, COALESCE(SUM(r.qtd_pecas), 0) as pecas, COUNT(*) as pedidos
+    `SELECT COALESCE(r.responsavel, '(sem)') as nome, COALESCE(SUM(r.qtd_pecas), 0) as pecas,
+            COUNT(DISTINCT r.pedido_norm) as pedidos
      FROM fato_revisao r WHERE ${where} GROUP BY r.responsavel ORDER BY pecas DESC`,
     params,
   )
@@ -1335,14 +1365,14 @@ export const getOficinas = cache(async (filters: DashFilters = {}) => {
   const ranking = runAll<{
     nome: string
     pecas: number
-    pedidos: number
+    lotes: number
     enviadas: number
     retornadas: number
     defeitos: number
     valor: number
   }>(
-    `SELECT o.oficina as nome, COALESCE(SUM(o.qtd_pendentes), 0) as pecas,
-            COUNT(*) as pedidos, COALESCE(SUM(o.qtd_enviadas), 0) as enviadas,
+    `SELECT o.oficina as nome, COALESCE(SUM(${sqlPendentesOficina('o')}), 0) as pecas,
+            COUNT(*) as lotes, COALESCE(SUM(o.qtd_enviadas), 0) as enviadas,
             COALESCE(SUM(o.qtd_retornadas), 0) as retornadas,
             COALESCE(SUM(o.qtd_defeitos), 0) as defeitos,
             COALESCE(SUM(o.valor_total), 0) as valor
@@ -1360,7 +1390,7 @@ export const getOficinas = cache(async (filters: DashFilters = {}) => {
        SUM(CASE WHEN o.status_entrega LIKE 'Em dia%' THEN 1 ELSE 0 END) as noPrazo,
        SUM(CASE WHEN o.status_entrega LIKE '%Atrasad%' THEN 1 ELSE 0 END) as atraso,
        COUNT(*) as lotes,
-       SUM(CASE WHEN o.qtd_pendentes > 0 THEN 1 ELSE 0 END) as abertos,
+       SUM(CASE WHEN ${sqlPendentesOficina('o')} > 0 THEN 1 ELSE 0 END) as abertos,
        COALESCE(SUM(o.valor_total), 0) as valor
      FROM fato_oficinas o WHERE ${where}`,
     params,
@@ -1374,7 +1404,7 @@ export const getOficinas = cache(async (filters: DashFilters = {}) => {
     params,
   ).v
   const pendentes = runGet<{ v: number }>(
-    `SELECT COALESCE(SUM(o.qtd_pendentes), 0) as v FROM fato_oficinas o WHERE ${where}`,
+    `SELECT COALESCE(SUM(${sqlPendentesOficina('o')}), 0) as v FROM fato_oficinas o WHERE ${where}`,
     params,
   ).v
   const defeitos = runGet<{ v: number }>(
@@ -1386,10 +1416,11 @@ export const getOficinas = cache(async (filters: DashFilters = {}) => {
     pedido: string | null
     enviadas: number
     data: string
+    produto: string | null
     observacao: string | null
   }>(
     `SELECT o.oficina, o.pedido_norm as pedido, o.qtd_enviadas as enviadas, o.data_envio as data,
-            ${observacaoExpr()}
+            o.produto, ${observacaoExpr()}
      FROM fato_oficinas o
      LEFT JOIN fato_corte_pedido p ON p.pedido_norm = o.pedido_norm
      WHERE ${where} AND o.qtd_enviadas > 0 AND o.qtd_retornadas = 0 AND o.qtd_pendentes = 0
@@ -1403,20 +1434,22 @@ export const getOficinas = cache(async (filters: DashFilters = {}) => {
     data: string
     prometida: string | null
     diasParado: number | null
+    produto: string | null
   }>(
-    `SELECT o.oficina, o.pedido_norm as pedido, o.qtd_pendentes as pendentes, o.data_envio as data,
+    `SELECT o.oficina, o.pedido_norm as pedido, ${sqlPendentesOficina('o')} as pendentes, o.data_envio as data,
             o.data_prometida as prometida,
-            CAST(julianday('now', 'localtime') - julianday(o.data_envio) AS INTEGER) as diasParado
+            CAST(julianday('now', 'localtime') - julianday(o.data_envio) AS INTEGER) as diasParado,
+            o.produto
      FROM fato_oficinas o
-     WHERE ${where} AND o.qtd_pendentes > 0
-     ORDER BY diasParado DESC, o.qtd_pendentes DESC
+     WHERE ${where} AND ${sqlPendentesOficina('o')} > 0
+     ORDER BY diasParado DESC, pendentes DESC
      LIMIT 40`,
     params,
   )
   const porMes = runAll<{ mes: number; enviadas: number; pendentes: number }>(
     `SELECT CAST(substr(o.data_envio, 6, 2) as INTEGER) as mes,
             COALESCE(SUM(o.qtd_enviadas), 0) as enviadas,
-            COALESCE(SUM(o.qtd_pendentes), 0) as pendentes
+            COALESCE(SUM(${sqlPendentesOficina('o')}), 0) as pendentes
      FROM fato_oficinas o WHERE ${where} GROUP BY mes ORDER BY mes`,
     params,
   )
@@ -1455,6 +1488,12 @@ export const getTempoProducao = cache(async (filters: DashFilters = {}) => {
             p.inicio_corte as inicioCorte,
             p.final_corte as finalCorte,
             ${observacaoExpr()},
+            (SELECT l.tecido FROM fato_corte_linha l
+             WHERE l.pedido_norm = p.pedido_norm AND l.is_header = 1
+             ORDER BY l.excel_row LIMIT 1) as tecido,
+            (SELECT l.cod_tecido FROM fato_corte_linha l
+             WHERE l.pedido_norm = p.pedido_norm AND l.is_header = 1
+             ORDER BY l.excel_row LIMIT 1) as codTecido,
             MIN(r.data_producao) as dataRevisaoPrimeira,
             MAX(r.data_producao) as dataRevisaoUltima,
             COALESCE(SUM(r.qtd_pecas), 0) as pecasRevisao

@@ -11,6 +11,7 @@ import {
   formatDays,
   formatInt,
   formatMeters,
+  formatProduto,
   formatTecido,
 } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
@@ -71,13 +72,13 @@ export default async function CortePage({
         <KpiCard
           label="WIP"
           value={`${formatInt(corte.resumo.wipPedidos)} / ${formatInt(corte.resumo.wipPecas)}`}
-          hint="Pedidos vigentes / peças desta ordem de corte"
+          hint="OCs vigentes / peças desta ordem de corte"
           alert={corte.resumo.wipPedidos > 0}
         />
         <KpiCard
           label="Aguardando tecido"
           value={`${formatInt(corte.resumo.tecidoPedidos)} / ${formatInt(corte.resumo.tecidoPecas)}`}
-          hint={`${formatMeters(corte.resumo.tecidoMetros)} com status AGUARDANDO TECIDO`}
+          hint={`${formatMeters(corte.resumo.tecidoMetros)} · OCs com status AGUARDANDO TECIDO`}
           alert={corte.resumo.tecidoPedidos > 0}
         />
       </KpiGrid>
@@ -121,7 +122,13 @@ export default async function CortePage({
             rows={corte.wip.map((row) => ({
               pedido: row.pedidoNorm,
               title: formatDays(row.diasParado, 0),
-              lines: [row.statusVigente, row.cliente, `${formatInt(row.pecas)} pçs`, row.responsavel],
+              lines: [
+                row.statusVigente,
+                row.cliente,
+                formatProduto(row) === '—' ? null : formatProduto(row),
+                `${formatInt(row.pecas)} pçs`,
+                row.responsavel,
+              ],
               alert: (row.diasParado ?? 0) >= 15,
               warning: (row.diasParado ?? 0) >= 8 && (row.diasParado ?? 0) < 15,
             }))}
@@ -134,6 +141,7 @@ export default async function CortePage({
                 { key: 'status', label: 'Status' },
                 { key: 'dias', label: 'Dias', numeric: true },
                 { key: 'cliente', label: 'Cliente' },
+                { key: 'produto', label: 'Produto', wrap: true },
                 { key: 'pecas', label: 'Peças', numeric: true },
                 { key: 'responsavel', label: 'Responsável' },
               ]}
@@ -143,9 +151,13 @@ export default async function CortePage({
                 status: row.statusVigente,
                 dias: formatDays(row.diasParado, 0),
                 cliente: row.cliente,
+                produto: formatProduto(row),
                 pecas: formatInt(row.pecas),
                 responsavel: row.responsavel,
-                hint: explainCorteWip(row),
+                hint: explainCorteWip({
+                  ...row,
+                  tecido: formatProduto(row),
+                }),
                 alert: (row.diasParado ?? 0) >= 15,
                 warning: (row.diasParado ?? 0) >= 8 && (row.diasParado ?? 0) < 15,
               }))}

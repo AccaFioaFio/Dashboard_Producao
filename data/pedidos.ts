@@ -7,6 +7,7 @@ import { leadTimeDays } from '@/lib/dates'
 import type { DashFilters } from '@/lib/filters'
 import { funilSliceWhere, type FunilSlice } from '@/lib/funil'
 import { ocPecasExpr } from '@/lib/corte-oc'
+import { sqlPendentesOficina } from '@/lib/oficinas-qty'
 import { pedidoDigits, parsePedidoParam } from '@/lib/pedido'
 
 export type PedidoListaRow = {
@@ -26,6 +27,9 @@ export type PedidoListaRow = {
   noSignus: boolean
   responsavel: string | null
   excelRow: number | null
+  tecido: string | null
+  codTecido: string | null
+  observacao: string | null
 }
 
 export type PedidoFicha = {
@@ -63,6 +67,9 @@ export type PedidoFicha = {
     cliente: string | null
     canal: string | null
     responsavel: string | null
+    observacao: string | null
+    tecido: string | null
+    codTecido: string | null
   }[]
   linhas: {
     tecido: string | null
@@ -171,6 +178,16 @@ function hasObservacaoColumn() {
   )
 }
 
+function hasCorteLinhaObservacaoColumn() {
+  return Boolean(
+    sqlite()
+      .prepare(
+        `SELECT 1 as v FROM pragma_table_info('fato_corte_linha') WHERE name = 'observacao'`,
+      )
+      .get(),
+  )
+}
+
 function sliceDateExpr(fatia: FunilSlice) {
   if (fatia === 'costuraSemCorte') {
     return `(SELECT MIN(c.data_producao) FROM fato_costura c
@@ -249,7 +266,7 @@ export const getPedidosLista = cache(async (filters: DashFilters = {}) => {
          FROM fato_revisao GROUP BY pedido_norm
        ) rv ON rv.pedido_norm = d.pedido_norm
        LEFT JOIN (
-         SELECT pedido_norm, SUM(qtd_pendentes) as pendentes
+         SELECT pedido_norm, SUM(${sqlPendentesOficina()}) as pendentes
          FROM fato_oficinas GROUP BY pedido_norm
        ) ofc ON ofc.pedido_norm = d.pedido_norm`
   const stmt = sqlite().prepare(
@@ -269,7 +286,10 @@ export const getPedidosLista = cache(async (filters: DashFilters = {}) => {
               d.no_oficinas as noOficinas,
               d.no_signus as noSignus,
               h.responsavel as responsavel,
-              h.excel_row as excelRow
+              h.excel_row as excelRow,
+              h.tecido as tecido,
+              h.cod_tecido as codTecido,
+              ${hasCorteLinhaObservacaoColumn() ? 'h.observacao' : 'NULL'} as observacao
        ${fromOc}
        ${joinsLaterais}
        WHERE ${where}
@@ -293,7 +313,14 @@ export const getPedidosLista = cache(async (filters: DashFilters = {}) => {
               d.no_oficinas as noOficinas,
               d.no_signus as noSignus,
               p.responsavel as responsavel,
-              NULL as excelRow
+              NULL as excelRow,
+              (SELECT h.tecido FROM fato_corte_linha h
+               WHERE h.pedido_norm = d.pedido_norm AND h.is_header = 1
+               ORDER BY h.excel_row LIMIT 1) as tecido,
+              (SELECT h.cod_tecido FROM fato_corte_linha h
+               WHERE h.pedido_norm = d.pedido_norm AND h.is_header = 1
+               ORDER BY h.excel_row LIMIT 1) as codTecido,
+              ${hasObservacaoColumn() ? 'p.observacao' : 'NULL'} as observacao
        ${fromPedido}
        ${joinsLaterais}
        WHERE ${where}
@@ -382,11 +409,16 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
     )
     .get(pedidoNorm) as PedidoFicha['corte'] | undefined
 
+  const ocObs = hasCorteLinhaObservacaoColumn()
+    ? 'h.observacao'
+    : 'NULL as observacao'
   const ocs = db
     .prepare(
       `SELECT h.excel_row as excelRow, h.data, h.status,
               ${ocPecasExpr('h')} as pecas,
-              h.cliente, h.canal, h.responsavel
+              h.cliente, h.canal, h.responsavel,
+              ${ocObs},
+              h.tecido, h.cod_tecido as codTecido
        FROM fato_corte_linha h
        WHERE h.pedido_norm = ? AND h.is_header = 1
        ORDER BY h.excel_row`,
@@ -421,8 +453,9 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
   const oficinas = db
     .prepare(
       `SELECT oficina, data_envio as dataEnvio, data_prometida as dataPrometida,
-              data_retorno as dataRetorno, qtd_enviadas as enviadas, qtd_retornadas as retornadas,
-              qtd_pendentes as pendentes, qtd_defeitos as defeitos, status_entrega as statusEntrega,
+              CASE WHEN qtd_retornadas > 0 THEN data_retorno ELSE NULL END as dataRetorno,
+              qtd_enviadas as enviadas, qtd_retornadas as retornadas,
+              ${sqlPendentesOficina()} as pendentes, qtd_defeitos as defeitos, status_entrega as statusEntrega,
               produto, valor_total as valorTotal
        FROM fato_oficinas WHERE pedido_norm = ? ORDER BY data_envio, excel_row`,
     )
