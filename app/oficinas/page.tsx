@@ -10,6 +10,7 @@ import { parseFilters } from '@/lib/filters'
 import { PedidoQueue } from '@/components/pedido-queue'
 import { explainOficinaRanking, explainOficinaSemRetorno } from '@/lib/table-explain'
 import { AGING_FAIXAS } from '@/lib/pedido'
+import { YEAR } from '@/lib/year'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Oficinas' }
@@ -30,7 +31,7 @@ export default async function OficinasPage({
   return (
     <PageShell
       title="Oficinas"
-      description="Somente lotes com Data Envio em 2026 e oficina preenchida."
+      description={`Lotes com Data Envio em ${YEAR} e oficina preenchida. Remessas p/ industrialização do Pedidos.xlsx entram aqui (cruzamento por nº do pedido) — não no Top Clientes.`}
     >
       <FilterBar
         pathname="/oficinas"
@@ -61,6 +62,22 @@ export default async function OficinasPage({
           value={`${formatNumber(retorno, 1)}%`}
           hint={`${formatInt(oficinas.retornadas)} de ${formatInt(oficinas.enviadas)} enviadas`}
         />
+        {oficinas.comercialLoaded ? (
+          <>
+            <KpiCard
+              label="Remessas Signus"
+              value={formatInt(oficinas.remessasPedidos)}
+              hint={`${formatInt(oficinas.oficinasComRemessa)} oficinas com remessa p/ indust.`}
+              tone="indigo"
+            />
+            <KpiCard
+              label="Valor remessa"
+              value={formatMoneyCompact(oficinas.valorRemessa)}
+              hint="Pedidos.xlsx · industrialização cruzada por pedido"
+              tone="amber"
+            />
+          </>
+        ) : null}
       </KpiGrid>
 
       <MonthlyAreaChart
@@ -93,6 +110,12 @@ export default async function OficinasPage({
             { key: 'retornadas', label: 'Retornadas', numeric: true },
             { key: 'defeitos', label: 'Defeitos', numeric: true },
             { key: 'valor', label: 'Valor pago', numeric: true },
+            ...(oficinas.comercialLoaded
+              ? [
+                  { key: 'remessas', label: 'Remessas', numeric: true },
+                  { key: 'valorRemessa', label: 'Valor remessa', numeric: true },
+                ]
+              : []),
           ]}
           rows={oficinas.ranking.map((row) => ({
             nome: row.nome,
@@ -101,6 +124,8 @@ export default async function OficinasPage({
             retornadas: formatInt(row.retornadas),
             defeitos: formatInt(row.defeitos),
             valor: formatMoney(row.valor),
+            remessas: formatInt(row.remessas),
+            valorRemessa: formatMoney(row.valorRemessa),
             alert: row.defeitos > 0,
             warning: row.pecas > 0 && row.defeitos === 0,
             hint: explainOficinaRanking({
@@ -110,10 +135,54 @@ export default async function OficinasPage({
               retornadas: row.retornadas,
               defeitos: row.defeitos,
               valor: row.valor,
+              remessas: row.remessas,
+              valorRemessa: row.valorRemessa,
+              clienteSignus: row.clienteSignus,
             }),
           }))}
         />
       </section>
+
+      {oficinas.comercialLoaded ? (
+        <section className="flex min-w-0 flex-col gap-2">
+          <h2 className="text-sm font-medium">
+            Remessas p/ industrialização × produção
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Pedidos.xlsx (tipo remessa indust.) cruzados com lotes da planilha de
+            oficinas pelo mesmo nº de pedido.
+          </p>
+          <SimpleTable
+            columns={[
+              { key: 'oficina', label: 'Oficina' },
+              { key: 'pedido', label: 'Pedido', link: true },
+              { key: 'cliente', label: 'Cliente Signus' },
+              { key: 'canal', label: 'Canal' },
+              { key: 'valor', label: 'Valor remessa', numeric: true },
+              { key: 'enviadas', label: 'Enviadas', numeric: true },
+              { key: 'pendentes', label: 'Pendentes', numeric: true },
+              { key: 'data', label: 'Venda' },
+            ]}
+            rows={oficinas.remessasDetalhe.map((row) => ({
+              oficina: row.oficina,
+              pedido: row.pedido,
+              cliente: row.cliente ?? '—',
+              canal: row.canal ?? '—',
+              valor: formatMoney(row.valor),
+              enviadas: formatInt(row.enviadas),
+              pendentes: formatInt(row.pendentes),
+              data: formatDate(row.data),
+              hint: [
+                row.tipo,
+                `${formatInt(row.retornadas)} retornadas`,
+              ]
+                .filter(Boolean)
+                .join(' · '),
+            }))}
+            empty="Nenhuma remessa industrialização cruzada neste recorte"
+          />
+        </section>
+      ) : null}
 
       <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Pendentes por envelhecimento</h2>

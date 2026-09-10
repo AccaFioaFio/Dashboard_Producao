@@ -129,6 +129,9 @@ export function explainOficinaRanking(row: {
   retornadas: number
   defeitos: number
   valor: number
+  remessas?: number
+  valorRemessa?: number
+  clienteSignus?: string | null
 }) {
   const retorno =
     row.enviadas > 0 ? `${formatNumber((row.retornadas / row.enviadas) * 100, 1)}%` : '—'
@@ -136,9 +139,14 @@ export function explainOficinaRanking(row: {
     row.enviadas > 0 && row.retornadas === 0 && row.pendentes === 0
       ? 'Enviadas sem retorno e sem pendente — quebra de cadastro (não fecha o saldo).'
       : null
+  const remessa =
+    row.remessas && row.remessas > 0
+      ? `Signus: ${formatInt(row.remessas)} remessa${row.remessas === 1 ? '' : 's'} p/ industrialização · ${formatMoney(row.valorRemessa ?? 0)}${row.clienteSignus ? ` (${row.clienteSignus})` : ''}.`
+      : null
   return hintLines([
     `${row.nome}: ${formatInt(row.pendentes)} pendentes · ${formatInt(row.enviadas)} enviadas · ${formatInt(row.retornadas)} retornadas (${retorno} de retorno).`,
     `${formatInt(row.defeitos)} defeito${row.defeitos === 1 ? '' : 's'} · valor lançado ${formatMoney(row.valor)}.`,
+    remessa,
     quebra,
   ])
 }

@@ -31,7 +31,7 @@ export default async function TopClientesPage({
   return (
     <PageShell
       title="Top Clientes"
-      description={`Pedidos comerciais ${YEAR} (Signus Pedidos.xlsx) cruzados com baixas de tecido na movimentação de estoque. Clique num cliente para ver o mix de tecidos e a tendência.`}
+      description={`Pedidos comerciais ${YEAR} — só venda final (exclui remessa p/ industrialização e oficinas). Cruzado com baixas de tecido na movimentação Signus. Clique num cliente para ver o mix de tecidos e a tendência.`}
     >
       <FilterBar
         pathname="/top-clientes"

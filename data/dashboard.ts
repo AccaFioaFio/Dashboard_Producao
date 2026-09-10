@@ -1666,7 +1666,7 @@ export const getOficinas = cache(async (filters: DashFilters = {}) => {
   })
   const where = whereSql(filter)
   const { params } = filter
-  const ranking = runAll<{
+  const rankingBase = runAll<{
     nome: string
     pecas: number
     lotes: number
@@ -1757,6 +1757,115 @@ export const getOficinas = cache(async (filters: DashFilters = {}) => {
      FROM fato_oficinas o WHERE ${where} GROUP BY mes ORDER BY mes`,
     params,
   )
+
+  const hasComercial = hasPedidoComercialTable()
+  const remessaPorPedido = hasComercial
+    ? runAll<{
+        nome: string
+        pedidoNorm: string
+        cliente: string | null
+        valorRemessa: number
+        canal: string | null
+      }>(
+        `SELECT o.oficina as nome,
+                r.pedido_norm as pedidoNorm,
+                r.cliente,
+                r.canal,
+                r.valorRemessa
+         FROM (
+           SELECT p.pedido_norm,
+                  MAX(p.cliente) as cliente,
+                  MAX(p.canal) as canal,
+                  SUM(p.valor_faturado) as valorRemessa
+           FROM fato_pedido_comercial p
+           WHERE CAST(substr(COALESCE(p.data_venda, p.data_cadastro), 1, 4) as INTEGER) = @anoComercial
+             AND ${sqlRemessaIndust('p')}
+           GROUP BY p.pedido_norm
+         ) r
+         JOIN fato_oficinas o ON o.pedido_norm = r.pedido_norm
+         WHERE ${where}
+         GROUP BY o.oficina, r.pedido_norm`,
+        { ...params, anoComercial: YEAR },
+      )
+    : []
+
+  const remessaMap = new Map<
+    string,
+    { remessas: number; valorRemessa: number; clienteSignus: string | null }
+  >()
+  for (const row of remessaPorPedido) {
+    const current = remessaMap.get(row.nome) ?? {
+      remessas: 0,
+      valorRemessa: 0,
+      clienteSignus: null as string | null,
+    }
+    current.remessas += 1
+    current.valorRemessa += row.valorRemessa
+    current.clienteSignus = current.clienteSignus ?? row.cliente
+    remessaMap.set(row.nome, current)
+  }
+
+  const ranking = rankingBase.map((row) => {
+    const rem = remessaMap.get(row.nome)
+    return {
+      ...row,
+      remessas: rem?.remessas ?? 0,
+      valorRemessa: rem?.valorRemessa ?? 0,
+      clienteSignus: rem?.clienteSignus ?? null,
+    }
+  })
+
+  const remessasPedidos = remessaPorPedido.length
+  const valorRemessa = remessaPorPedido.reduce(
+    (sum, row) => sum + row.valorRemessa,
+    0,
+  )
+  const oficinasComRemessa = remessaMap.size
+
+  const remessasDetalhe = hasComercial
+    ? runAll<{
+        oficina: string
+        pedido: string
+        cliente: string | null
+        canal: string | null
+        valor: number
+        tipo: string | null
+        data: string | null
+        enviadas: number
+        retornadas: number
+        pendentes: number
+      }>(
+        `SELECT o.oficina,
+                r.pedido_norm as pedido,
+                r.cliente,
+                r.canal,
+                r.valor,
+                r.tipo,
+                r.data,
+                COALESCE(SUM(o.qtd_enviadas), 0) as enviadas,
+                COALESCE(SUM(o.qtd_retornadas), 0) as retornadas,
+                COALESCE(SUM(${sqlPendentesOficina('o')}), 0) as pendentes
+         FROM (
+           SELECT p.pedido_norm,
+                  MAX(p.cliente) as cliente,
+                  MAX(p.canal) as canal,
+                  SUM(p.valor_faturado) as valor,
+                  MAX(p.tipo_comercializacao) as tipo,
+                  MAX(COALESCE(p.data_venda, p.data_cadastro)) as data
+           FROM fato_pedido_comercial p
+           WHERE CAST(substr(COALESCE(p.data_venda, p.data_cadastro), 1, 4) as INTEGER) = @anoComercial
+             AND ${sqlRemessaIndust('p')}
+           GROUP BY p.pedido_norm
+         ) r
+         JOIN fato_oficinas o ON o.pedido_norm = r.pedido_norm
+         WHERE ${where}
+         GROUP BY o.oficina, r.pedido_norm
+         ORDER BY r.valor DESC
+         LIMIT 40`,
+        { ...params, anoComercial: YEAR },
+      )
+    : []
+
   return {
     ranking,
     sla,
@@ -1767,6 +1876,11 @@ export const getOficinas = cache(async (filters: DashFilters = {}) => {
     semRetorno,
     pendentesAging,
     porMes,
+    remessasPedidos,
+    valorRemessa,
+    oficinasComRemessa,
+    remessasDetalhe,
+    comercialLoaded: hasComercial,
   }
 })
 
@@ -1975,13 +2089,31 @@ function hasPedidoComercialTable() {
   )
 }
 
+/** Venda final no Signus (exclui remessa p/ industrialização e similares). */
+function sqlVendaFinal(alias: string) {
+  const t = `upper(COALESCE(${alias}.tipo_comercializacao, ''))`
+  const c = `upper(COALESCE(${alias}.cliente, ''))`
+  return `(${t} LIKE '%VENDA%' AND ${t} NOT LIKE '%INDUST%' AND ${c} NOT LIKE 'OFICINA%')`
+}
+
+/** Remessa p/ industrialização — típico de oficina no Pedidos.xlsx. */
+function sqlRemessaIndust(alias: string) {
+  const t = `upper(COALESCE(${alias}.tipo_comercializacao, ''))`
+  const c = `upper(COALESCE(${alias}.cliente, ''))`
+  return `(${t} LIKE '%REM P/ INDUST%' OR ${t} LIKE '%INDUSTRIALIZA%' OR ${c} LIKE 'OFICINA%')`
+}
+
 function applyComercialFilters(
   filter: SqlFilter,
   alias: string,
   filters: DashFilters,
+  opts: { vendaFinal?: boolean } = {},
 ) {
   filter.clauses.push(`CAST(substr(COALESCE(${alias}.data_venda, ${alias}.data_cadastro), 1, 4) as INTEGER) = @ano`)
   filter.params.ano = YEAR
+  if (opts.vendaFinal) {
+    filter.clauses.push(sqlVendaFinal(alias))
+  }
   if (filters.mes) {
     filter.clauses.push(
       `CAST(substr(COALESCE(${alias}.data_venda, ${alias}.data_cadastro), 6, 2) as INTEGER) = @mes`,
@@ -2069,7 +2201,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
   if (!hasPedidoComercialTable()) return empty
 
   const filter = emptyFilter()
-  applyComercialFilters(filter, 'p', filters)
+  applyComercialFilters(filter, 'p', filters, { vendaFinal: true })
   const where = whereSql(filter)
   const { params } = filter
 
@@ -2332,8 +2464,9 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     meses: porMes.map((row) => row.mes),
     canais: (
       runAll<{ canal: string }>(
-        `SELECT DISTINCT canal FROM fato_pedido_comercial
-         WHERE canal IS NOT NULL AND trim(canal) != ''
+        `SELECT DISTINCT canal FROM fato_pedido_comercial p
+         WHERE ${sqlVendaFinal('p')}
+           AND canal IS NOT NULL AND trim(canal) != ''
          ORDER BY canal`,
         {},
       )
