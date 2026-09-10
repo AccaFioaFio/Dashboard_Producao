@@ -1,6 +1,7 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
 import { PedidoLink } from '@/components/pedido-link'
 import {
   Tooltip,
@@ -12,7 +13,9 @@ import { cn } from '@/lib/utils'
 type TableRow = Record<string, string | number | boolean | null> & {
   alert?: boolean
   warning?: boolean
+  selected?: boolean
   hint?: string
+  href?: string
 }
 
 export type TableColumn = {
@@ -48,21 +51,55 @@ function TonedRow({
   row: TableRow
   children: ReactNode
 }) {
+  const router = useRouter()
+  const href = row.href ? String(row.href) : undefined
   const className = cn(
     'border-t border-border/80 hover:bg-muted/40',
-    row.hint && 'cursor-help',
+    href ? 'cursor-pointer' : row.hint ? 'cursor-help' : null,
+    row.selected &&
+      'bg-primary/[0.08] shadow-[inset_3px_0_0_0_var(--primary)] hover:bg-primary/12',
     row.alert &&
       'bg-destructive/[0.07] shadow-[inset_3px_0_0_0_var(--destructive)] hover:bg-destructive/12',
     !row.alert &&
+      !row.selected &&
       row.warning &&
       'bg-chart-3/15 shadow-[inset_3px_0_0_0_var(--chart-3)] hover:bg-chart-3/25',
   )
+
+  const activate = () => {
+    if (href) router.push(href)
+  }
+
+  const onKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
+    if (!href) return
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      activate()
+    }
+  }
+
+  const rowProps = href
+    ? {
+        role: 'link' as const,
+        tabIndex: 0,
+        onClick: activate,
+        onKeyDown,
+      }
+    : {}
+
   if (!row.hint) {
-    return <tr className={className}>{children}</tr>
+    return (
+      <tr className={className} {...rowProps}>
+        {children}
+      </tr>
+    )
   }
   return (
     <Tooltip>
-      <TooltipTrigger delay={180} render={<tr className={className} />}>
+      <TooltipTrigger
+        delay={180}
+        render={<tr className={className} {...rowProps} />}
+      >
         {children}
       </TooltipTrigger>
       <TooltipContent

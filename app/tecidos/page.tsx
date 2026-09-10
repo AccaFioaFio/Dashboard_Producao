@@ -4,7 +4,7 @@ import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { FilterBar } from '@/components/filter-bar'
-import { TecidosValoresButton } from '@/components/tecidos-valores-nav'
+import { TecidosSubNav } from '@/components/tecidos-valores-nav'
 import { getFilterOptions, getTecidos } from '@/data/dashboard'
 import {
   MONTH_LABELS,
@@ -51,7 +51,7 @@ export default async function TecidosPage({
     <PageShell
       title="Tecidos"
       description="Consumo no Corte, baixa no Signus e saldo atual do Estoque Geral. Join pelo código do tecido. Saldo é snapshot da carga (não filtra por mês)."
-      actions={<TecidosValoresButton filters={filters} />}
+      actions={<TecidosSubNav filters={filters} current="metros" />}
     >
       <FilterBar
         pathname="/tecidos"

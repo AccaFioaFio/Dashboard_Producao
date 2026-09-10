@@ -118,12 +118,16 @@ export function FilterBar({
         {fields.includes('q') ? (
           <label className="flex min-w-0 flex-col gap-1">
             <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-              Pedido
+              {fields.includes('tipo') ? 'Busca' : 'Pedido'}
             </span>
             <Input
               key={values.q ?? ''}
               defaultValue={values.q ?? ''}
-              placeholder="Nº pedido"
+              placeholder={
+                fields.includes('tipo')
+                  ? 'Pedido, código ou Orig. Mov.'
+                  : 'Nº pedido'
+              }
               className="bg-background/70"
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
@@ -175,6 +179,17 @@ export function FilterBar({
             onChange={(value) => setField('oficina', value)}
           />
         ) : null}
+        {fields.includes('tipo') ? (
+          <FilterSelect
+            label="Tipo Signus"
+            value={values.tipo}
+            items={(options.tipos ?? []).map((row) => row.value)}
+            labels={Object.fromEntries(
+              (options.tipos ?? []).map((row) => [row.value, row.label]),
+            )}
+            onChange={(value) => setField('tipo', value)}
+          />
+        ) : null}
       </div>
     </section>
   )
@@ -184,11 +199,13 @@ function FilterSelect({
   label,
   value,
   items,
+  labels,
   onChange,
 }: {
   label: string
   value?: string
   items: string[]
+  labels?: Record<string, string>
   onChange: (value: string | undefined) => void
 }) {
   return (
@@ -204,7 +221,9 @@ function FilterSelect({
           <SelectValue>
             {(selected) => (
               <span className="truncate">
-                {selected == null || selected === ALL ? 'Todos' : String(selected)}
+                {selected == null || selected === ALL
+                  ? 'Todos'
+                  : labels?.[String(selected)] ?? String(selected)}
               </span>
             )}
           </SelectValue>
@@ -213,7 +232,7 @@ function FilterSelect({
           <SelectItem value={ALL}>Todos</SelectItem>
           {items.map((item) => (
             <SelectItem key={item} value={item}>
-              {item}
+              {labels?.[item] ?? item}
             </SelectItem>
           ))}
         </SelectContent>

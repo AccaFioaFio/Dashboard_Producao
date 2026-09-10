@@ -4,7 +4,7 @@ import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { GroupedTable } from '@/components/grouped-table'
 import { FilterBar } from '@/components/filter-bar'
-import { TecidosMetrosButton } from '@/components/tecidos-valores-nav'
+import { TecidosSubNav } from '@/components/tecidos-valores-nav'
 import { getFilterOptions, getTecidosValores } from '@/data/dashboard'
 import {
   formatInt,
@@ -53,7 +53,7 @@ export default async function TecidosValoresPage({
     <PageShell
       title="Valores do tecido"
       description="Valor unitário do Signus e valor unitário × quantidade baixada. Clique em + para abrir os pedidos daquele tecido."
-      actions={<TecidosMetrosButton filters={filters} />}
+      actions={<TecidosSubNav filters={filters} current="valores" />}
     >
       <FilterBar
         pathname="/tecidos/valores"

@@ -10,6 +10,7 @@ import type { FunilKpis, HeaderKpis, SerieMensal } from '@/lib/etl/types'
 import { ocJoinLinhas, ocPecasExpr } from '@/lib/corte-oc'
 import { analyzeTempoProducao, type TempoPedidoRow } from '@/lib/etl/tempo'
 import { sqlPendentesOficina } from '@/lib/oficinas-qty'
+import { TIPO_TECIDO_LABEL } from '@/lib/format'
 
 export type CargaInfo = {
   id: number
@@ -191,6 +192,45 @@ function applySignusFilters(filter: SqlFilter, alias: string, filters: DashFilte
   }
 }
 
+/** Filtros da aba rastreio: q busca pedido, código, nome ou Orig. Mov.; tipo_norm opcional. */
+function applySignusRastreioFilters(
+  filter: SqlFilter,
+  alias: string,
+  filters: DashFilters,
+) {
+  if (filters.mes) {
+    filter.clauses.push(`CAST(substr(${alias}.data, 6, 2) as INTEGER) = @mes`)
+    filter.params.mes = filters.mes
+  }
+  if (filters.tipo) {
+    filter.clauses.push(`${alias}.tipo_norm = @tipo`)
+    filter.params.tipo = filters.tipo
+  }
+  if (filters.q) {
+    filter.clauses.push(
+      `(${alias}.pedido_norm LIKE @q
+        OR ${alias}.cod_produto LIKE @q
+        OR COALESCE(${alias}.nome_produto, '') LIKE @q
+        OR COALESCE(${alias}.origem_mov, '') LIKE @q)`,
+    )
+    filter.params.q = likeContains(filters.q)
+  }
+  if (filters.canal || filters.cliente) {
+    const pedidoClauses = [`sp.pedido_norm = ${alias}.pedido_norm`]
+    if (filters.canal) {
+      pedidoClauses.push('sp.canal = @canal')
+      filter.params.canal = filters.canal
+    }
+    if (filters.cliente) {
+      pedidoClauses.push('sp.cliente = @cliente')
+      filter.params.cliente = filters.cliente
+    }
+    filter.clauses.push(
+      `EXISTS (SELECT 1 FROM fato_corte_pedido sp WHERE ${pedidoClauses.join(' AND ')})`,
+    )
+  }
+}
+
 function whereSql(filter: SqlFilter) {
   return filter.clauses.join(' AND ')
 }
@@ -271,6 +311,7 @@ export const getFilterOptions = cache(async (): Promise<FilterOptions> => {
     )
       .map((row) => row.oficina)
       .filter(Boolean),
+    tipos: Object.entries(TIPO_TECIDO_LABEL).map(([value, label]) => ({ value, label })),
   }
 })
 
@@ -641,6 +682,14 @@ export type TecidoTipoRow = {
   pedidos: number
 }
 
+export type TecidoProdutoAggRow = {
+  cod: string
+  nome: string | null
+  movimentos: number
+  metros: number
+  pedidos: number
+}
+
 export type TecidoCruzadoRow = {
   cod: string
   nome: string | null
@@ -994,6 +1043,161 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
     estoqueSemCorte,
     tecido,
     porCanalSignus,
+  }
+})
+
+const RASTREIO_ROW_LIMIT = 300
+
+export type TecidoRastreioRow = {
+  data: string
+  movimentoId: string | null
+  cod: string
+  nome: string | null
+  tipoNorm: string
+  tipoMovimento: string
+  metros: number
+  pedidoNorm: string | null
+  origemMov: string | null
+  almox: string | null
+  isBaixa: boolean
+}
+
+export const getTecidosRastreio = cache(async (filters: DashFilters = {}) => {
+  await ensureCloudDatabase()
+  const db = sqlite()
+  const hasSignus = Boolean(
+    db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'fato_tecido_signus'`,
+      )
+      .get(),
+  )
+  if (!hasSignus) {
+    return {
+      metrosTotal: 0,
+      metrosBaixaOficial: 0,
+      comPedido: 0,
+      semPedido: 0,
+      movimentos: 0,
+      truncated: false,
+      porTipo: [] as TecidoTipoRow[],
+      porTecido: [] as TecidoProdutoAggRow[],
+      rows: [] as TecidoRastreioRow[],
+    }
+  }
+
+  const signusFilter = emptyFilter()
+  applySignusRastreioFilters(signusFilter, 's', filters)
+  const signusWhere = whereSql(signusFilter)
+  const params = { ...signusFilter.params }
+
+  // Lista de tipos ignora o filtro de tipo para permitir trocar o recorte na própria tabela.
+  const tipoListFilter = emptyFilter()
+  applySignusRastreioFilters(tipoListFilter, 's', { ...filters, tipo: undefined })
+  const tipoListWhere = whereSql(tipoListFilter)
+  const tipoListParams = { ...tipoListFilter.params }
+
+  const totals = runGet<{
+    metrosTotal: number
+    metrosBaixaOficial: number
+    movimentos: number
+    comPedido: number
+    semPedido: number
+  }>(
+    `SELECT COALESCE(SUM(s.metros), 0) as metrosTotal,
+            COALESCE(SUM(CASE WHEN s.is_baixa = 1 THEN s.metros ELSE 0 END), 0) as metrosBaixaOficial,
+            COUNT(*) as movimentos,
+            COALESCE(SUM(CASE
+              WHEN s.pedido_norm IS NOT NULL AND trim(s.pedido_norm) != '' THEN s.metros
+              ELSE 0 END), 0) as comPedido,
+            COALESCE(SUM(CASE
+              WHEN s.pedido_norm IS NULL OR trim(s.pedido_norm) = '' THEN s.metros
+              ELSE 0 END), 0) as semPedido
+     FROM fato_tecido_signus s
+     WHERE ${signusWhere}`,
+    params,
+  )
+
+  const porTipo = runAll<TecidoTipoRow>(
+    `SELECT s.tipo_norm as tipoNorm, COUNT(*) as movimentos,
+            COALESCE(SUM(s.metros), 0) as metros,
+            COUNT(DISTINCT s.pedido_norm) as pedidos
+     FROM fato_tecido_signus s
+     WHERE ${tipoListWhere}
+     GROUP BY s.tipo_norm
+     ORDER BY metros DESC`,
+    tipoListParams,
+  )
+
+  const porTecido = runAll<TecidoProdutoAggRow>(
+    `SELECT s.cod_produto as cod, MAX(s.nome_produto) as nome,
+            COUNT(*) as movimentos,
+            COALESCE(SUM(s.metros), 0) as metros,
+            COUNT(DISTINCT CASE
+              WHEN s.pedido_norm IS NOT NULL AND trim(s.pedido_norm) != '' THEN s.pedido_norm
+              END) as pedidos
+     FROM fato_tecido_signus s
+     WHERE ${signusWhere}
+     GROUP BY s.cod_produto
+     ORDER BY metros DESC
+     LIMIT ${RASTREIO_ROW_LIMIT}`,
+    params,
+  )
+
+  const rowsRaw = runAll<{
+    data: string
+    movimentoId: string | null
+    cod: string
+    nome: string | null
+    tipoNorm: string
+    tipoMovimento: string
+    metros: number
+    pedidoNorm: string | null
+    origemMov: string | null
+    almox: string | null
+    isBaixaFlag: number
+  }>(
+    `SELECT s.data,
+            s.movimento_id as movimentoId,
+            s.cod_produto as cod,
+            s.nome_produto as nome,
+            s.tipo_norm as tipoNorm,
+            s.tipo_movimento as tipoMovimento,
+            s.metros,
+            s.pedido_norm as pedidoNorm,
+            s.origem_mov as origemMov,
+            s.almox,
+            s.is_baixa as isBaixaFlag
+     FROM fato_tecido_signus s
+     WHERE ${signusWhere}
+     ORDER BY s.data DESC, s.excel_row DESC
+     LIMIT ${RASTREIO_ROW_LIMIT}`,
+    params,
+  )
+  const rows: TecidoRastreioRow[] = rowsRaw.map((row) => ({
+    data: row.data,
+    movimentoId: row.movimentoId,
+    cod: row.cod,
+    nome: row.nome,
+    tipoNorm: row.tipoNorm,
+    tipoMovimento: row.tipoMovimento,
+    metros: row.metros,
+    pedidoNorm: row.pedidoNorm,
+    origemMov: row.origemMov,
+    almox: row.almox,
+    isBaixa: Boolean(row.isBaixaFlag),
+  }))
+
+  return {
+    metrosTotal: totals.metrosTotal,
+    metrosBaixaOficial: totals.metrosBaixaOficial,
+    comPedido: totals.comPedido,
+    semPedido: totals.semPedido,
+    movimentos: totals.movimentos,
+    truncated: totals.movimentos > RASTREIO_ROW_LIMIT,
+    porTipo,
+    porTecido,
+    rows,
   }
 })
 

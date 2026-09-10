@@ -201,10 +201,26 @@ export function explainTecidoTipo(args: {
   movimentos: number
   pedidos: number
   extra?: string
+  selected?: boolean
 }) {
   return hintLines([
     `${args.tipo}: ${formatMeters(args.metros)} em ${formatInt(args.movimentos)} movimento${args.movimentos === 1 ? '' : 's'} · ${formatInt(args.pedidos)} pedido${args.pedidos === 1 ? '' : 's'}.`,
     args.extra,
+    args.selected
+      ? 'Selecionado — clique de novo para limpar o filtro.'
+      : 'Clique para ver os tecidos deste tipo.',
+  ])
+}
+
+export function explainTecidoProdutoAgg(args: {
+  tecido: string
+  metros: number
+  movimentos: number
+  pedidos: number
+}) {
+  return hintLines([
+    `${args.tecido}: ${formatMeters(args.metros)} em ${formatInt(args.movimentos)} movimento${args.movimentos === 1 ? '' : 's'} · ${formatInt(args.pedidos)} pedido${args.pedidos === 1 ? '' : 's'}.`,
+    'Agregado do recorte atual (filtros da página).',
   ])
 }
 
@@ -262,6 +278,32 @@ export function explainEstoqueSemCorte(row: {
   return hintLines([
     `${row.tecido}: saldo atual ${formatMeters(row.saldoAtual)} · reservado ${formatMeters(row.saldoReservado)}.`,
     'Código no Saldo do Estoque Geral sem COD TECIDO na programação de Corte.',
+  ])
+}
+
+export function explainTecidoRastreio(row: {
+  data: string
+  tecido: string
+  tipo: string
+  metros: number
+  pedidoNorm: string | null
+  origemMov: string | null
+  almox: string | null
+  isBaixa: boolean
+  tipoMovimento?: string
+}) {
+  return hintLines([
+    `${formatDate(row.data)} · ${row.tecido}: ${formatMeters(row.metros)} · ${row.tipo}.`,
+    row.pedidoNorm
+      ? `Pedido ${row.pedidoNorm}${row.origemMov ? ` · Orig. Mov. ${row.origemMov}` : ''}.`
+      : `Sem pedido no Orig. Mov.${row.origemMov ? ` (${row.origemMov})` : ''}.`,
+    row.almox ? `Almox ${row.almox}.` : null,
+    row.isBaixa
+      ? 'Entra no KPI oficial de baixa (produção ou SAIDA FF/AC/TC).'
+      : 'Fora do KPI oficial de baixa.',
+    row.tipoMovimento && row.tipoMovimento !== row.tipo
+      ? `Tipo Signus: ${row.tipoMovimento}.`
+      : null,
   ])
 }
 
