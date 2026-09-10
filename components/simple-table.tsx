@@ -3,17 +3,13 @@
 import type { KeyboardEvent, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { PedidoLink } from '@/components/pedido-link'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 type TableRow = Record<string, string | number | boolean | null> & {
   alert?: boolean
   warning?: boolean
   selected?: boolean
+  /** Ignorado — tooltips nas linhas atrapalhavam a leitura. */
   hint?: string
   href?: string
 }
@@ -55,7 +51,7 @@ function TonedRow({
   const href = row.href ? String(row.href) : undefined
   const className = cn(
     'border-t border-border/80 hover:bg-muted/40',
-    href ? 'cursor-pointer' : row.hint ? 'cursor-help' : null,
+    href && 'cursor-pointer',
     row.selected &&
       'bg-primary/[0.08] shadow-[inset_3px_0_0_0_var(--primary)] hover:bg-primary/12',
     row.alert &&
@@ -87,29 +83,10 @@ function TonedRow({
       }
     : {}
 
-  if (!row.hint) {
-    return (
-      <tr className={className} {...rowProps}>
-        {children}
-      </tr>
-    )
-  }
   return (
-    <Tooltip>
-      <TooltipTrigger
-        delay={180}
-        render={<tr className={className} {...rowProps} />}
-      >
-        {children}
-      </TooltipTrigger>
-      <TooltipContent
-        side="top"
-        align="start"
-        className="max-w-sm whitespace-pre-line text-left leading-snug"
-      >
-        {row.hint}
-      </TooltipContent>
-    </Tooltip>
+    <tr className={className} {...rowProps}>
+      {children}
+    </tr>
   )
 }
 

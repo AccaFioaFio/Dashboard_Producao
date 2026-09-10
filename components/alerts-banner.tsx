@@ -34,7 +34,7 @@ export function AlertsBanner({
   if (wipPedidos) {
     items.push({
       key: 'wip',
-      text: `WIP Corte: ${formatInt(wipPedidos)} OCs / ${formatInt(wipPecas)} pçs`,
+      text: `Em produção no Corte: ${formatInt(wipPedidos)} OCs / ${formatInt(wipPecas)} pçs`,
       href: pedidosFatiaHref('wip'),
       tone: 'block',
     })
@@ -50,7 +50,7 @@ export function AlertsBanner({
   if (oficinasPendentes) {
     items.push({
       key: 'oficinas',
-      text: `Oficinas pendentes: ${formatInt(oficinasPendentes)} pçs`,
+      text: `Peças pendentes em oficina: ${formatInt(oficinasPendentes)}`,
       href: '/oficinas',
       tone: 'block',
     })

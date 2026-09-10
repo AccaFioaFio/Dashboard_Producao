@@ -61,7 +61,7 @@ export default async function ConfiguracoesPage() {
           <dd>{formatDateTime(carga?.lidaEm)}</dd>
         </div>
         <div className="flex flex-col gap-1">
-          <dt className="text-xs text-muted-foreground">Pedidos no Corte</dt>
+          <dt className="text-xs text-muted-foreground">Total de Pedidos</dt>
           <dd className="font-mono">{carga?.pedidosCorte ?? '—'}</dd>
         </div>
         <div className="flex flex-col gap-1 sm:col-span-2">

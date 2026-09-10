@@ -71,50 +71,58 @@ export default async function TecidosValoresPage({
 
       <KpiGrid>
         <KpiCard
-          label="Valor da baixa"
+          label="Valor da baixa de tecido"
           value={formatMoneyCompact(valores.valorBaixa)}
-          hint="VU × qtd baixada (produção + SAIDA FF/AC/TC)"
+          hint="Valor unitário × quantidade baixada"
+          detail="Signus · VU × qtd baixada (produção + SAIDA FF/AC/TC)."
           tone="teal"
         />
         <KpiCard
           label="Valor unitário médio"
           value={formatMoney(valores.valorUnitarioMedio)}
           hint="Média ponderada pela quantidade baixada"
+          detail="Signus · média do valor unitário ponderada pela qtd baixada no recorte."
           tone="indigo"
         />
         <KpiCard
-          label="VU × consumo do Corte"
+          label="Valor estimado do consumo no Corte"
           value={formatMoneyCompact(valores.valorConsumoEst)}
-          hint={`${formatNumber(cobertura, 1)}% do consumo estimado já baixado em valor`}
+          hint={`${formatNumber(cobertura, 1)}% do consumo estimado já baixado`}
+          detail="Valor unitário médio × metros de consumo do Corte (estimativa)."
           tone="amber"
         />
         <KpiCard
-          label="Custo por metro / peça"
+          label="Custo por metro cortado"
           value={formatMoney(custoMetro)}
           hint={`${formatMoney(custoPeca)} por peça cortada no recorte`}
+          detail="Valor da baixa ÷ metros (e peças) cortados no recorte."
           tone="magenta"
         />
         <KpiCard
-          label="Inventário (documento)"
+          label="Valor de inventário"
           value={formatMoneyCompact(valores.valorInventario)}
-          hint="Tipo de documento = Inventário. Fora do KPI de baixa."
+          hint="Documento tipo Inventário"
+          detail="Signus · tipo de documento = Inventário. Fora do KPI de baixa de produção."
         />
         <KpiCard
-          label="Compras (NF entrada)"
+          label="Valor de compras (NF entrada)"
           value={formatMoneyCompact(valores.valorCompras)}
-          hint="Tipo de documento = Nota fiscal — entrada"
+          hint="Nota fiscal de entrada"
+          detail="Signus · tipo de documento = Nota fiscal — entrada."
           tone="teal"
         />
         <KpiCard
-          label="Pedidos com baixa"
+          label="Pedidos com baixa de tecido"
           value={`${formatInt(valores.pedidosComBaixa)} / ${formatInt(valores.pedidosCorte)}`}
-          hint={`${formatInt(valores.pedidosSemBaixa)} pedidos do Corte sem baixa Signus`}
+          hint={`${formatInt(valores.pedidosSemBaixa)} do Corte ainda sem baixa Signus`}
+          detail="Pedidos do Corte com pelo menos uma baixa Signus ÷ total de pedidos do Corte."
           warning={valores.pedidosSemBaixa > 0}
         />
         <KpiCard
-          label="Metros baixa × Corte"
+          label="Cobertura metros baixa × Corte"
           value={`${formatNumber(coberturaM, 1)}%`}
           hint={`${formatMeters(valores.metrosBaixa)} de ${formatMeters(valores.metrosCorte)}`}
+          detail="Metros baixados no Signus ÷ metros de consumo apontados no Corte."
           tone="indigo"
         />
       </KpiGrid>

@@ -55,32 +55,38 @@ export default async function CortePage({
 
       <KpiGrid columns={5}>
         <KpiCard
-          label="Pedidos"
+          label="Total de Pedidos"
           value={formatInt(corte.resumo.pedidos)}
-          hint="Nº pedido distinto no recorte"
+          hint="Números de pedido distintos"
+          detail="Planilha de Corte · nº pedido distinto no período/filtros."
           tone="indigo"
         />
         <KpiCard
           label="Ordens de corte"
           value={formatInt(corte.resumo.ocs)}
           hint={`${formatInt(corte.resumo.pedidos)} pedidos geraram estas OCs`}
+          detail="Cabeçalhos de ordem de corte (cada OC conta 1, mesmo pedido pode ter várias)."
           tone="teal"
         />
         <KpiCard
           label="Peças cortadas"
           value={formatInt(corte.resumo.pecas)}
+          hint="Soma das quantidades no Corte"
+          detail="Planilha de Corte · SUM da quantidade no recorte."
           tone="amber"
         />
         <KpiCard
-          label="WIP"
+          label="Em produção no Corte"
           value={`${formatInt(corte.resumo.wipPedidos)} / ${formatInt(corte.resumo.wipPecas)}`}
-          hint="OCs vigentes / peças desta ordem de corte"
+          hint="Ordens / peças no status EM PRODUÇÃO"
+          detail="OCs vigentes com status EM PRODUÇÃO (ordens / peças desta OC)."
           alert={corte.resumo.wipPedidos > 0}
         />
         <KpiCard
           label="Aguardando tecido"
           value={`${formatInt(corte.resumo.tecidoPedidos)} / ${formatInt(corte.resumo.tecidoPecas)}`}
-          hint={`${formatMeters(corte.resumo.tecidoMetros)} · OCs com status AGUARDANDO TECIDO`}
+          hint={`${formatMeters(corte.resumo.tecidoMetros)} · status AGUARDANDO TECIDO`}
+          detail="OCs com status AGUARDANDO TECIDO (pedidos / peças)."
           alert={corte.resumo.tecidoPedidos > 0}
         />
       </KpiGrid>

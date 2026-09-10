@@ -49,23 +49,28 @@ export default async function RevisaoPage({
 
       <KpiGrid>
         <KpiCard
-          label="Revisão limpa"
+          label="Peças na Revisão limpa"
           value={formatInt(revisao.resumo.pecas)}
           hint="Peças no recorte"
+          detail="Relatório de Revisão · peças limpas (sem total da tabela e sem Qtd = pedido)."
         />
         <KpiCard
           label="Pedidos com Revisão"
           value={formatInt(revisao.resumo.pedidos)}
-          hint={`${formatInt(funil?.semRevisao ?? 0)} pedidos de Corte sem Revisão (ano)`}
+          hint={`${formatInt(funil?.semRevisao ?? 0)} do Corte ainda sem Revisão`}
+          detail="Relatório de Revisão · pedidos distintos com Data Produção no recorte."
         />
         <KpiCard
-          label="Revisão sem Corte"
+          label="Revisão sem Corte no ano"
           value={formatInt(funil?.revisaoSemCorte ?? 0)}
-          hint="Pedidos apontados na Revisão e ausentes no Corte 2026"
+          hint="Apontados na Revisão e ausentes no Corte 2026"
+          detail="Funil · revisados em 2026 cujo pedido não aparece no Corte 2026 (pode ser corte de outro ano)."
         />
         <KpiCard
-          label={`Hoje (${formatDate(revisao.hoje)})`}
+          label={`Revisão de hoje (${formatDate(revisao.hoje)})`}
           value={formatInt(pecasHoje)}
+          hint="Peças lançadas no dia"
+          detail="Relatório de Revisão · peças limpas do dia corrente."
         />
       </KpiGrid>
 

@@ -62,52 +62,60 @@ export default async function TecidosPage({
 
       <KpiGrid columns={3}>
         <KpiCard
-          label="Consumo no Corte"
+          label="Consumo de tecido no Corte"
           value={formatMeters(metrosCorte)}
-          hint="SUM de MTS / TECIDOS no recorte"
+          hint="Metros programados / apontados"
+          detail="Planilha de Corte · SUM de MTS / TECIDOS no recorte."
           tone="teal"
         />
         <KpiCard
-          label="Baixa Signus"
+          label="Baixa de tecido no Signus"
           value={formatMeters(metrosSignus)}
           hint={`${formatInt(tecidos.movimentosBaixa)} movimentos · ${formatInt(tecidos.pedidosComBaixa)} pedidos`}
+          detail="Movimentação Signus · metros de baixa oficiais no recorte."
           tone="indigo"
         />
         <KpiCard
-          label="Corte − Signus"
+          label="Diferença Corte − Signus"
           value={formatMeters(delta)}
-          hint={`${formatNumber(cobertura, 1)}% da programação baixada no Signus`}
+          hint={`${formatNumber(cobertura, 1)}% da programação já baixada`}
+          detail="Consumo do Corte menos metros baixados no Signus (cobertura da programação)."
           tone="amber"
         />
         <KpiCard
-          label="Saldo atual"
+          label="Saldo atual em estoque"
           value={formatMeters(tecidos.saldoAtualMetros)}
           hint={`${formatInt(tecidos.estoqueCodigos)} códigos · só unidade metro`}
+          detail="Estoque Geral Signus · soma do saldo atual (metros)."
           tone="teal"
         />
         <KpiCard
           label="Saldo reservado"
           value={formatMeters(tecidos.saldoReservadoMetros)}
-          hint="Soma do Saldo reservado (metros) no Estoque Geral"
+          hint="Metros reservados no estoque"
+          detail="Estoque Geral Signus · soma do Saldo reservado (metros)."
           tone="magenta"
         />
         <KpiCard
           label="Economia de tecido"
           value={formatMeters(metrosEconomia)}
           hint={`${formatNumber(economiaPct, 1)}% do consumo do Corte`}
+          detail="Quando a baixa Signus fica abaixo do consumo do Corte — metros ‘economizados’ no recorte."
           tone="teal"
           progress={Math.min(100, Math.max(12, economiaPct * 12))}
         />
         <KpiCard
           label="Aguardando tecido"
           value={`${formatInt(tecidos.tecidoPedidos)} / ${formatMeters(tecidos.tecidoMetros)}`}
-          hint={`${formatInt(tecidos.tecidoPecas)} pçs com status AGUARDANDO TECIDO`}
+          hint={`${formatInt(tecidos.tecidoPecas)} peças com status AGUARDANDO TECIDO`}
+          detail="Ordens de corte com status AGUARDANDO TECIDO (pedidos / metros)."
           alert={tecidos.tecidoPedidos > 0}
         />
         <KpiCard
-          label="Retorno do corte"
+          label="Retorno de tecido do corte"
           value={formatMeters(tecidos.retornoCorte)}
-          hint={`${formatInt(tecidos.baixasSemPedido)} baixas Signus sem nº de pedido em Orig. Mov.`}
+          hint={`${formatInt(tecidos.baixasSemPedido)} baixas Signus sem nº de pedido`}
+          detail="Baixas Signus sem nº de pedido em Orig. Mov. (retorno/ajuste típico do corte)."
           tone="magenta"
         />
       </KpiGrid>

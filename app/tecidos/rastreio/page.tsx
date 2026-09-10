@@ -61,27 +61,31 @@ export default async function TecidosRastreioPage({
 
       <KpiGrid columns={3}>
         <KpiCard
-          label="Metros no recorte"
+          label="Metros movimentados no recorte"
           value={formatMeters(rastreio.metrosTotal)}
           hint={`${formatInt(rastreio.movimentos)} movimentos Signus`}
+          detail="Movimentação Signus · soma de metros no período/filtros."
           tone="teal"
         />
         <KpiCard
-          label="Baixa oficial"
+          label="Baixa oficial de produção"
           value={formatMeters(rastreio.metrosBaixaOficial)}
           hint="Produção (insumos) + SAIDA FF/AC/TC"
+          detail="Signus · tipos de baixa oficiais: Produção (insumos) e SAIDA FF/AC/TC."
           tone="indigo"
         />
         <KpiCard
-          label="Com pedido"
+          label="Metros com nº de pedido"
           value={formatMeters(rastreio.comPedido)}
-          hint="Orig. Mov. com nº de pedido"
+          hint="Orig. Mov. com pedido"
+          detail="Signus · movimentos cujo Orig. Mov. traz nº de pedido."
           tone="teal"
         />
         <KpiCard
-          label="Sem pedido"
+          label="Metros sem nº de pedido"
           value={formatMeters(rastreio.semPedido)}
           hint="Inventário, ajuste, texto livre, etc."
+          detail="Signus · movimentos sem nº de pedido em Orig. Mov. (inventário, ajuste, texto livre)."
           tone="amber"
           alert={rastreio.semPedido > 0}
         />

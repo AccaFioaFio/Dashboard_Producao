@@ -64,7 +64,8 @@ export function KpiCard({
 }) {
   const bar = alert ? TONE_BAR.rose : warning ? TONE_BAR.amber : TONE_BAR[tone]
   const width = progress == null ? null : Math.max(8, Math.min(100, progress))
-  const tooltip = detail ?? hint
+  // Tooltip só com `detail` (origem/definição). `hint` fica no cartão.
+  const tooltip = detail
   const className = cn(
     'kpi-shine card-surface flex h-full min-h-[var(--kpi-min-h)] w-full min-w-0 flex-col gap-1 p-[var(--kpi-pad)]',
     tooltip && 'cursor-help',

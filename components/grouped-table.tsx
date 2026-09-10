@@ -4,11 +4,6 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import { PedidoLink } from '@/components/pedido-link'
 import { Button } from '@/components/ui/button'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 type CellValue = string | number | boolean | null
@@ -25,6 +20,7 @@ type ChildRow = {
   cells: Record<string, CellValue>
   alert?: boolean
   warning?: boolean
+  /** Ignorado — tooltips nas linhas atrapalhavam a leitura. */
   hint?: string
 }
 
@@ -33,6 +29,7 @@ export type GroupedTableGroup = {
   cells: Record<string, CellValue>
   alert?: boolean
   warning?: boolean
+  /** Ignorado — tooltips nas linhas atrapalhavam a leitura. */
   hint?: string
   children: ChildRow[]
 }
@@ -50,13 +47,12 @@ function cellClass(col: TableColumn, header = false) {
 }
 
 function rowTone(
-  row: { alert?: boolean; warning?: boolean; hint?: string },
+  row: { alert?: boolean; warning?: boolean },
   nested = false,
 ) {
   return cn(
     'border-t border-border/80 hover:bg-muted/40',
     nested && 'bg-muted/20',
-    row.hint && 'cursor-help',
     row.alert &&
       'bg-destructive/[0.07] shadow-[inset_3px_0_0_0_var(--destructive)] hover:bg-destructive/12',
     !row.alert &&
@@ -71,29 +67,13 @@ function TonedRow({
   className,
   children,
 }: {
-  row: { alert?: boolean; warning?: boolean; hint?: string }
+  row: { alert?: boolean; warning?: boolean }
   nested?: boolean
   className?: string
   children: ReactNode
 }) {
-  const rowClassName = cn(rowTone(row, nested), className)
-  if (!row.hint) {
-    return <tr className={rowClassName}>{children}</tr>
-  }
-
   return (
-    <Tooltip>
-      <TooltipTrigger delay={180} render={<tr className={rowClassName} />}>
-        {children}
-      </TooltipTrigger>
-      <TooltipContent
-        side="top"
-        align="start"
-        className="max-w-sm whitespace-pre-line text-left leading-snug"
-      >
-        {row.hint}
-      </TooltipContent>
-    </Tooltip>
+    <tr className={cn(rowTone(row, nested), className)}>{children}</tr>
   )
 }
 

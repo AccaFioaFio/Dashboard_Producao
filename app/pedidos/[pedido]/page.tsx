@@ -86,36 +86,41 @@ export default async function PedidoFichaPage({
         <KpiCard
           label="Peças cortadas"
           value={formatInt(ficha.totais.pecasCorte)}
-          hint={ficha.flags.corte ? 'SUM da quantidade no Corte' : 'Sem Corte 2026'}
+          hint={ficha.flags.corte ? 'Soma no Corte deste pedido' : 'Sem Corte 2026'}
+          detail="Planilha de Corte · SUM da quantidade deste pedido."
           tone="indigo"
         />
         <KpiCard
-          label="Costura Produção"
+          label="Peças na Costura Produção"
           value={formatInt(ficha.totais.pecasCosturaProd)}
           hint={
             ficha.totais.pecasCosturaServico
               ? `Serviço ${formatInt(ficha.totais.pecasCosturaServico)}`
               : 'Origem = Produção'
           }
+          detail="Relatório de Costura · peças com Origem = Produção deste pedido."
           tone="teal"
         />
         <KpiCard
-          label="Revisão"
+          label="Peças na Revisão"
           value={formatInt(ficha.totais.pecasRevisao)}
           hint="Pode ser maior que o corte (recorte de ano ou vários lançamentos)"
+          detail="Relatório de Revisão · peças limpas deste pedido."
           tone="magenta"
         />
         <KpiCard
-          label="Oficina pendente"
+          label="Peças pendentes em oficina"
           value={formatInt(ficha.totais.pendentes)}
           hint={`Enviadas ${formatInt(ficha.totais.enviadas)} · defeitos ${formatInt(ficha.totais.defeitos)}`}
+          detail="Oficinas · peças enviadas deste pedido ainda sem retorno."
           alert={ficha.totais.pendentes > 0}
           tone="amber"
         />
         <KpiCard
-          label="Ciclo"
+          label="Dias do ciclo"
           value={formatDays(ficha.totais.diasCiclo, 0)}
           hint="PCP prontas até a última Data Produção da Revisão"
+          detail="Dias entre PCP prontas e a última Data Produção na Revisão deste pedido."
           tone="teal"
         />
       </KpiGrid>

@@ -49,54 +49,62 @@ export default async function TopClientesPage({
         <>
           <KpiGrid columns={4}>
             <KpiCard
-              label="Clientes ativos"
+              label="Clientes com pedido"
               value={formatInt(data.clientesAtivos)}
               hint={`${formatInt(data.pedidos)} pedidos no recorte`}
+              detail="Pedidos.xlsx · clientes distintos com venda final, no período/filtros atuais."
               tone="indigo"
             />
             <KpiCard
               label="Valor faturado"
               value={formatMoney(data.valorFaturado)}
               hint={`Ticket médio ${formatMoney(data.ticketMedio)}`}
+              detail="Pedidos.xlsx · coluna Pedido - Valor faturado (só venda final)."
               tone="teal"
             />
             <KpiCard
               label="Metros baixados"
               value={formatMeters(data.metrosSignus)}
               hint={`${formatInt(data.pedidosComTecido)} pedidos com baixa · ${formatNumber(data.coberturaTecidoPct, 0)}% cobertura`}
+              detail="Movimentação Signus · metros de baixa cruzados com o nº do pedido comercial."
               tone="amber"
             />
             <KpiCard
-              label="Concentração top 5"
+              label="Concentração dos 5 maiores"
               value={`${formatNumber(data.concentracaoTop5Pct, 0)}%`}
-              hint="Share de pedidos dos 5 maiores clientes"
+              hint="Participação dos 5 maiores no total de pedidos"
+              detail="Soma dos pedidos dos 5 clientes com maior faturamento ÷ total de pedidos do recorte."
               tone="magenta"
             />
             <KpiCard
-              label="Média mensal"
+              label="Média mensal de faturamento"
               value={formatMoney(data.mediaMensalValor)}
               hint={`${formatMeters(data.mediaMensalMetros)} · ${formatInt(data.mesesComVenda)} meses com venda`}
+              detail="Valor faturado ÷ meses com pelo menos uma venda no recorte."
               tone="teal"
             />
             <KpiCard
-              label={`Previsão ${YEAR}`}
+              label={`Previsão de faturamento ${YEAR}`}
               value={formatMoney(data.previsaoValorAno)}
-              hint={`Run-rate × 12 · tecido ${formatMeters(data.previsaoMetrosAno)}`}
+              hint={`Projeção linear · tecido ${formatMeters(data.previsaoMetrosAno)}`}
+              detail="Média mensal de faturamento × 12 (run-rate). Não é meta — é ritmo atual anualizado."
               tone="indigo"
             />
             <KpiCard
-              label="Valor total"
+              label="Valor total do pedido"
               value={formatMoney(data.valorTotal)}
-              hint="Soma Pedido - Valor total no recorte"
+              hint="Soma do valor total no recorte"
+              detail="Pedidos.xlsx · coluna Pedido - Valor total (venda final)."
             />
             <KpiCard
-              label="Pedidos"
+              label="Pedidos comerciais"
               value={formatInt(data.pedidos)}
               hint={
                 clienteAtivo
-                  ? `Filtro: ${clienteAtivo}`
-                  : 'Base comercial Signus'
+                  ? `Filtro ativo: ${clienteAtivo}`
+                  : 'Venda final no recorte'
               }
+              detail="Pedidos.xlsx · linhas de venda final (exclui remessa p/ industrialização)."
             />
           </KpiGrid>
 
@@ -192,7 +200,6 @@ export default async function TopClientesPage({
                       : `${tecidoLabel} (${formatMeters(row.topTecidoMetros)})`,
                   selected: filters.cliente === row.cliente,
                   href: query ? `/top-clientes?${query}` : '/top-clientes',
-                  hint: `${row.cliente}: ${formatInt(row.pedidos)} pedidos · ${formatInt(row.tecidos)} tecidos · ${formatInt(row.pedidosComTecido)} com baixa Signus`,
                 }
               })}
             />
@@ -218,7 +225,6 @@ export default async function TopClientesPage({
                 pedidos: formatInt(row.pedidos),
                 clientes: formatInt(row.clientes),
                 saldo: formatMeters(row.saldoAtual),
-                hint: `${row.cod}: ${formatInt(row.movimentos)} baixas Signus no recorte`,
               }))}
             />
           </section>

@@ -70,32 +70,36 @@ export default async function AcaoComercialPage({
 
       <KpiGrid columns={4}>
         <KpiCard
-          label="Peças cortadas"
+          label="Peças cortadas (entrada)"
           value={formatInt(acao.pecasCortadas)}
-          hint="Soma de QTD CORTADO em TAB_ENTRADA"
+          hint="QTD CORTADO em TAB_ENTRADA"
+          detail="Ação comercial · soma de QTD CORTADO na TAB_ENTRADA."
           tone="amber"
         />
         <KpiCard
-          label="Peças aproveitadas"
+          label="Peças aproveitadas (saída)"
           value={formatInt(acao.pecasAproveitadas)}
-          hint="Soma de QTD APROVEITAMENTO em TAB_SAIDA"
+          hint="QTD APROVEITAMENTO em TAB_SAIDA"
+          detail="Ação comercial · soma de QTD APROVEITAMENTO na TAB_SAIDA."
           tone="teal"
         />
         <KpiCard
-          label="Saldo"
+          label="Saldo cortado − aproveitado"
           value={formatInt(acao.saldo)}
-          hint="Cortadas − aproveitadas"
+          hint="Peças cortadas menos aproveitadas"
+          detail="Ação comercial · cortadas − aproveitadas no recorte."
           tone="indigo"
           alert={acao.saldo < 0}
         />
         <KpiCard
-          label="% aproveitamento"
+          label="Percentual de aproveitamento"
           value={`${formatNumber(pct, 1)}%`}
           hint={
             acao.pecasCortadas > 0
               ? `${formatInt(acao.pecasAproveitadas)} de ${formatInt(acao.pecasCortadas)} peças cortadas`
               : 'Sem entrada no recorte'
           }
+          detail="Ação comercial · peças aproveitadas ÷ peças cortadas."
           tone="magenta"
           progress={Math.max(0, Math.min(100, pct))}
         />

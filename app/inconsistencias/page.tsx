@@ -20,26 +20,29 @@ export default async function InconsistenciasPage() {
     >
       <KpiGrid columns={3}>
         <KpiCard
-          label="Eventos"
+          label="Eventos detectados na carga"
           value={formatInt(total)}
-          hint="Todas as inconsistências e órfãos desta carga"
+          hint="Inconsistências e órfãos desta carga"
+          detail="ETL · todas as inconsistências e órfãos encontrados na última carga."
           tone="indigo"
         />
         <KpiCard
-          label="Tipos"
+          label="Tipos de inconsistência"
           value={formatInt(grupos.length)}
           hint="Grupos distintos"
+          detail="ETL · quantidade de categorias/tipos distintos de evento."
           tone="amber"
         />
         <KpiCard
-          label="Com pedido"
+          label="Eventos ligados a pedido"
           value={formatInt(
             grupos.reduce(
               (sum, grupo) => sum + grupo.eventos.filter((row) => row.pedidoNorm).length,
               0,
             ),
           )}
-          hint="Linhas ligadas a um Nº pedido"
+          hint="Linhas com Nº pedido"
+          detail="ETL · eventos que referenciam um nº de pedido (não órfãos sem chave)."
           tone="teal"
         />
       </KpiGrid>

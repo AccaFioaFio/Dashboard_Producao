@@ -67,38 +67,43 @@ export default async function Page() {
 
       <KpiGrid>
         <KpiCard
-          label="Peças cortadas"
+          label="Peças cortadas no ano"
           value={formatInt(header.pecasCortadas)}
-          hint="SUM da quantidade, não contagem de linha"
+          hint="Soma das quantidades no Corte"
+          detail="Planilha de Corte · SUM da quantidade (não é contagem de linha)."
           tone="indigo"
           href="/corte"
         />
         <KpiCard
-          label="Pedidos no Corte"
+          label="Total de Pedidos"
           value={formatInt(header.pedidosCorte)}
-          hint="Nº pedido distinto; * herda o cabeçalho"
+          hint="Números de pedido distintos"
+          detail="Corte 2026 · nº pedido distinto (* herda o cabeçalho da OC)."
           tone="teal"
           href={pedidosFatiaHref('corte')}
         />
         <KpiCard
-          label="Costura Produção"
+          label="Peças na Costura Produção"
           value={formatInt(header.pecasCosturaProd)}
-          hint="Origem = Produção (funil)"
+          hint="Origem = Produção"
+          detail="Relatório de Costura · só lançamentos com Origem = Produção (funil)."
           tone="amber"
           progress={costuraShare}
           href="/costuras"
         />
         <KpiCard
-          label="Revisão limpa"
+          label="Peças na Revisão limpa"
           value={formatInt(header.pecasRevisao)}
-          hint="Sem total da tabela e sem Qtd = pedido. Não fecha contra o corte do mês."
+          hint="Sem total da tabela e sem Qtd = pedido"
+          detail="Relatório de Revisão · peças limpas. Não fecha contra o corte do mês."
           tone="magenta"
           href="/revisao"
         />
         <KpiCard
-          label="WIP Corte"
+          label="Em produção no Corte"
           value={`${formatInt(header.wipPedidos)} / ${formatInt(header.wipPecas)}`}
-          hint="OCs / peças no status EM PRODUÇÃO. Mesmo pedido pode ter mais de uma OC."
+          hint="Ordens / peças no status EM PRODUÇÃO"
+          detail="Cabeçalhos de OC com status EM PRODUÇÃO. O mesmo pedido pode ter mais de uma OC."
           alert={header.wipPedidos > 0}
           tone="indigo"
           href={pedidosFatiaHref('wip')}
@@ -106,23 +111,26 @@ export default async function Page() {
         <KpiCard
           label="Aguardando tecido"
           value={`${formatInt(header.tecidoPedidos)} / ${formatMeters(header.tecidoMetros)}`}
-          hint={`${formatInt(header.tecidoPecas)} pçs · detalhes na aba Tecidos`}
+          hint={`${formatInt(header.tecidoPecas)} peças · detalhes em Tecidos`}
+          detail="Ordens de corte com status AGUARDANDO TECIDO (pedidos / metros)."
           alert={header.tecidoPedidos > 0}
           tone="amber"
           href={pedidosFatiaHref('aguardandoTecido')}
         />
         <KpiCard
-          label="Oficinas pendentes"
+          label="Peças pendentes em oficina"
           value={formatInt(header.oficinasPendentes)}
           hint={`Defeitos ${formatInt(header.oficinasDefeitos)}`}
+          detail="Planilha de Oficinas · peças enviadas ainda sem retorno."
           alert={header.oficinasPendentes > 0}
           tone="magenta"
           href="/oficinas"
         />
         <KpiCard
-          label="Hoje"
+          label="Produção de hoje"
           value={`${formatInt(alertas.costuraHoje)} / ${formatInt(alertas.revisaoHoje)}`}
           hint="Costura Produção / Revisão do dia"
+          detail="Lançamentos do dia corrente em Costura (Produção) e Revisão."
           tone="teal"
           href="/costuras"
         />

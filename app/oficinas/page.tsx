@@ -42,38 +42,46 @@ export default async function OficinasPage({
 
       <KpiGrid>
         <KpiCard
-          label="Valor Total Pago"
+          label="Valor total pago às oficinas"
           value={formatMoneyCompact(oficinas.sla.valor)}
           hint="Soma do valor lançado no recorte"
+          detail="Planilha de Oficinas · soma do valor pago no período/filtros."
           tone="teal"
         />
         <KpiCard
-          label="Peças Pendentes"
+          label="Peças pendentes de retorno"
           value={formatInt(oficinas.pendentes)}
+          hint="Enviadas ainda sem retorno"
+          detail="Planilha de Oficinas · peças enviadas sem data/quantidade de retorno."
           warning={oficinas.pendentes > 0}
         />
         <KpiCard
-          label="Peças com Defeitos"
+          label="Peças com defeito"
           value={formatInt(oficinas.defeitos)}
+          hint="Apontadas com defeito no retorno"
+          detail="Planilha de Oficinas · peças retornadas com defeito."
           alert={oficinas.defeitos > 0}
         />
         <KpiCard
-          label="% de Retorno"
+          label="Taxa de retorno"
           value={`${formatNumber(retorno, 1)}%`}
           hint={`${formatInt(oficinas.retornadas)} de ${formatInt(oficinas.enviadas)} enviadas`}
+          detail="Oficinas · peças retornadas ÷ peças enviadas no recorte."
         />
         {oficinas.comercialLoaded ? (
           <>
             <KpiCard
-              label="Remessas Signus"
+              label="Remessas para industrialização"
               value={formatInt(oficinas.remessasPedidos)}
-              hint={`${formatInt(oficinas.oficinasComRemessa)} oficinas com remessa p/ indust.`}
+              hint={`${formatInt(oficinas.oficinasComRemessa)} oficinas com remessa`}
+              detail="Pedidos.xlsx · remessas p/ industrialização cruzadas com a oficina pelo nº do pedido."
               tone="indigo"
             />
             <KpiCard
-              label="Valor remessa"
+              label="Valor das remessas"
               value={formatMoneyCompact(oficinas.valorRemessa)}
-              hint="Pedidos.xlsx · industrialização cruzada por pedido"
+              hint="Industrialização cruzada por pedido"
+              detail="Pedidos.xlsx · valor faturado das remessas p/ industrialização ligadas às oficinas."
               tone="amber"
             />
           </>

@@ -59,7 +59,7 @@ export default async function TempoProducaoPage({
 
       <KpiGrid columns={5}>
         <KpiCard
-          label="Pedidos no ciclo"
+          label="Pedidos medidos no ciclo"
           value={formatInt(tempo.medidos)}
           hint={`${pct(tempo.medidos, tempo.recorte)} do recorte · ${formatInt(tempo.pecasMedidas)} peças`}
           detail={`Pedidos com PCP prontas e Data Produção na Revisão.\n${formatInt(tempo.medidos)} de ${formatInt(tempo.recorte)} pedidos do recorte (${pct(tempo.medidos, tempo.recorte)}).\n${formatInt(tempo.comPcp)} com PCP · ${formatInt(tempo.comRevisao)} com Revisão.`}
@@ -71,14 +71,14 @@ export default async function TempoProducaoPage({
           }
         />
         <KpiCard
-          label="Mediana"
+          label="Prazo mediano do ciclo"
           value={formatDays(tempo.medianaDias)}
           hint="Metade dos pedidos fecha até este prazo"
           detail={`Metade dos ${formatInt(tempo.medidos)} pedidos medidos sai de PCP prontas e chega na Revisão em até ${formatDays(tempo.medianaDias)}.\nFaixa ${formatDays(tempo.minDias, 0)} a ${formatDays(tempo.maxDias, 0)}. A mediana não é puxada por lotes enormes.`}
           tone="teal"
         />
         <KpiCard
-          label="Média por pedido"
+          label="Prazo médio por pedido"
           value={formatDays(tempo.mediaDias)}
           hint={
             tempo.mediaPonderadaPecas != null
@@ -89,7 +89,7 @@ export default async function TempoProducaoPage({
           tone="amber"
         />
         <KpiCard
-          label="P90"
+          label="Prazo do 90º percentil"
           value={formatDays(tempo.p90Dias)}
           hint="9 em cada 10 pedidos fecham até aqui"
           detail={`90% dos pedidos medidos saem de PCP prontas e chegam na Revisão em até ${formatDays(tempo.p90Dias)}.\nOs 10% mais lentos ficam na tabela abaixo.`}
@@ -111,7 +111,7 @@ export default async function TempoProducaoPage({
 
       <KpiGrid columns={3}>
         <KpiCard
-          label="PCP → Final do corte"
+          label="Tempo PCP → Final do corte"
           value={formatDays(tempo.etapaCorte.media)}
           hint={
             tempo.etapaCorte.n
@@ -122,7 +122,7 @@ export default async function TempoProducaoPage({
           tone="indigo"
         />
         <KpiCard
-          label="Final do corte → Revisão"
+          label="Tempo Final do corte → Revisão"
           value={formatDays(tempo.etapaPosCorte.media)}
           hint={
             tempo.etapaPosCorte.n
@@ -133,7 +133,7 @@ export default async function TempoProducaoPage({
           tone="teal"
         />
         <KpiCard
-          label="Fora da média"
+          label="Pedidos fora da média"
           value={formatInt(foraDaMedia)}
           hint={`${formatInt(tempo.revisaoSemPcp)} sem PCP · ${formatInt(tempo.inconsistentes)} datas invertidas`}
           detail={`Não entram no cálculo do ciclo:\n• ${formatInt(tempo.revisaoSemPcp)} com Revisão e PCP prontas vazia\n• ${formatInt(tempo.inconsistentes)} com Data Produção anterior ao PCP\n• ${formatInt(tempo.semDatas)} sem as duas datas`}

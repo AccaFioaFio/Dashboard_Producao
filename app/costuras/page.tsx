@@ -53,24 +53,28 @@ export default async function CosturasPage({
 
       <KpiGrid>
         <KpiCard
-          label="Produção"
+          label="Peças na Costura Produção"
           value={formatInt(costuras.producao.pecas)}
           hint="Origem = Produção no recorte"
+          detail="Relatório de Costura · só lançamentos com Origem = Produção."
         />
         <KpiCard
-          label="Serviço"
+          label="Peças em serviço"
           value={formatInt(pecasServico)}
-          hint="Etiqueta, festonê, conserto e demais origens"
+          hint="Etiqueta, festonê, conserto e demais"
+          detail="Relatório de Costura · origens diferentes de Produção (serviço)."
         />
         <KpiCard
-          label="Pedidos com Costura"
+          label="Pedidos com Costura Produção"
           value={formatInt(funil?.comCostura ?? 0)}
-          hint={`${formatInt(funil?.semCostura ?? 0)} pedidos de Corte sem Costura Produção (ano)`}
+          hint={`${formatInt(funil?.semCostura ?? 0)} do Corte ainda sem Costura Produção`}
+          detail="Funil 2026 · pedidos do Corte com pelo menos um lançamento Origem = Produção."
         />
         <KpiCard
-          label={`Hoje (${formatDate(costuras.hoje)})`}
+          label={`Produção de hoje (${formatDate(costuras.hoje)})`}
           value={formatInt(pecasHoje)}
           hint="Lançamentos Origem = Produção"
+          detail="Relatório de Costura · peças do dia com Origem = Produção."
         />
       </KpiGrid>
 
