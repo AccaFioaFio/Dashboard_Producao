@@ -2138,6 +2138,7 @@ function applyComercialFilters(
 
 export type TopClienteRow = {
   cliente: string
+  codCliente: string | null
   pedidos: number
   valorTotal: number
   valorFaturado: number
@@ -2146,6 +2147,7 @@ export type TopClienteRow = {
   tecidos: number
   pedidosComTecido: number
   topTecido: string | null
+  topTecidoNome: string | null
   topTecidoMetros: number
 }
 
@@ -2235,20 +2237,25 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     params,
   )
 
+  // "CONSUMIDOR FINAL" costuma ser placeholder/erro de cadastro — fora do ranking.
+  const rankingWhere = `${where} AND UPPER(TRIM(COALESCE(p.cliente, ''))) != 'CONSUMIDOR FINAL'`
+
   const ranking = runAll<{
     cliente: string
+    codCliente: string | null
     pedidos: number
     valorTotal: number
     valorFaturado: number
   }>(
     `SELECT COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)') as cliente,
+            MAX(NULLIF(trim(p.parceiro_codigo), '')) as codCliente,
             COUNT(*) as pedidos,
             COALESCE(SUM(p.valor_total), 0) as valorTotal,
             COALESCE(SUM(p.valor_faturado), 0) as valorFaturado
      FROM fato_pedido_comercial p
-     WHERE ${where}
+     WHERE ${rankingWhere}
      GROUP BY COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)')
-     ORDER BY pedidos DESC, valorFaturado DESC
+     ORDER BY valorFaturado DESC, pedidos DESC
      LIMIT 40`,
     params,
   )
@@ -2266,7 +2273,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
                 COUNT(DISTINCT s.pedido_norm) as pedidosComTecido
          FROM fato_pedido_comercial p
          JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1
-         WHERE ${where}
+         WHERE ${rankingWhere}
          GROUP BY COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)')`,
         params,
       )
@@ -2276,24 +2283,33 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     ? runAll<{
         cliente: string
         cod: string
+        nome: string | null
         metros: number
       }>(
         `SELECT COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)') as cliente,
                 s.cod_produto as cod,
+                MAX(s.nome_produto) as nome,
                 COALESCE(SUM(s.metros), 0) as metros
          FROM fato_pedido_comercial p
          JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1
-         WHERE ${where}
+         WHERE ${rankingWhere}
          GROUP BY COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)'), s.cod_produto
          ORDER BY metros DESC`,
         params,
       )
     : []
 
-  const topTecidoMap = new Map<string, { cod: string; metros: number }>()
+  const topTecidoMap = new Map<
+    string,
+    { cod: string; nome: string | null; metros: number }
+  >()
   for (const row of topTecidoPorClienteRaw) {
     if (!topTecidoMap.has(row.cliente)) {
-      topTecidoMap.set(row.cliente, { cod: row.cod, metros: row.metros })
+      topTecidoMap.set(row.cliente, {
+        cod: row.cod,
+        nome: row.nome,
+        metros: row.metros,
+      })
     }
   }
 
@@ -2306,6 +2322,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     const top = topTecidoMap.get(row.cliente)
     return {
       cliente: row.cliente,
+      codCliente: row.codCliente,
       pedidos: row.pedidos,
       valorTotal: row.valorTotal,
       valorFaturado: row.valorFaturado,
@@ -2314,6 +2331,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
       tecidos: tecido?.tecidos ?? 0,
       pedidosComTecido: tecido?.pedidosComTecido ?? 0,
       topTecido: top?.cod ?? null,
+      topTecidoNome: top?.nome ?? null,
       topTecidoMetros: top?.metros ?? 0,
     }
   })
@@ -2402,7 +2420,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
      FROM fato_pedido_comercial p
      WHERE ${where}
      GROUP BY p.canal
-     ORDER BY pedidos DESC`,
+     ORDER BY valor DESC, pedidos DESC`,
     params,
   ).map((row) => ({
     ...row,

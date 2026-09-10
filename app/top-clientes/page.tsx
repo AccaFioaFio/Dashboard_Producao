@@ -137,72 +137,6 @@ export default async function TopClientesPage({
             />
           </div>
 
-          <div className="grid min-w-0 gap-[var(--page-gap)] xl:grid-cols-2">
-            <section className="flex min-w-0 flex-col gap-2">
-              <h2 className="text-sm font-medium">
-                {clienteAtivo ? `Cliente · ${clienteAtivo}` : 'Maiores clientes'}
-              </h2>
-              <SimpleTable
-                columns={[
-                  { key: 'cliente', label: 'Cliente' },
-                  { key: 'pedidos', label: 'Pedidos', numeric: true },
-                  { key: 'valor', label: 'Faturado', numeric: true },
-                  { key: 'ticket', label: 'Ticket', numeric: true },
-                  { key: 'metros', label: 'Metros', numeric: true },
-                  { key: 'topTecido', label: 'Top tecido' },
-                ]}
-                rows={data.ranking.map((row) => {
-                  const next = {
-                    ...filters,
-                    cliente:
-                      filters.cliente === row.cliente ? undefined : row.cliente,
-                  }
-                  const query = filtersToSearch(next).toString()
-                  return {
-                    cliente: row.cliente,
-                    pedidos: formatInt(row.pedidos),
-                    valor: formatMoney(row.valorFaturado),
-                    ticket: formatMoney(row.ticketMedio),
-                    metros: formatMeters(row.metros),
-                    topTecido: row.topTecido
-                      ? `${row.topTecido} (${formatMeters(row.topTecidoMetros)})`
-                      : '—',
-                    selected: filters.cliente === row.cliente,
-                    href: query
-                      ? `/top-clientes?${query}`
-                      : '/top-clientes',
-                    hint: `${row.cliente}: ${formatInt(row.pedidos)} pedidos · ${formatInt(row.tecidos)} tecidos · ${formatInt(row.pedidosComTecido)} com baixa Signus`,
-                  }
-                })}
-              />
-            </section>
-
-            <section className="flex min-w-0 flex-col gap-2">
-              <h2 className="text-sm font-medium">
-                {clienteAtivo
-                  ? 'Tecidos que este cliente mais compra'
-                  : 'Tecidos mais comprados (cruzamento)'}
-              </h2>
-              <SimpleTable
-                columns={[
-                  { key: 'tecido', label: 'Tecido' },
-                  { key: 'metros', label: 'Metros', numeric: true },
-                  { key: 'pedidos', label: 'Pedidos', numeric: true },
-                  { key: 'clientes', label: 'Clientes', numeric: true },
-                  { key: 'saldo', label: 'Saldo', numeric: true },
-                ]}
-                rows={data.tecidos.map((row) => ({
-                  tecido: formatTecido(row.cod, row.nome),
-                  metros: formatMeters(row.metros),
-                  pedidos: formatInt(row.pedidos),
-                  clientes: formatInt(row.clientes),
-                  saldo: formatMeters(row.saldoAtual),
-                  hint: `${row.cod}: ${formatInt(row.movimentos)} baixas Signus no recorte`,
-                }))}
-              />
-            </section>
-          </div>
-
           <section className="flex min-w-0 flex-col gap-2">
             <h2 className="text-sm font-medium">Mix por canal</h2>
             <SimpleTable
@@ -217,6 +151,74 @@ export default async function TopClientesPage({
                 pedidos: formatInt(row.pedidos),
                 valor: formatMoney(row.valor),
                 metros: formatMeters(row.metros),
+              }))}
+            />
+          </section>
+
+          <section className="flex min-w-0 flex-col gap-2">
+            <h2 className="text-sm font-medium">
+              {clienteAtivo ? `Cliente · ${clienteAtivo}` : 'Maiores clientes'}
+            </h2>
+            <SimpleTable
+              columns={[
+                { key: 'codCliente', label: 'Cód.' },
+                { key: 'cliente', label: 'Cliente' },
+                { key: 'pedidos', label: 'Pedidos', numeric: true },
+                { key: 'valor', label: 'Faturado', numeric: true },
+                { key: 'ticket', label: 'Ticket', numeric: true },
+                { key: 'metros', label: 'Metros', numeric: true },
+                { key: 'topTecido', label: 'Top tecido' },
+              ]}
+              rows={data.ranking.map((row) => {
+                const next = {
+                  ...filters,
+                  cliente:
+                    filters.cliente === row.cliente ? undefined : row.cliente,
+                }
+                const query = filtersToSearch(next).toString()
+                const tecidoLabel = row.topTecido
+                  ? formatTecido(row.topTecido, row.topTecidoNome)
+                  : '—'
+                return {
+                  codCliente: row.codCliente || '—',
+                  cliente: row.cliente,
+                  pedidos: formatInt(row.pedidos),
+                  valor: formatMoney(row.valorFaturado),
+                  ticket: formatMoney(row.ticketMedio),
+                  metros: formatMeters(row.metros),
+                  topTecido:
+                    tecidoLabel === '—'
+                      ? '—'
+                      : `${tecidoLabel} (${formatMeters(row.topTecidoMetros)})`,
+                  selected: filters.cliente === row.cliente,
+                  href: query ? `/top-clientes?${query}` : '/top-clientes',
+                  hint: `${row.cliente}: ${formatInt(row.pedidos)} pedidos · ${formatInt(row.tecidos)} tecidos · ${formatInt(row.pedidosComTecido)} com baixa Signus`,
+                }
+              })}
+            />
+          </section>
+
+          <section className="flex min-w-0 flex-col gap-2">
+            <h2 className="text-sm font-medium">
+              {clienteAtivo
+                ? 'Tecidos que este cliente mais compra'
+                : 'Tecidos mais comprados (cruzamento)'}
+            </h2>
+            <SimpleTable
+              columns={[
+                { key: 'tecido', label: 'Tecido' },
+                { key: 'metros', label: 'Metros', numeric: true },
+                { key: 'pedidos', label: 'Pedidos', numeric: true },
+                { key: 'clientes', label: 'Clientes', numeric: true },
+                { key: 'saldo', label: 'Saldo', numeric: true },
+              ]}
+              rows={data.tecidos.map((row) => ({
+                tecido: formatTecido(row.cod, row.nome),
+                metros: formatMeters(row.metros),
+                pedidos: formatInt(row.pedidos),
+                clientes: formatInt(row.clientes),
+                saldo: formatMeters(row.saldoAtual),
+                hint: `${row.cod}: ${formatInt(row.movimentos)} baixas Signus no recorte`,
               }))}
             />
           </section>
