@@ -13,6 +13,7 @@ import {
   corteXlsxPath,
   estoqueXlsxPath,
   oficinasXlsxPath,
+  pedidosXlsxPath,
   signusXlsPath,
 } from '@/lib/paths'
 
@@ -26,6 +27,7 @@ export type RefreshResult =
       oficinasLastWrite: string
       signusLastWrite: string
       estoqueLastWrite: string
+      pedidosLastWrite: string | null
       lidaEm: string
     }
   | {
@@ -53,10 +55,12 @@ export async function applySnapshotPayload(
     oficinasPath: payload.oficinasPath,
     signusPath: payload.signusPath,
     estoquePath: payload.estoquePath,
+    pedidosPath: payload.pedidosPath,
     corteLastWrite: payload.corteLastWrite,
     oficinasLastWrite: payload.oficinasLastWrite,
     signusLastWrite: payload.signusLastWrite,
     estoqueLastWrite: payload.estoqueLastWrite,
+    pedidosLastWrite: payload.pedidosLastWrite,
     header,
   })
 
@@ -89,6 +93,7 @@ export async function applySnapshotPayload(
     oficinasLastWrite: payload.oficinasLastWrite,
     signusLastWrite: payload.signusLastWrite,
     estoqueLastWrite: payload.estoqueLastWrite,
+    pedidosLastWrite: payload.pedidosLastWrite,
     lidaEm: new Date().toISOString(),
   }
 }
@@ -98,10 +103,17 @@ export async function refreshFromExcel(): Promise<RefreshResult> {
   const oficinasPath = oficinasXlsxPath()
   const signusPath = signusXlsPath()
   const estoquePath = estoqueXlsxPath()
+  const pedidosPath = pedidosXlsxPath()
 
   let copied: ReturnType<typeof copySources>
   try {
-    copied = copySources(cortePath, oficinasPath, signusPath, estoquePath)
+    copied = copySources(
+      cortePath,
+      oficinasPath,
+      signusPath,
+      estoquePath,
+      pedidosPath,
+    )
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Falha ao copiar os arquivos Excel'
@@ -117,6 +129,7 @@ export async function refreshFromExcel(): Promise<RefreshResult> {
       copied.oficinasCache,
       copied.signusCache,
       copied.estoqueCache,
+      copied.pedidosCache,
     )
     return await applySnapshotPayload({
       snapshot,
@@ -124,10 +137,12 @@ export async function refreshFromExcel(): Promise<RefreshResult> {
       oficinasPath,
       signusPath,
       estoquePath,
+      pedidosPath,
       corteLastWrite: copied.corteLastWrite,
       oficinasLastWrite: copied.oficinasLastWrite,
       signusLastWrite: copied.signusLastWrite,
       estoqueLastWrite: copied.estoqueLastWrite,
+      pedidosLastWrite: copied.pedidosLastWrite,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

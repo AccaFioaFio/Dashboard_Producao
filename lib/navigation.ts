@@ -10,6 +10,7 @@ import {
   ShieldAlert,
   Shirt,
   Timer,
+  Trophy,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -68,6 +69,12 @@ export const navigation: NavItem[] = [
     href: '/pedidos',
     icon: ListOrdered,
     description: 'Funil por pedido e ficha 2026.',
+  },
+  {
+    title: 'Top Clientes',
+    href: '/top-clientes',
+    icon: Trophy,
+    description: 'Ranking comercial, mix de tecidos e previsão de compra.',
   },
   {
     title: 'Tempo de produção',

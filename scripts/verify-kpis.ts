@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { parseWorkbookFiles } from '../lib/etl/snapshot'
 import { computeFunil, computeHeaderKpis, computeSerieMensal, checkInvariants } from '../lib/etl/kpis'
 import { diffGolden } from '../lib/etl/golden'
@@ -5,15 +6,18 @@ import {
   corteXlsxPath,
   estoqueXlsxPath,
   oficinasXlsxPath,
+  pedidosXlsxPath,
   signusXlsPath,
 } from '../lib/paths'
 
 async function main() {
+  const pedidos = pedidosXlsxPath()
   const snapshot = await parseWorkbookFiles(
     corteXlsxPath(),
     oficinasXlsxPath(),
     signusXlsPath(),
     estoqueXlsxPath(),
+    existsSync(pedidos) ? pedidos : null,
   )
   const header = computeHeaderKpis(snapshot)
   const funil = computeFunil(snapshot)
@@ -28,6 +32,7 @@ async function main() {
   console.log('oficinas', snapshot.oficinas.length)
   console.log('signus tecidos', snapshot.tecidosSignus.length)
   console.log('estoque tecidos', snapshot.tecidosEstoque.length)
+  console.log('pedidos comerciais', snapshot.pedidosComerciais.length)
   console.log('qualidade', snapshot.qualidade.length)
 
   if (invariants.length || golden.length) {

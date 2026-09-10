@@ -19,10 +19,12 @@ export type CargaInfo = {
   oficinasPath: string
   signusPath: string | null
   estoquePath: string | null
+  pedidosPath: string | null
   corteLastWrite: string | null
   oficinasLastWrite: string | null
   signusLastWrite: string | null
   estoqueLastWrite: string | null
+  pedidosLastWrite: string | null
   pecasCortadas: number | null
   pedidosCorte: number | null
   pecasCosturaProd: number | null
@@ -320,9 +322,10 @@ export const getLatestCarga = cache(async (): Promise<CargaInfo | null> => {
   const row = sqlite()
     .prepare(
       `SELECT id, lida_em as lidaEm, corte_path as cortePath, oficinas_path as oficinasPath,
-              signus_path as signusPath, estoque_path as estoquePath,
+              signus_path as signusPath, estoque_path as estoquePath, pedidos_path as pedidosPath,
               corte_last_write as corteLastWrite, oficinas_last_write as oficinasLastWrite,
               signus_last_write as signusLastWrite, estoque_last_write as estoqueLastWrite,
+              pedidos_last_write as pedidosLastWrite,
               pecas_cortadas as pecasCortadas, pedidos_corte as pedidosCorte,
               pecas_costura_prod as pecasCosturaProd, pecas_revisao as pecasRevisao,
               wip_pedidos as wipPedidos, wip_pecas as wipPecas,
@@ -1959,6 +1962,414 @@ export const getAcaoComercial = cache(async (filters: DashFilters = {}) => {
     pctAproveitamento,
     porMes,
     produtos,
+  }
+})
+
+function hasPedidoComercialTable() {
+  return Boolean(
+    sqlite()
+      .prepare(
+        `SELECT 1 as v FROM sqlite_master WHERE type = 'table' AND name = 'fato_pedido_comercial'`,
+      )
+      .get(),
+  )
+}
+
+function applyComercialFilters(
+  filter: SqlFilter,
+  alias: string,
+  filters: DashFilters,
+) {
+  filter.clauses.push(`CAST(substr(COALESCE(${alias}.data_venda, ${alias}.data_cadastro), 1, 4) as INTEGER) = @ano`)
+  filter.params.ano = YEAR
+  if (filters.mes) {
+    filter.clauses.push(
+      `CAST(substr(COALESCE(${alias}.data_venda, ${alias}.data_cadastro), 6, 2) as INTEGER) = @mes`,
+    )
+    filter.params.mes = filters.mes
+  }
+  if (filters.canal) {
+    filter.clauses.push(`${alias}.canal = @canal`)
+    filter.params.canal = filters.canal
+  }
+  if (filters.cliente) {
+    filter.clauses.push(`${alias}.cliente = @cliente`)
+    filter.params.cliente = filters.cliente
+  }
+  if (filters.q) {
+    filter.clauses.push(
+      `(${alias}.pedido_norm LIKE @q OR COALESCE(${alias}.cliente, '') LIKE @q OR COALESCE(${alias}.razao_social, '') LIKE @q)`,
+    )
+    filter.params.q = likeContains(filters.q)
+  }
+}
+
+export type TopClienteRow = {
+  cliente: string
+  pedidos: number
+  valorTotal: number
+  valorFaturado: number
+  ticketMedio: number
+  metros: number
+  tecidos: number
+  pedidosComTecido: number
+  topTecido: string | null
+  topTecidoMetros: number
+}
+
+export type TopClienteTecidoRow = {
+  cod: string
+  nome: string | null
+  metros: number
+  pedidos: number
+  movimentos: number
+  clientes: number
+  saldoAtual: number
+}
+
+export type TopClienteMesRow = {
+  mes: number
+  pedidos: number
+  valor: number
+  metros: number
+}
+
+export const getTopClientes = cache(async (filters: DashFilters = {}) => {
+  await ensureCloudDatabase()
+  const empty = {
+    loaded: false as const,
+    clientesAtivos: 0,
+    pedidos: 0,
+    valorTotal: 0,
+    valorFaturado: 0,
+    ticketMedio: 0,
+    metrosSignus: 0,
+    pedidosComTecido: 0,
+    coberturaTecidoPct: 0,
+    concentracaoTop5Pct: 0,
+    previsaoValorAno: 0,
+    previsaoMetrosAno: 0,
+    mediaMensalValor: 0,
+    mediaMensalMetros: 0,
+    mesesComVenda: 0,
+    ranking: [] as TopClienteRow[],
+    tecidos: [] as TopClienteTecidoRow[],
+    porMes: [] as TopClienteMesRow[],
+    porCanal: [] as { nome: string; pedidos: number; valor: number; metros: number }[],
+    options: {
+      meses: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      canais: [] as string[],
+      clientes: [] as string[],
+      responsaveis: [] as string[],
+      produtos: [] as string[],
+      oficinas: [] as string[],
+    } satisfies FilterOptions,
+  }
+
+  if (!hasPedidoComercialTable()) return empty
+
+  const filter = emptyFilter()
+  applyComercialFilters(filter, 'p', filters)
+  const where = whereSql(filter)
+  const { params } = filter
+
+  const hasSignus = Boolean(
+    sqlite()
+      .prepare(
+        `SELECT 1 as v FROM sqlite_master WHERE type = 'table' AND name = 'fato_tecido_signus'`,
+      )
+      .get(),
+  )
+  const hasEstoque = Boolean(
+    sqlite()
+      .prepare(
+        `SELECT 1 as v FROM sqlite_master WHERE type = 'table' AND name = 'fato_tecido_estoque'`,
+      )
+      .get(),
+  )
+
+  const resumo = runGet<{
+    clientes: number
+    pedidos: number
+    valorTotal: number
+    valorFaturado: number
+  }>(
+    `SELECT COUNT(DISTINCT p.cliente) as clientes,
+            COUNT(*) as pedidos,
+            COALESCE(SUM(p.valor_total), 0) as valorTotal,
+            COALESCE(SUM(p.valor_faturado), 0) as valorFaturado
+     FROM fato_pedido_comercial p
+     WHERE ${where}`,
+    params,
+  )
+
+  const ranking = runAll<{
+    cliente: string
+    pedidos: number
+    valorTotal: number
+    valorFaturado: number
+  }>(
+    `SELECT COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)') as cliente,
+            COUNT(*) as pedidos,
+            COALESCE(SUM(p.valor_total), 0) as valorTotal,
+            COALESCE(SUM(p.valor_faturado), 0) as valorFaturado
+     FROM fato_pedido_comercial p
+     WHERE ${where}
+     GROUP BY COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)')
+     ORDER BY pedidos DESC, valorFaturado DESC
+     LIMIT 40`,
+    params,
+  )
+
+  const tecidoPorCliente = hasSignus
+    ? runAll<{
+        cliente: string
+        metros: number
+        tecidos: number
+        pedidosComTecido: number
+      }>(
+        `SELECT COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)') as cliente,
+                COALESCE(SUM(s.metros), 0) as metros,
+                COUNT(DISTINCT s.cod_produto) as tecidos,
+                COUNT(DISTINCT s.pedido_norm) as pedidosComTecido
+         FROM fato_pedido_comercial p
+         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1
+         WHERE ${where}
+         GROUP BY COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)')`,
+        params,
+      )
+    : []
+
+  const topTecidoPorClienteRaw = hasSignus
+    ? runAll<{
+        cliente: string
+        cod: string
+        metros: number
+      }>(
+        `SELECT COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)') as cliente,
+                s.cod_produto as cod,
+                COALESCE(SUM(s.metros), 0) as metros
+         FROM fato_pedido_comercial p
+         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1
+         WHERE ${where}
+         GROUP BY COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)'), s.cod_produto
+         ORDER BY metros DESC`,
+        params,
+      )
+    : []
+
+  const topTecidoMap = new Map<string, { cod: string; metros: number }>()
+  for (const row of topTecidoPorClienteRaw) {
+    if (!topTecidoMap.has(row.cliente)) {
+      topTecidoMap.set(row.cliente, { cod: row.cod, metros: row.metros })
+    }
+  }
+
+  const tecidoMap = new Map(
+    tecidoPorCliente.map((row) => [row.cliente, row]),
+  )
+
+  const rankingFull: TopClienteRow[] = ranking.map((row) => {
+    const tecido = tecidoMap.get(row.cliente)
+    const top = topTecidoMap.get(row.cliente)
+    return {
+      cliente: row.cliente,
+      pedidos: row.pedidos,
+      valorTotal: row.valorTotal,
+      valorFaturado: row.valorFaturado,
+      ticketMedio: row.pedidos ? row.valorFaturado / row.pedidos : 0,
+      metros: tecido?.metros ?? 0,
+      tecidos: tecido?.tecidos ?? 0,
+      pedidosComTecido: tecido?.pedidosComTecido ?? 0,
+      topTecido: top?.cod ?? null,
+      topTecidoMetros: top?.metros ?? 0,
+    }
+  })
+
+  const estoqueSelect = hasEstoque
+    ? `COALESCE((
+         SELECT e.saldo_atual FROM fato_tecido_estoque e
+         WHERE replace(trim(e.cod_produto), ' ', '') = replace(trim(s.cod_produto), ' ', '')
+         LIMIT 1
+       ), 0)`
+    : '0'
+
+  const tecidos = hasSignus
+    ? runAll<TopClienteTecidoRow>(
+        `SELECT s.cod_produto as cod,
+                MAX(s.nome_produto) as nome,
+                COALESCE(SUM(s.metros), 0) as metros,
+                COUNT(DISTINCT s.pedido_norm) as pedidos,
+                COUNT(*) as movimentos,
+                COUNT(DISTINCT p.cliente) as clientes,
+                ${estoqueSelect} as saldoAtual
+         FROM fato_tecido_signus s
+         JOIN fato_pedido_comercial p ON p.pedido_norm = s.pedido_norm
+         WHERE ${where} AND s.is_baixa = 1
+         GROUP BY s.cod_produto
+         ORDER BY metros DESC
+         LIMIT 25`,
+        params,
+      )
+    : []
+
+  const porMesBase = runAll<{
+    mes: number
+    pedidos: number
+    valor: number
+    pedidoNorm: string
+  }>(
+    `SELECT CAST(substr(COALESCE(p.data_venda, p.data_cadastro), 6, 2) as INTEGER) as mes,
+            p.pedido_norm as pedidoNorm,
+            p.valor_faturado as valor,
+            1 as pedidos
+     FROM fato_pedido_comercial p
+     WHERE ${where} AND COALESCE(p.data_venda, p.data_cadastro) IS NOT NULL`,
+    params,
+  )
+
+  const metrosPorPedido = hasSignus
+    ? new Map(
+        runAll<{ pedidoNorm: string; metros: number }>(
+          `SELECT s.pedido_norm as pedidoNorm, COALESCE(SUM(s.metros), 0) as metros
+           FROM fato_tecido_signus s
+           WHERE s.is_baixa = 1
+             AND s.pedido_norm IN (
+               SELECT p.pedido_norm FROM fato_pedido_comercial p WHERE ${where}
+             )
+           GROUP BY s.pedido_norm`,
+          params,
+        ).map((row) => [row.pedidoNorm, row.metros]),
+      )
+    : new Map<string, number>()
+
+  const mesAgg = new Map<number, TopClienteMesRow>()
+  for (const row of porMesBase) {
+    if (row.mes < 1 || row.mes > 12) continue
+    const current = mesAgg.get(row.mes) ?? {
+      mes: row.mes,
+      pedidos: 0,
+      valor: 0,
+      metros: 0,
+    }
+    current.pedidos += 1
+    current.valor += row.valor
+    current.metros += metrosPorPedido.get(row.pedidoNorm) ?? 0
+    mesAgg.set(row.mes, current)
+  }
+  const porMes = [...mesAgg.values()].sort((a, b) => a.mes - b.mes)
+
+  const porCanal = runAll<{
+    nome: string
+    pedidos: number
+    valor: number
+  }>(
+    `SELECT COALESCE(p.canal, '(sem canal)') as nome,
+            COUNT(*) as pedidos,
+            COALESCE(SUM(p.valor_faturado), 0) as valor
+     FROM fato_pedido_comercial p
+     WHERE ${where}
+     GROUP BY p.canal
+     ORDER BY pedidos DESC`,
+    params,
+  ).map((row) => ({
+    ...row,
+    metros: 0,
+  }))
+
+  if (hasSignus) {
+    const metrosCanal = runAll<{ nome: string; metros: number }>(
+      `SELECT COALESCE(p.canal, '(sem canal)') as nome,
+              COALESCE(SUM(s.metros), 0) as metros
+       FROM fato_pedido_comercial p
+       JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1
+       WHERE ${where}
+       GROUP BY p.canal`,
+      params,
+    )
+    const canalMap = new Map(metrosCanal.map((row) => [row.nome, row.metros]))
+    for (const row of porCanal) {
+      row.metros = canalMap.get(row.nome) ?? 0
+    }
+  }
+
+  const metrosSignus = hasSignus
+    ? runGet<{ v: number }>(
+        `SELECT COALESCE(SUM(s.metros), 0) as v
+         FROM fato_tecido_signus s
+         JOIN fato_pedido_comercial p ON p.pedido_norm = s.pedido_norm
+         WHERE ${where} AND s.is_baixa = 1`,
+        params,
+      ).v
+    : 0
+
+  const pedidosComTecido = hasSignus
+    ? runGet<{ v: number }>(
+        `SELECT COUNT(DISTINCT p.pedido_norm) as v
+         FROM fato_pedido_comercial p
+         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1
+         WHERE ${where}`,
+        params,
+      ).v
+    : 0
+
+  const top5Pedidos = rankingFull
+    .slice(0, 5)
+    .reduce((sum, row) => sum + row.pedidos, 0)
+  const concentracaoTop5Pct = resumo.pedidos
+    ? (top5Pedidos / resumo.pedidos) * 100
+    : 0
+
+  const mesesComVenda = porMes.filter((row) => row.pedidos > 0).length
+  const mediaMensalValor = mesesComVenda
+    ? resumo.valorFaturado / mesesComVenda
+    : 0
+  const mediaMensalMetros = mesesComVenda ? metrosSignus / mesesComVenda : 0
+  const previsaoValorAno = mediaMensalValor * 12
+  const previsaoMetrosAno = mediaMensalMetros * 12
+
+  const options: FilterOptions = {
+    meses: porMes.map((row) => row.mes),
+    canais: (
+      runAll<{ canal: string }>(
+        `SELECT DISTINCT canal FROM fato_pedido_comercial
+         WHERE canal IS NOT NULL AND trim(canal) != ''
+         ORDER BY canal`,
+        {},
+      )
+    ).map((row) => row.canal),
+    clientes: rankingFull.slice(0, 80).map((row) => row.cliente),
+    responsaveis: [],
+    produtos: [],
+    oficinas: [],
+  }
+  if (!options.meses.length) {
+    options.meses = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  }
+
+  return {
+    loaded: true as const,
+    clientesAtivos: resumo.clientes,
+    pedidos: resumo.pedidos,
+    valorTotal: resumo.valorTotal,
+    valorFaturado: resumo.valorFaturado,
+    ticketMedio: resumo.pedidos ? resumo.valorFaturado / resumo.pedidos : 0,
+    metrosSignus,
+    pedidosComTecido,
+    coberturaTecidoPct: resumo.pedidos
+      ? (pedidosComTecido / resumo.pedidos) * 100
+      : 0,
+    concentracaoTop5Pct,
+    previsaoValorAno,
+    previsaoMetrosAno,
+    mediaMensalValor,
+    mediaMensalMetros,
+    mesesComVenda,
+    ranking: rankingFull,
+    tecidos,
+    porMes,
+    porCanal,
+    options,
   }
 })
 

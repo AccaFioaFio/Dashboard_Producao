@@ -207,6 +207,37 @@ export const fatoTecidoEstoque = sqliteTable('fato_tecido_estoque', {
   excelRow: integer('excel_row').notNull(),
 })
 
+export const fatoPedidoComercial = sqliteTable(
+  'fato_pedido_comercial',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    pedidoNorm: text('pedido_norm').notNull(),
+    pedidoRaw: text('pedido_raw').notNull(),
+    unidadeNegocio: text('unidade_negocio'),
+    canal: text('canal'),
+    parceiroCodigo: text('parceiro_codigo'),
+    parceiroCnpj: text('parceiro_cnpj'),
+    cliente: text('cliente'),
+    razaoSocial: text('razao_social'),
+    tipoComercializacao: text('tipo_comercializacao'),
+    status: text('status'),
+    valorTotal: real('valor_total').notNull().default(0),
+    valorFaturado: real('valor_faturado').notNull().default(0),
+    dataCadastro: text('data_cadastro'),
+    dataVenda: text('data_venda'),
+    dataFaturamento: text('data_faturamento'),
+    dataCancelamento: text('data_cancelamento'),
+    vendedor: text('vendedor'),
+    excelRow: integer('excel_row').notNull(),
+  },
+  (table) => [
+    index('idx_pedido_comercial_norm').on(table.pedidoNorm),
+    index('idx_pedido_comercial_cliente').on(table.cliente),
+    index('idx_pedido_comercial_venda').on(table.dataVenda),
+    index('idx_pedido_comercial_canal').on(table.canal),
+  ],
+)
+
 export const fatoAproveitamento = sqliteTable(
   'fato_aproveitamento',
   {
@@ -245,10 +276,12 @@ export const carga = sqliteTable('carga', {
   oficinasPath: text('oficinas_path').notNull(),
   signusPath: text('signus_path'),
   estoquePath: text('estoque_path'),
+  pedidosPath: text('pedidos_path'),
   corteLastWrite: text('corte_last_write'),
   oficinasLastWrite: text('oficinas_last_write'),
   signusLastWrite: text('signus_last_write'),
   estoqueLastWrite: text('estoque_last_write'),
+  pedidosLastWrite: text('pedidos_last_write'),
   pecasCortadas: real('pecas_cortadas'),
   pedidosCorte: integer('pedidos_corte'),
   pecasCosturaProd: real('pecas_costura_prod'),

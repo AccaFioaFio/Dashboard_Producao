@@ -150,6 +150,27 @@ export type EstoqueTecidoSaldo = {
   emMetros: boolean
 }
 
+export type PedidoComercial = {
+  excelRow: number
+  pedidoNorm: string
+  pedidoRaw: string
+  unidadeNegocio: string | null
+  canal: string | null
+  parceiroCodigo: string | null
+  parceiroCnpj: string | null
+  cliente: string | null
+  razaoSocial: string | null
+  tipoComercializacao: string | null
+  status: string | null
+  valorTotal: number
+  valorFaturado: number
+  dataCadastro: string | null
+  dataVenda: string | null
+  dataFaturamento: string | null
+  dataCancelamento: string | null
+  vendedor: string | null
+}
+
 export type AproveitamentoTipo = 'entrada' | 'saida'
 
 export type AproveitamentoMovimento = {
@@ -172,6 +193,7 @@ export type Snapshot = {
   oficinas: OficinaLote[]
   tecidosSignus: SignusTecidoMovimento[]
   tecidosEstoque: EstoqueTecidoSaldo[]
+  pedidosComerciais: PedidoComercial[]
   qualidade: QualidadeEvento[]
   aproveitamento: AproveitamentoMovimento[]
 }
@@ -219,8 +241,10 @@ export type SnapshotPayload = {
   oficinasPath: string
   signusPath: string
   estoquePath: string
+  pedidosPath: string
   corteLastWrite: string
   oficinasLastWrite: string
   signusLastWrite: string
   estoqueLastWrite: string
+  pedidosLastWrite: string | null
 }

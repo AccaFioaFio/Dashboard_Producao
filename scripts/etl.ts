@@ -5,6 +5,7 @@ import {
   corteXlsxPath,
   estoqueXlsxPath,
   oficinasXlsxPath,
+  pedidosXlsxPath,
   signusXlsPath,
 } from '../lib/paths'
 import { computeFunil, computeHeaderKpis, computeSerieMensal, checkInvariants } from '../lib/etl/kpis'
@@ -19,6 +20,7 @@ async function main() {
     const oficinas = oficinasXlsxPath()
     const signus = signusXlsPath()
     const estoque = estoqueXlsxPath()
+    const pedidos = pedidosXlsxPath()
     if (
       !existsSync(corte) ||
       !existsSync(oficinas) ||
@@ -27,7 +29,13 @@ async function main() {
     ) {
       throw new Error('Arquivos Excel não encontrados')
     }
-    const snapshot = await parseWorkbookFiles(corte, oficinas, signus, estoque)
+    const snapshot = await parseWorkbookFiles(
+      corte,
+      oficinas,
+      signus,
+      estoque,
+      existsSync(pedidos) ? pedidos : null,
+    )
     const header = computeHeaderKpis(snapshot)
     const funil = computeFunil(snapshot)
     const serie = computeSerieMensal(snapshot)

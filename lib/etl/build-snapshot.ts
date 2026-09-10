@@ -6,6 +6,7 @@ import {
 } from '@/lib/etl/parse'
 import { parseAproveitamento } from '@/lib/etl/parse-aproveitamento'
 import { parseEstoqueTecidos } from '@/lib/etl/parse-estoque'
+import { parsePedidosComerciais } from '@/lib/etl/parse-pedidos'
 import { parseSignusTecidos } from '@/lib/etl/parse-signus'
 import type { QualidadeEvento, Snapshot } from '@/lib/etl/types'
 import type * as XLSX from 'xlsx'
@@ -15,6 +16,7 @@ export function buildSnapshotFromWorkbooks(
   oficinasWb: XLSX.WorkBook,
   signusWb: XLSX.WorkBook,
   estoqueWb: XLSX.WorkBook,
+  pedidosWb: XLSX.WorkBook | null,
 ): Snapshot {
   const corte = parseCorte(corteWb)
   const aproveitamento = parseAproveitamento(corteWb)
@@ -23,6 +25,7 @@ export function buildSnapshotFromWorkbooks(
   const oficinas = parseOficinas(oficinasWb)
   const tecidosSignus = parseSignusTecidos(signusWb)
   const tecidosEstoque = parseEstoqueTecidos(estoqueWb)
+  const pedidosComerciais = pedidosWb ? parsePedidosComerciais(pedidosWb) : []
 
   const qualidade: QualidadeEvento[] = [
     ...corte.qualidade,
@@ -104,6 +107,7 @@ export function buildSnapshotFromWorkbooks(
     oficinas: oficinas.lotes,
     tecidosSignus,
     tecidosEstoque,
+    pedidosComerciais,
     qualidade,
     aproveitamento,
   }

@@ -9,16 +9,15 @@ export type SourceMtimes = {
   oficinas: string
   signus: string
   estoque: string
+  pedidos: string | null
 }
 
 export type PersistResult = { ok: true } | { ok: false; error: string }
 
 export function readSourceMtimes(): SourceMtimes {
   const paths = sourceFilePaths()
-  for (const [name, filePath] of Object.entries(paths) as [
-    keyof SourceFilePaths,
-    string,
-  ][]) {
+  for (const name of ['corte', 'oficinas', 'signus', 'estoque'] as const) {
+    const filePath = paths[name]
     if (!existsSync(filePath)) {
       throw new Error(`Arquivo de origem ausente (${name}): ${filePath}`)
     }
@@ -28,6 +27,9 @@ export function readSourceMtimes(): SourceMtimes {
     oficinas: statSync(paths.oficinas).mtime.toISOString(),
     signus: statSync(paths.signus).mtime.toISOString(),
     estoque: statSync(paths.estoque).mtime.toISOString(),
+    pedidos: existsSync(paths.pedidos)
+      ? statSync(paths.pedidos).mtime.toISOString()
+      : null,
   }
 }
 
@@ -36,7 +38,8 @@ export function sameMtimes(left: SourceMtimes, right: SourceMtimes) {
     left.corte === right.corte &&
     left.oficinas === right.oficinas &&
     left.signus === right.signus &&
-    left.estoque === right.estoque
+    left.estoque === right.estoque &&
+    left.pedidos === right.pedidos
   )
 }
 
@@ -45,12 +48,16 @@ export function lastOkCargaMtimes(): SourceMtimes | null {
     const row = getSqlite()
       .prepare(
         `SELECT corte_last_write as corte, oficinas_last_write as oficinas,
-                signus_last_write as signus, estoque_last_write as estoque
+                signus_last_write as signus, estoque_last_write as estoque,
+                pedidos_last_write as pedidos
          FROM carga WHERE ok = 1 ORDER BY id DESC LIMIT 1`,
       )
       .get() as SourceMtimes | undefined
     if (!row?.corte || !row.oficinas || !row.signus || !row.estoque) return null
-    return row
+    return {
+      ...row,
+      pedidos: row.pedidos ?? null,
+    }
   } catch {
     return null
   }
@@ -111,5 +118,6 @@ export function formatPublishLog(result: RefreshResult, paths: SourceFilePaths) 
     `  oficinas ${result.oficinasLastWrite}  ${paths.oficinas}`,
     `  signus   ${result.signusLastWrite}  ${paths.signus}`,
     `  estoque  ${result.estoqueLastWrite}  ${paths.estoque}`,
+    `  pedidos  ${result.pedidosLastWrite ?? '—'}  ${paths.pedidos}`,
   ].join('\n')
 }

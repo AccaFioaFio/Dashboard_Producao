@@ -21,12 +21,14 @@ const DEFAULT_CORTE = path.join(EXCEL_DIR, 'PROGRAMAÇÃO CORTE E COSTURA .xlsx'
 const DEFAULT_OFICINAS = path.join(EXCEL_DIR, 'Produção Oficinas.xlsx')
 const DEFAULT_SIGNUS = path.join(EXCEL_DIR, 'Movimentacao Tecidos.xlsx')
 const DEFAULT_ESTOQUE = path.join(EXCEL_DIR, 'Saldo do Estoque Geral.xlsx')
+const DEFAULT_PEDIDOS = path.join(EXCEL_DIR, 'Pedidos.xlsx')
 
 export type SourceFilePaths = {
   corte: string
   oficinas: string
   signus: string
   estoque: string
+  pedidos: string
 }
 
 function resolveSourcePath(configured: string | undefined, fallback: string) {
@@ -43,6 +45,7 @@ export function sourceFilePaths(): SourceFilePaths {
       DEFAULT_SIGNUS,
     ),
     estoque: resolveSourcePath(process.env.ESTOQUE_XLSX, DEFAULT_ESTOQUE),
+    pedidos: resolveSourcePath(process.env.PEDIDOS_XLSX, DEFAULT_PEDIDOS),
   }
 }
 
@@ -65,6 +68,10 @@ export function signusXlsPath() {
 
 export function estoqueXlsxPath() {
   return sourceFilePaths().estoque
+}
+
+export function pedidosXlsxPath() {
+  return sourceFilePaths().pedidos
 }
 
 export function cachePath(filename: string) {
