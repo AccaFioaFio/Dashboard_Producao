@@ -139,6 +139,17 @@ export type SignusTecidoMovimento = {
   tipoDocumentoSigla: string | null
 }
 
+export type EstoqueTecidoSaldo = {
+  excelRow: number
+  codProduto: string
+  nomeProduto: string | null
+  categoria: string | null
+  unidade: string | null
+  saldoAtual: number
+  saldoReservado: number
+  emMetros: boolean
+}
+
 export type AproveitamentoTipo = 'entrada' | 'saida'
 
 export type AproveitamentoMovimento = {
@@ -160,6 +171,7 @@ export type Snapshot = {
   revisao: RevisaoLancamento[]
   oficinas: OficinaLote[]
   tecidosSignus: SignusTecidoMovimento[]
+  tecidosEstoque: EstoqueTecidoSaldo[]
   qualidade: QualidadeEvento[]
   aproveitamento: AproveitamentoMovimento[]
 }
@@ -206,7 +218,9 @@ export type SnapshotPayload = {
   cortePath: string
   oficinasPath: string
   signusPath: string
+  estoquePath: string
   corteLastWrite: string
   oficinasLastWrite: string
   signusLastWrite: string
+  estoqueLastWrite: string
 }

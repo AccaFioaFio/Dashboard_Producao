@@ -10,13 +10,13 @@ Há um PDF irmão: `docs/Guia-publicador-outro-PC.pdf`.
 
 ## 1. Em uma frase
 
-O site na Vercel **não lê o Excel**. Um programa neste computador (o **publicador / vigia**) lê as três planilhas, monta um SQLite e envia para o Blob. Quem abre o dashboard só recarrega a página.
+O site na Vercel **não lê o Excel**. Um programa neste computador (o **publicador / vigia**) lê as quatro planilhas, monta um SQLite e envia para o Blob. Quem abre o dashboard só recarrega a página.
 
 ```
 Excel salvo neste PC  →  terminal com o vigia  →  Blob na Vercel  →  o site mostra os números
 ```
 
-## 2. As três peças (não misture)
+## 2. As quatro peças (não misture)
 
 | Peça | O que é | O que você faz |
 |---|---|---|
@@ -71,7 +71,8 @@ BLOB_READ_WRITE_TOKEN=vercel_blob_rw_COLE_AQUI
 BLOB_STORE_ID=store_qviaeEZFcFgswkZZ
 CORTE_XLSX="C:/Users/SEU_USUARIO/OneDrive/.../PROGRAMAÇÃO CORTE E COSTURA .xlsx"
 OFICINAS_XLSX="C:/Users/SEU_USUARIO/OneDrive/.../Produção Oficinas.xlsx"
-SIGNUS_XLS="C:/Users/SEU_USUARIO/OneDrive/.../Movimentação Tecidos.xls"
+SIGNUS_XLS="C:/Users/SEU_USUARIO/OneDrive/.../Movimentacao Tecidos.xlsx"
+ESTOQUE_XLSX="C:/Users/SEU_USUARIO/OneDrive/.../Saldo do Estoque Geral.xlsx"
 ```
 
 - Caminhos **absolutos deste PC**, com aspas e barras `/` (não `\`).
@@ -90,7 +91,7 @@ Não cole o token no chat nem no Git. Se vazar, gere outro no Blob e atualize o 
 
 ### Passo E — Ligar o vigia (o “ponto 4” do dia a dia)
 
-Isso **não** é deploy. É deixar um programa **acordado** o expediente todo, olhando as três planilhas.
+Isso **não** é deploy. É deixar um programa **acordado** o expediente todo, olhando as quatro planilhas.
 
 ```powershell
 npx tsx scripts/publish-carga.ts --watch
@@ -102,12 +103,13 @@ Tem que aparecer:
 watcher no ar. Ctrl+C para parar. Este PC precisa ficar ligado.
 corte    C:/Users/.../PROGRAMAÇÃO CORTE E COSTURA .xlsx
 oficinas C:/Users/.../Produção Oficinas.xlsx
-signus   C:/Users/.../Movimentação Tecidos.xls
+signus   C:/Users/.../Movimentacao Tecidos.xlsx
+estoque  C:/Users/.../Saldo do Estoque Geral.xlsx
 ```
 
 A janela fica **ocupada**: o prompt `PS C:\...>` **não** volta. Não feche, não dê Ctrl+C, não desligue o PC no meio do dia.
 
-Se os três caminhos ainda forem os do notebook, o `.env.local` deste PC está errado. Se o prompt voltar na hora, o vigia **morreu** — rode o mesmo comando de novo. **Não cole** a mensagem de erro de volta no terminal.
+Se os quatro caminhos ainda forem os do notebook, o `.env.local` deste PC está errado. Se o prompt voltar na hora, o vigia **morreu** — rode o mesmo comando de novo. **Não cole** a mensagem de erro de volta no terminal.
 
 Quem aponta no Excel só precisa **salvar**. Em até ~2 minutos, recarregue o site (Ctrl+Shift+R). Não escolha ficheiro no navegador.
 
@@ -144,7 +146,7 @@ Quando o utilizador pedir ajuda noutra máquina: ler este ficheiro.
 - Repo: `AccaFioaFio/Dashboard_Producao` · site: `https://dashboard-producao1.vercel.app`
 - Blob: `dashboard-producao1-blob`, private, região gru1. Path da carga: `dashboard/producao.sqlite` (`lib/cloud/constants.ts`).
 - Publicar neste PC: `npx tsx scripts/publish-carga.ts --watch` (preferir isto a `pnpm carga:watch` se o pnpm 11 disparar install). Env: `lib/load-env.ts` lê `.env` e `.env.local`.
-- Variáveis: `BLOB_READ_WRITE_TOKEN` (obrigatório para publicar), `BLOB_STORE_ID`, `CORTE_XLSX`, `OFICINAS_XLSX`, `SIGNUS_XLS` — `lib/paths.ts`. Relativos resolvem na raiz; OneDrive = absoluto com `/`.
+- Variáveis: `BLOB_READ_WRITE_TOKEN` (obrigatório para publicar), `BLOB_STORE_ID`, `CORTE_XLSX`, `OFICINAS_XLSX`, `SIGNUS_XLS`, `ESTOQUE_XLSX` — `lib/paths.ts`. Relativos resolvem na raiz; OneDrive = absoluto com `/`.
 - Site na Vercel: `ensureCloudDatabase` em `lib/cloud/carga.ts` (só se `VERCEL=1`). Precisa token ou OIDC + `BLOB_STORE_ID`. Caminhos `/var/task/...` no ecrã Configurações são o filesystem serverless, não a origem.
 - pnpm 11: `overrides.hono` está em `pnpm-workspace.yaml`, não no `package.json`.
 - Não reintroduzir upload de Excel como fluxo feliz. Não commitar `.env.local`. Um watcher por vez.

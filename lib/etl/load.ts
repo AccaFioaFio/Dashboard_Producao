@@ -14,9 +14,11 @@ export function replaceSnapshot(
     cortePath: string
     oficinasPath: string
     signusPath: string
+    estoquePath: string
     corteLastWrite: string
     oficinasLastWrite: string
     signusLastWrite: string
+    estoqueLastWrite: string
     header: HeaderKpis
   },
 ) {
@@ -25,6 +27,7 @@ export function replaceSnapshot(
     sqlite.exec(`
       DELETE FROM qualidade_evento;
       DELETE FROM fato_aproveitamento;
+      DELETE FROM fato_tecido_estoque;
       DELETE FROM fato_tecido_signus;
       DELETE FROM fato_oficinas;
       DELETE FROM fato_revisao;
@@ -272,6 +275,24 @@ export function replaceSnapshot(
       }
     }
 
+    const insertEstoque = sqlite.prepare(`
+      INSERT INTO fato_tecido_estoque (
+        cod_produto, nome_produto, categoria, unidade,
+        saldo_atual, saldo_reservado, em_metros, excel_row
+      ) VALUES (
+        @codProduto, @nomeProduto, @categoria, @unidade,
+        @saldoAtual, @saldoReservado, @emMetros, @excelRow
+      )
+    `)
+    for (const group of chunk(snapshot.tecidosEstoque)) {
+      for (const row of group) {
+        insertEstoque.run({
+          ...row,
+          emMetros: row.emMetros ? 1 : 0,
+        })
+      }
+    }
+
     const insertAproveitamento = sqlite.prepare(`
       INSERT INTO fato_aproveitamento (
         tipo, pedido, cliente, data, cod_produto, tecido, modelo, qtd, excel_row
@@ -292,21 +313,23 @@ export function replaceSnapshot(
     sqlite
       .prepare(
         `INSERT INTO carga (
-          lida_em, corte_path, oficinas_path, signus_path,
-          corte_last_write, oficinas_last_write, signus_last_write,
+          lida_em, corte_path, oficinas_path, signus_path, estoque_path,
+          corte_last_write, oficinas_last_write, signus_last_write, estoque_last_write,
           pecas_cortadas, pedidos_corte, pecas_costura_prod, pecas_revisao,
           wip_pedidos, wip_pecas, tecido_pedidos, tecido_pecas, oficinas_pendentes,
           ok, erro
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL)`,
       )
       .run(
         new Date().toISOString(),
         meta.cortePath,
         meta.oficinasPath,
         meta.signusPath,
+        meta.estoquePath,
         meta.corteLastWrite,
         meta.oficinasLastWrite,
         meta.signusLastWrite,
+        meta.estoqueLastWrite,
         meta.header.pecasCortadas,
         meta.header.pedidosCorte,
         meta.header.pecasCosturaProd,

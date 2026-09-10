@@ -8,7 +8,13 @@ import type {
   SerieMensal,
   SnapshotPayload,
 } from '@/lib/etl/types'
-import { IS_CLOUD, corteXlsxPath, oficinasXlsxPath, signusXlsPath } from '@/lib/paths'
+import {
+  IS_CLOUD,
+  corteXlsxPath,
+  estoqueXlsxPath,
+  oficinasXlsxPath,
+  signusXlsPath,
+} from '@/lib/paths'
 
 export type RefreshResult =
   | {
@@ -19,6 +25,7 @@ export type RefreshResult =
       corteLastWrite: string
       oficinasLastWrite: string
       signusLastWrite: string
+      estoqueLastWrite: string
       lidaEm: string
     }
   | {
@@ -45,9 +52,11 @@ export async function applySnapshotPayload(
     cortePath: payload.cortePath,
     oficinasPath: payload.oficinasPath,
     signusPath: payload.signusPath,
+    estoquePath: payload.estoquePath,
     corteLastWrite: payload.corteLastWrite,
     oficinasLastWrite: payload.oficinasLastWrite,
     signusLastWrite: payload.signusLastWrite,
+    estoqueLastWrite: payload.estoqueLastWrite,
     header,
   })
 
@@ -79,6 +88,7 @@ export async function applySnapshotPayload(
     corteLastWrite: payload.corteLastWrite,
     oficinasLastWrite: payload.oficinasLastWrite,
     signusLastWrite: payload.signusLastWrite,
+    estoqueLastWrite: payload.estoqueLastWrite,
     lidaEm: new Date().toISOString(),
   }
 }
@@ -87,10 +97,11 @@ export async function refreshFromExcel(): Promise<RefreshResult> {
   const cortePath = corteXlsxPath()
   const oficinasPath = oficinasXlsxPath()
   const signusPath = signusXlsPath()
+  const estoquePath = estoqueXlsxPath()
 
   let copied: ReturnType<typeof copySources>
   try {
-    copied = copySources(cortePath, oficinasPath, signusPath)
+    copied = copySources(cortePath, oficinasPath, signusPath, estoquePath)
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Falha ao copiar os arquivos Excel'
@@ -105,15 +116,18 @@ export async function refreshFromExcel(): Promise<RefreshResult> {
       copied.corteCache,
       copied.oficinasCache,
       copied.signusCache,
+      copied.estoqueCache,
     )
     return await applySnapshotPayload({
       snapshot,
       cortePath,
       oficinasPath,
       signusPath,
+      estoquePath,
       corteLastWrite: copied.corteLastWrite,
       oficinasLastWrite: copied.oficinasLastWrite,
       signusLastWrite: copied.signusLastWrite,
+      estoqueLastWrite: copied.estoqueLastWrite,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

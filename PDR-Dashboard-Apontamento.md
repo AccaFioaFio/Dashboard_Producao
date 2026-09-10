@@ -13,7 +13,7 @@
 | Idem, aba oculta **RELATORIO COSTURA** | `RELATORIO_COSTURA` | `Data Produção` ∈ 2026 |
 | Idem, aba oculta **RELATORIO REVISÃO** | `RELATORIO_REVISÃO` | `Data Produção` ∈ 2026 |
 | `Arquivos do Excel/Produção Oficinas.xlsx` | `TAB_OFICINAS` | `Data Envio` ∈ 2026 |
-| `Arquivos do Excel/Movimentação Tecidos.xls` | `FatoTecidoSignus` (aba Movimentação Tecidos) | `Data de movimentação` ∈ 2026 e Linha = TECIDO |
+| `Arquivos do Excel/Movimentacao Tecidos.xlsx` | `FatoTecidoSignus` (aba Movimentacao Tecidos) | `Data de movimentacao` ∈ 2026; tecido = Linha TECIDO (layout antigo) ou MATÉRIA PRIMA com nome TECIDO / categoria TECIDO |
 
 Os arquivos ficam na pasta `Arquivos do Excel` na raiz do projeto e mudam o dia inteiro. O usuário entra e clica em **Atualizar dados** (reflash). Depois do refresh, o recorte continua sendo só 2026.
 
@@ -173,7 +173,7 @@ Filtro de ano na transformação, não só no visual. Linha 2024/2025 nem entra 
 
 ### 3.1 Signus — baixa real de tecido
 
-O `.xls` mistura produto acabado, etiqueta e matéria-prima. **Só Linha = TECIDO entra no fato.** Inventário, transferência, compra e amostra ficam classificados, mas **não** somam o KPI de baixa.
+O `.xlsx` (e o `.xls` antigo) mistura produto acabado, etiqueta e matéria-prima. **Só tecido entra no fato** (Linha = TECIDO no layout antigo; no layout novo: categoria TECIDO ou MATÉRIA PRIMA com nome TECIDO). Inventário, transferência, compra e amostra ficam classificados, mas **não** somam o KPI de baixa.
 
 | Tipo no Signus | Papel no dashboard |
 |---|---|
@@ -246,7 +246,7 @@ O recorte **ano = 2026** e as regras do §2 e §3.1 valem em qualquer transporte
 
 O leitor **não** envia planilha e **não** depende do botão Atualizar. Publicação: processo neste PC observa os arquivos, copia para cache (Excel aberto não lê in-place), valida invariantes e publica a carga pronta na nuvem. Falha mantém a carga anterior. Abas ocultas de costura/revisão e Signus entram na leitura.
 
-Caminhos: origem real dos três arquivos (`CORTE_XLSX`, `OFICINAS_XLSX`, `SIGNUS_XLS`). Blob Store na Vercel (private) para o site **consumir** a carga já pronta. Cadastro completo de clientes e **saldo atual** de estoque de tecido fora da v1.
+Caminhos: origem real dos quatro arquivos (`CORTE_XLSX`, `OFICINAS_XLSX`, `SIGNUS_XLS`, `ESTOQUE_XLSX`). Blob Store na Vercel (private) para o site **consumir** a carga já pronta. Cadastro completo de clientes fora da v1.
 
 ---
 

@@ -17,6 +17,7 @@ import {
 import { parseFilters } from '@/lib/filters'
 import {
   explainAguardandoTecido,
+  explainEstoqueSemCorte,
   explainSignusSemCorte,
   explainTecidoCanal,
   explainTecidoCruzado,
@@ -49,7 +50,7 @@ export default async function TecidosPage({
   return (
     <PageShell
       title="Tecidos"
-      description="Consumo apontado no Corte versus baixa real no Signus. Só Linha = TECIDO entra no fato Signus; a baixa oficial é Produção (insumos) + SAIDA FF/AC/TC."
+      description="Consumo no Corte, baixa no Signus e saldo atual do Estoque Geral. Join pelo código do tecido. Saldo é snapshot da carga (não filtra por mês)."
       actions={<TecidosValoresButton filters={filters} />}
     >
       <FilterBar
@@ -77,6 +78,18 @@ export default async function TecidosPage({
           value={formatMeters(delta)}
           hint={`${formatNumber(cobertura, 1)}% da programação baixada no Signus`}
           tone="amber"
+        />
+        <KpiCard
+          label="Saldo atual"
+          value={formatMeters(tecidos.saldoAtualMetros)}
+          hint={`${formatInt(tecidos.estoqueCodigos)} códigos · só unidade metro`}
+          tone="teal"
+        />
+        <KpiCard
+          label="Saldo reservado"
+          value={formatMeters(tecidos.saldoReservadoMetros)}
+          hint="Soma do Saldo reservado (metros) no Estoque Geral"
+          tone="magenta"
         />
         <KpiCard
           label="Economia de tecido"
@@ -131,7 +144,7 @@ export default async function TecidosPage({
       <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Tecidos mais usados</h2>
         <p className="text-xs text-muted-foreground">
-          Ranking do Corte 2026. A coluna Signus é a baixa real do mesmo código de produto.
+          Ranking do Corte 2026. Signus = baixa; Saldo = Estoque Geral no mesmo código.
         </p>
         <SimpleTable
           columns={[
@@ -139,6 +152,8 @@ export default async function TecidosPage({
             { key: 'corte', label: 'Corte', numeric: true },
             { key: 'share', label: '% Corte', numeric: true },
             { key: 'signus', label: 'Signus', numeric: true },
+            { key: 'saldo', label: 'Saldo', numeric: true },
+            { key: 'reservado', label: 'Reserv.', numeric: true },
             { key: 'economia', label: 'Economia', numeric: true },
             { key: 'pedidos', label: 'Pedidos', numeric: true },
           ]}
@@ -150,12 +165,16 @@ export default async function TecidosPage({
                 ? `${formatNumber((row.metros / metrosCorte) * 100, 1)}%`
                 : '—',
             signus: formatMeters(row.signusMetros),
+            saldo: formatMeters(row.saldoAtual),
+            reservado: formatMeters(row.saldoReservado),
             economia: formatMeters(row.economia, row.economia >= 10 ? 0 : 1),
             pedidos: formatInt(row.pedidos),
             hint: explainTecidoRanking({
               tecido: formatTecido(row.cod, row.nome),
               metros: row.metros,
               signusMetros: row.signusMetros,
+              saldoAtual: row.saldoAtual,
+              saldoReservado: row.saldoReservado,
               economia: row.economia,
               pedidos: row.pedidos,
               totalCorte: metrosCorte,
@@ -214,27 +233,32 @@ export default async function TecidosPage({
       </div>
 
       <section className="flex min-w-0 flex-col gap-2">
-        <h2 className="text-sm font-medium">Corte × baixa Signus</h2>
+        <h2 className="text-sm font-medium">Corte × Signus × Estoque</h2>
         <p className="text-xs text-muted-foreground">
-          Cruza COD TECIDO da programação com Código produto do Signus. Orig. Mov. no
-          formato PED 23456 liga o movimento ao pedido.
+          COD TECIDO da programação × Código produto (Signus e Saldo do Estoque Geral).
         </p>
         <SimpleTable
           columns={[
             { key: 'tecido', label: 'Tecido', wrap: true },
             { key: 'corte', label: 'Corte', numeric: true },
             { key: 'signus', label: 'Signus', numeric: true },
-            { key: 'delta', label: 'Delta', numeric: true },
+            { key: 'saldo', label: 'Saldo', numeric: true },
+            { key: 'reservado', label: 'Reserv.', numeric: true },
+            { key: 'delta', label: 'Delta C−S', numeric: true },
           ]}
           rows={tecidos.cruzados.map((row) => ({
             tecido: formatTecido(row.cod, row.nome),
             corte: formatMeters(row.corteMetros),
             signus: formatMeters(row.signusMetros),
+            saldo: formatMeters(row.saldoAtual),
+            reservado: formatMeters(row.saldoReservado),
             delta: formatMeters(row.corteMetros - row.signusMetros),
             hint: explainTecidoCruzado({
               tecido: formatTecido(row.cod, row.nome),
               corteMetros: row.corteMetros,
               signusMetros: row.signusMetros,
+              saldoAtual: row.saldoAtual,
+              saldoReservado: row.saldoReservado,
               cortePedidos: row.cortePedidos,
               signusPedidos: row.signusPedidos,
             }),
@@ -287,9 +311,34 @@ export default async function TecidosPage({
       </div>
 
       <section className="flex min-w-0 flex-col gap-2">
+        <h2 className="text-sm font-medium">Estoque com saldo e sem código no Corte</h2>
+        <p className="text-xs text-muted-foreground">
+          Códigos em metro com saldo atual ≠ 0 no Estoque Geral e sem COD TECIDO no Corte.
+        </p>
+        <SimpleTable
+          columns={[
+            { key: 'tecido', label: 'Tecido', wrap: true },
+            { key: 'saldo', label: 'Saldo', numeric: true },
+            { key: 'reservado', label: 'Reserv.', numeric: true },
+          ]}
+          rows={tecidos.estoqueSemCorte.map((row) => ({
+            tecido: formatTecido(row.cod, row.nome),
+            saldo: formatMeters(row.saldoAtual),
+            reservado: formatMeters(row.saldoReservado),
+            hint: explainEstoqueSemCorte({
+              tecido: formatTecido(row.cod, row.nome),
+              saldoAtual: row.saldoAtual,
+              saldoReservado: row.saldoReservado,
+            }),
+          }))}
+          empty="Todo saldo em metro tem código no Corte"
+        />
+      </section>
+
+      <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Aguardando tecido para produção</h2>
         <p className="text-xs text-muted-foreground">
-          Status AGUARDANDO TECIDO na programação de Corte: pedido, tecido e metros parados.
+          Status AGUARDANDO TECIDO na programação de Corte: pedido, tecido, metros e saldo.
         </p>
         <SimpleTable
           columns={[
@@ -297,6 +346,8 @@ export default async function TecidosPage({
             { key: 'cliente', label: 'Cliente' },
             { key: 'tecido', label: 'Tecido', wrap: true },
             { key: 'metros', label: 'Metros', numeric: true },
+            { key: 'saldo', label: 'Saldo', numeric: true },
+            { key: 'reservado', label: 'Reserv.', numeric: true },
             { key: 'pecas', label: 'Peças', numeric: true },
             { key: 'status', label: 'Status' },
           ]}
@@ -305,6 +356,8 @@ export default async function TecidosPage({
             cliente: row.cliente,
             tecido: formatTecido(row.codTecido, row.tecido),
             metros: formatNumber(row.metros, row.metros >= 100 ? 0 : 1),
+            saldo: formatMeters(row.saldoAtual),
+            reservado: formatMeters(row.saldoReservado),
             pecas: formatInt(row.pecas),
             status: row.statusVigente ?? 'AGUARDANDO TECIDO',
             hint: explainAguardandoTecido({

@@ -196,6 +196,17 @@ export const fatoTecidoSignus = sqliteTable(
   ],
 )
 
+export const fatoTecidoEstoque = sqliteTable('fato_tecido_estoque', {
+  codProduto: text('cod_produto').primaryKey(),
+  nomeProduto: text('nome_produto'),
+  categoria: text('categoria'),
+  unidade: text('unidade'),
+  saldoAtual: real('saldo_atual').notNull().default(0),
+  saldoReservado: real('saldo_reservado').notNull().default(0),
+  emMetros: integer('em_metros', { mode: 'boolean' }).notNull().default(false),
+  excelRow: integer('excel_row').notNull(),
+})
+
 export const fatoAproveitamento = sqliteTable(
   'fato_aproveitamento',
   {
@@ -233,9 +244,11 @@ export const carga = sqliteTable('carga', {
   cortePath: text('corte_path').notNull(),
   oficinasPath: text('oficinas_path').notNull(),
   signusPath: text('signus_path'),
+  estoquePath: text('estoque_path'),
   corteLastWrite: text('corte_last_write'),
   oficinasLastWrite: text('oficinas_last_write'),
   signusLastWrite: text('signus_last_write'),
+  estoqueLastWrite: text('estoque_last_write'),
   pecasCortadas: real('pecas_cortadas'),
   pedidosCorte: integer('pedidos_corte'),
   pecasCosturaProd: real('pecas_costura_prod'),

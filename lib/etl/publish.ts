@@ -8,6 +8,7 @@ export type SourceMtimes = {
   corte: string
   oficinas: string
   signus: string
+  estoque: string
 }
 
 export type PersistResult = { ok: true } | { ok: false; error: string }
@@ -26,6 +27,7 @@ export function readSourceMtimes(): SourceMtimes {
     corte: statSync(paths.corte).mtime.toISOString(),
     oficinas: statSync(paths.oficinas).mtime.toISOString(),
     signus: statSync(paths.signus).mtime.toISOString(),
+    estoque: statSync(paths.estoque).mtime.toISOString(),
   }
 }
 
@@ -33,7 +35,8 @@ export function sameMtimes(left: SourceMtimes, right: SourceMtimes) {
   return (
     left.corte === right.corte &&
     left.oficinas === right.oficinas &&
-    left.signus === right.signus
+    left.signus === right.signus &&
+    left.estoque === right.estoque
   )
 }
 
@@ -41,11 +44,12 @@ export function lastOkCargaMtimes(): SourceMtimes | null {
   try {
     const row = getSqlite()
       .prepare(
-        `SELECT corte_last_write as corte, oficinas_last_write as oficinas, signus_last_write as signus
+        `SELECT corte_last_write as corte, oficinas_last_write as oficinas,
+                signus_last_write as signus, estoque_last_write as estoque
          FROM carga WHERE ok = 1 ORDER BY id DESC LIMIT 1`,
       )
       .get() as SourceMtimes | undefined
-    if (!row?.corte || !row.oficinas || !row.signus) return null
+    if (!row?.corte || !row.oficinas || !row.signus || !row.estoque) return null
     return row
   } catch {
     return null
@@ -106,5 +110,6 @@ export function formatPublishLog(result: RefreshResult, paths: SourceFilePaths) 
     `  corte    ${result.corteLastWrite}  ${paths.corte}`,
     `  oficinas ${result.oficinasLastWrite}  ${paths.oficinas}`,
     `  signus   ${result.signusLastWrite}  ${paths.signus}`,
+    `  estoque  ${result.estoqueLastWrite}  ${paths.estoque}`,
   ].join('\n')
 }

@@ -107,9 +107,9 @@ Três arquivos, os mesmos de sempre:
 
 - Programação corte e costura (`.xlsx`) — abas CORTE, RELATORIO COSTURA, RELATORIO REVISÃO
 - Produção oficinas (`.xlsx`) — aba TABELA OFICINAS
-- Movimentação tecidos Signus (`.xls`)
+- Movimentação tecidos Signus (`.xlsx`)
 
-Override por `CORTE_XLSX`, `OFICINAS_XLSX`, `SIGNUS_XLS`.  
+Override por `CORTE_XLSX`, `OFICINAS_XLSX`, `SIGNUS_XLS` / `SIGNUS_XLSX`, `ESTOQUE_XLSX`.  
 Recorte analítico: ano = 2026, regras em `PDR-Dashboard-Apontamento.md`.
 
 ---

@@ -1,7 +1,12 @@
 import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
 import { getLatestCarga } from '@/data/dashboard'
-import { corteXlsxPath, oficinasXlsxPath, signusXlsPath } from '@/lib/paths'
+import {
+  corteXlsxPath,
+  estoqueXlsxPath,
+  oficinasXlsxPath,
+  signusXlsPath,
+} from '@/lib/paths'
 import { formatDateTime } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
@@ -23,8 +28,10 @@ export default async function ConfiguracoesPage() {
         <span className="font-mono text-xs">.env</span> local (o mesmo Blob da
         Vercel) e, se a fábrica grava no OneDrive, os caminhos absolutos{' '}
         <span className="font-mono text-xs">CORTE_XLSX</span>,{' '}
-        <span className="font-mono text-xs">OFICINAS_XLSX</span> e{' '}
-        <span className="font-mono text-xs">SIGNUS_XLS</span>.
+        <span className="font-mono text-xs">OFICINAS_XLSX</span>,{' '}
+        <span className="font-mono text-xs">SIGNUS_XLS</span> (ou{' '}
+        <span className="font-mono text-xs">SIGNUS_XLSX</span>) e{' '}
+        <span className="font-mono text-xs">ESTOQUE_XLSX</span>.
       </p>
       <dl className="card-surface grid gap-3 p-3 text-sm sm:grid-cols-2">
         <div className="flex flex-col gap-1 sm:col-span-2">
@@ -38,6 +45,10 @@ export default async function ConfiguracoesPage() {
         <div className="flex flex-col gap-1 sm:col-span-2">
           <dt className="text-xs text-muted-foreground">SIGNUS_XLS</dt>
           <dd className="break-all font-mono text-xs">{signusXlsPath()}</dd>
+        </div>
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <dt className="text-xs text-muted-foreground">ESTOQUE_XLSX</dt>
+          <dd className="break-all font-mono text-xs">{estoqueXlsxPath()}</dd>
         </div>
         <div className="flex flex-col gap-1">
           <dt className="text-xs text-muted-foreground">Última leitura</dt>
@@ -58,6 +69,10 @@ export default async function ConfiguracoesPage() {
         <div className="flex flex-col gap-1 sm:col-span-2">
           <dt className="text-xs text-muted-foreground">LastWriteTime Signus</dt>
           <dd>{formatDateTime(carga?.signusLastWrite)}</dd>
+        </div>
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <dt className="text-xs text-muted-foreground">LastWriteTime Estoque</dt>
+          <dd>{formatDateTime(carga?.estoqueLastWrite)}</dd>
         </div>
       </dl>
     </PageShell>

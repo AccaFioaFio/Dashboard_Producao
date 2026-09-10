@@ -17,9 +17,11 @@ export type CargaInfo = {
   cortePath: string
   oficinasPath: string
   signusPath: string | null
+  estoquePath: string | null
   corteLastWrite: string | null
   oficinasLastWrite: string | null
   signusLastWrite: string | null
+  estoqueLastWrite: string | null
   pecasCortadas: number | null
   pedidosCorte: number | null
   pecasCosturaProd: number | null
@@ -277,9 +279,9 @@ export const getLatestCarga = cache(async (): Promise<CargaInfo | null> => {
   const row = sqlite()
     .prepare(
       `SELECT id, lida_em as lidaEm, corte_path as cortePath, oficinas_path as oficinasPath,
-              signus_path as signusPath,
+              signus_path as signusPath, estoque_path as estoquePath,
               corte_last_write as corteLastWrite, oficinas_last_write as oficinasLastWrite,
-              signus_last_write as signusLastWrite,
+              signus_last_write as signusLastWrite, estoque_last_write as estoqueLastWrite,
               pecas_cortadas as pecasCortadas, pedidos_corte as pedidosCorte,
               pecas_costura_prod as pecasCosturaProd, pecas_revisao as pecasRevisao,
               wip_pedidos as wipPedidos, wip_pecas as wipPecas,
@@ -644,6 +646,8 @@ export type TecidoCruzadoRow = {
   nome: string | null
   corteMetros: number
   signusMetros: number
+  saldoAtual: number
+  saldoReservado: number
   cortePedidos: number
   signusPedidos: number
 }
@@ -670,6 +674,15 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
       )
       .get(),
   )
+  const hasEstoque = Boolean(
+    db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'fato_tecido_estoque'`,
+      )
+      .get(),
+  )
+  const estoqueJoin = (codExpr: string) =>
+    `replace(trim(e.cod_produto), ' ', '') = replace(trim(COALESCE(${codExpr}, '')), ' ', '')`
   const metrosCorte = runGet<{ v: number }>(
     `SELECT COALESCE(SUM(p.metros), 0) as v FROM fato_corte_pedido p WHERE ${corteWhere}`,
     params,
@@ -714,6 +727,26 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
         params,
       ).v
     : 0
+  const saldoAtualMetros = hasEstoque
+    ? runGet<{ v: number }>(
+        `SELECT COALESCE(SUM(e.saldo_atual), 0) as v FROM fato_tecido_estoque e
+         WHERE e.em_metros = 1`,
+        {},
+      ).v
+    : 0
+  const saldoReservadoMetros = hasEstoque
+    ? runGet<{ v: number }>(
+        `SELECT COALESCE(SUM(e.saldo_reservado), 0) as v FROM fato_tecido_estoque e
+         WHERE e.em_metros = 1`,
+        {},
+      ).v
+    : 0
+  const estoqueCodigos = hasEstoque
+    ? runGet<{ v: number }>(
+        `SELECT COUNT(*) as v FROM fato_tecido_estoque`,
+        {},
+      ).v
+    : 0
   const aguardando = runGet<{ pedidos: number; pecas: number; metros: number }>(
     `SELECT (
               SELECT COUNT(*) FROM fato_corte_linha h
@@ -755,7 +788,20 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
   for (const row of signusMes) months[row.mes - 1].signus = row.metros
   const porMes = months.filter((row) => row.corte || row.signus)
 
-  const porTecido = runAll<TecidoUsoRow & { signusMetros: number }>(
+  const estoqueSelect = hasEstoque
+    ? `COALESCE((
+                SELECT e.saldo_atual FROM fato_tecido_estoque e
+                WHERE ${estoqueJoin('l.cod_tecido')}
+              ), 0) as saldoAtual,
+              COALESCE((
+                SELECT e.saldo_reservado FROM fato_tecido_estoque e
+                WHERE ${estoqueJoin('l.cod_tecido')}
+              ), 0) as saldoReservado`
+    : `0 as saldoAtual, 0 as saldoReservado`
+
+  const porTecido = runAll<
+    TecidoUsoRow & { signusMetros: number; saldoAtual: number; saldoReservado: number }
+  >(
     hasSignus
       ? `SELECT COALESCE(NULLIF(trim(l.cod_tecido), ''), '(sem código)') as cod,
               MAX(l.tecido) as nome,
@@ -766,7 +812,8 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
                 SELECT SUM(s.metros) FROM fato_tecido_signus s
                 WHERE ${signusWhere} AND s.is_baixa = 1
                   AND replace(trim(s.cod_produto), ' ', '') = replace(trim(COALESCE(l.cod_tecido, '')), ' ', '')
-              ), 0) as signusMetros
+              ), 0) as signusMetros,
+              ${estoqueSelect}
        FROM fato_corte_linha l
        LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
        WHERE ${corteWhere} AND l.tecido IS NOT NULL AND trim(l.tecido) != ''
@@ -778,7 +825,8 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
               COALESCE(SUM(l.metros), 0) as metros,
               COALESCE(SUM(l.economia), 0) as economia,
               COUNT(DISTINCT l.pedido_norm) as pedidos,
-              0 as signusMetros
+              0 as signusMetros,
+              ${estoqueSelect}
        FROM fato_corte_linha l
        LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
        WHERE ${corteWhere} AND l.tecido IS NOT NULL AND trim(l.tecido) != ''
@@ -816,7 +864,8 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
                 SELECT COUNT(DISTINCT s.pedido_norm) FROM fato_tecido_signus s
                 WHERE ${signusWhere} AND s.is_baixa = 1
                   AND replace(trim(s.cod_produto), ' ', '') = replace(trim(COALESCE(l.cod_tecido, '')), ' ', '')
-              ), 0) as signusPedidos
+              ), 0) as signusPedidos,
+              ${estoqueSelect}
        FROM fato_corte_linha l
        LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
        WHERE ${corteWhere} AND l.tecido IS NOT NULL AND trim(l.tecido) != ''
@@ -828,7 +877,8 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
               COALESCE(SUM(l.metros), 0) as corteMetros,
               COUNT(DISTINCT l.pedido_norm) as cortePedidos,
               0 as signusMetros,
-              0 as signusPedidos
+              0 as signusPedidos,
+              ${estoqueSelect}
        FROM fato_corte_linha l
        LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
        WHERE ${corteWhere} AND l.tecido IS NOT NULL AND trim(l.tecido) != ''
@@ -861,7 +911,28 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
       )
     : []
 
-  const tecido = runAll<TecidoPendenteRow>(
+  const estoqueSemCorte = hasEstoque
+    ? runAll<{
+        cod: string
+        nome: string | null
+        saldoAtual: number
+        saldoReservado: number
+      }>(
+        `SELECT e.cod_produto as cod, e.nome_produto as nome,
+              e.saldo_atual as saldoAtual, e.saldo_reservado as saldoReservado
+         FROM fato_tecido_estoque e
+         WHERE e.em_metros = 1 AND e.saldo_atual != 0
+           AND NOT EXISTS (
+             SELECT 1 FROM fato_corte_linha l
+             WHERE replace(trim(l.cod_tecido), ' ', '') = replace(trim(e.cod_produto), ' ', '')
+           )
+         ORDER BY e.saldo_atual DESC
+         LIMIT 12`,
+        {},
+      )
+    : []
+
+  const tecido = runAll<TecidoPendenteRow & { saldoAtual: number; saldoReservado: number }>(
     `SELECT h.pedido_norm as pedidoNorm, h.data, h.cliente,
             h.status as statusVigente,
             COALESCE(SUM(l.qtd_pecas), 0) as pecas,
@@ -870,10 +941,18 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
             MAX(l.cod_tecido) as codTecido,
             h.responsavel as responsavel,
             ${hasObservacaoColumn() ? 'MAX(p.observacao)' : 'NULL'} as observacao,
-            h.excel_row as excelRow
+            h.excel_row as excelRow,
+            ${hasEstoque ? 'COALESCE(MAX(e.saldo_atual), 0)' : '0'} as saldoAtual,
+            ${hasEstoque ? 'COALESCE(MAX(e.saldo_reservado), 0)' : '0'} as saldoReservado
      FROM fato_corte_linha h
      JOIN fato_corte_linha l ON ${ocJoinLinhas('h', 'l')}
      LEFT JOIN fato_corte_pedido p ON p.pedido_norm = h.pedido_norm
+     ${
+       hasEstoque
+         ? `LEFT JOIN fato_tecido_estoque e
+            ON replace(trim(e.cod_produto), ' ', '') = replace(trim(COALESCE(l.cod_tecido, '')), ' ', '')`
+         : ''
+     }
      WHERE ${corteWhere} AND h.is_header = 1 AND h.status = 'AGUARDANDO TECIDO'
      GROUP BY h.excel_row, COALESCE(l.cod_tecido, l.tecido)
      ORDER BY metros DESC`,
@@ -901,6 +980,9 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
     pedidosComBaixa,
     baixasSemPedido,
     retornoCorte,
+    saldoAtualMetros,
+    saldoReservadoMetros,
+    estoqueCodigos,
     tecidoPedidos: aguardando.pedidos,
     tecidoPecas: aguardando.pecas,
     tecidoMetros: aguardando.metros,
@@ -909,6 +991,7 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
     porTipo,
     cruzados,
     signusSemCorte,
+    estoqueSemCorte,
     tecido,
     porCanalSignus,
   }

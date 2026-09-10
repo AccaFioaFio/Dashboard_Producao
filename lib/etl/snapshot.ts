@@ -8,31 +8,38 @@ export type CopiedSources = {
   corteCache: string
   oficinasCache: string
   signusCache: string
+  estoqueCache: string
   corteLastWrite: string
   oficinasLastWrite: string
   signusLastWrite: string
+  estoqueLastWrite: string
 }
 
 export function copySources(
   cortePath: string,
   oficinasPath: string,
   signusPath: string,
+  estoquePath: string,
 ): CopiedSources {
   ensureDataDirs()
   mkdirSync(cachePath('.'), { recursive: true })
   const corteCache = cachePath('corte.xlsx')
   const oficinasCache = cachePath('oficinas.xlsx')
-  const signusCache = cachePath('signus-tecidos.xls')
+  const signusCache = cachePath('signus-tecidos.xlsx')
+  const estoqueCache = cachePath('estoque-geral.xlsx')
   copyFileSync(cortePath, corteCache)
   copyFileSync(oficinasPath, oficinasCache)
   copyFileSync(signusPath, signusCache)
+  copyFileSync(estoquePath, estoqueCache)
   return {
     corteCache,
     oficinasCache,
     signusCache,
+    estoqueCache,
     corteLastWrite: statSync(cortePath).mtime.toISOString(),
     oficinasLastWrite: statSync(oficinasPath).mtime.toISOString(),
     signusLastWrite: statSync(signusPath).mtime.toISOString(),
+    estoqueLastWrite: statSync(estoquePath).mtime.toISOString(),
   }
 }
 
@@ -40,10 +47,12 @@ export async function parseWorkbookFiles(
   corteFile: string,
   oficinasFile: string,
   signusFile: string,
+  estoqueFile: string,
 ): Promise<Snapshot> {
   return buildSnapshotFromWorkbooks(
     readWorkbook(corteFile),
     readWorkbook(oficinasFile),
     readWorkbook(signusFile),
+    readWorkbook(estoqueFile),
   )
 }

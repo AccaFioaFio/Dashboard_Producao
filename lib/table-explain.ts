@@ -69,6 +69,8 @@ export function explainAguardandoTecido(row: {
   tecido: string
   metros: number
   pecas: number
+  saldoAtual?: number
+  saldoReservado?: number
   responsavel?: string | null
   statusVigente?: string | null
   observacao?: string | null
@@ -78,6 +80,9 @@ export function explainAguardandoTecido(row: {
       pedidoHead(row.pedidoNorm, [row.cliente, row.responsavel]),
       `${row.statusVigente ?? 'AGUARDANDO TECIDO'} · ${row.tecido}.`,
       `${formatMeters(row.metros, row.metros >= 10 ? 0 : 1)} apontados no Corte · ${formatInt(row.pecas)} peças.`,
+      row.saldoAtual != null
+        ? `Saldo atual ${formatMeters(row.saldoAtual)} · reservado ${formatMeters(row.saldoReservado ?? 0)}.`
+        : null,
       row.data ? `Data do pedido ${formatDate(row.data)}.` : null,
     ],
     row.observacao,
@@ -160,6 +165,8 @@ export function explainTecidoRanking(row: {
   tecido: string
   metros: number
   signusMetros: number
+  saldoAtual?: number
+  saldoReservado?: number
   economia: number
   pedidos: number
   totalCorte: number
@@ -169,7 +176,10 @@ export function explainTecidoRanking(row: {
   return hintLines([
     `${row.tecido}: Corte ${formatMeters(row.metros)}${share ? ` (${share} do consumo)` : ''} em ${formatInt(row.pedidos)} pedido${row.pedidos === 1 ? '' : 's'}.`,
     `Baixa Signus ${formatMeters(row.signusMetros)} · delta Corte − Signus ${formatMeters(delta)} · economia ${formatMeters(row.economia, row.economia >= 10 ? 0 : 1)}.`,
-    'Corte = MTS da programação. Signus = baixa real (produção + SAIDA FF/AC/TC).',
+    row.saldoAtual != null
+      ? `Saldo atual ${formatMeters(row.saldoAtual)} · reservado ${formatMeters(row.saldoReservado ?? 0)}.`
+      : null,
+    'Corte = MTS da programação. Signus = baixa real. Estoque = Saldo do Estoque Geral (snapshot).',
   ])
 }
 
@@ -202,16 +212,21 @@ export function explainTecidoCruzado(row: {
   tecido: string
   corteMetros: number
   signusMetros: number
+  saldoAtual?: number
+  saldoReservado?: number
   cortePedidos?: number
   signusPedidos?: number
 }) {
   const delta = row.corteMetros - row.signusMetros
   return hintLines([
     `${row.tecido}: programação ${formatMeters(row.corteMetros)} vs baixa ${formatMeters(row.signusMetros)} (delta ${formatMeters(delta)}).`,
+    row.saldoAtual != null
+      ? `Saldo atual ${formatMeters(row.saldoAtual)} · reservado ${formatMeters(row.saldoReservado ?? 0)}.`
+      : null,
     row.cortePedidos != null
       ? `Pedidos no Corte ${formatInt(row.cortePedidos)}${row.signusPedidos != null ? ` · com baixa Signus ${formatInt(row.signusPedidos)}` : ''}.`
       : null,
-    'Cruza COD TECIDO da programação com Código produto do Signus.',
+    'Cruza COD TECIDO com Código produto (Signus e Estoque Geral).',
   ])
 }
 
@@ -236,6 +251,17 @@ export function explainSignusSemCorte(row: {
   return hintLines([
     `${row.tecido}: ${formatMeters(row.signusMetros)} baixados no Signus em ${formatInt(row.signusPedidos)} pedido${row.signusPedidos === 1 ? '' : 's'}.`,
     'Código de produto sem correspondente no Corte (COD TECIDO).',
+  ])
+}
+
+export function explainEstoqueSemCorte(row: {
+  tecido: string
+  saldoAtual: number
+  saldoReservado: number
+}) {
+  return hintLines([
+    `${row.tecido}: saldo atual ${formatMeters(row.saldoAtual)} · reservado ${formatMeters(row.saldoReservado)}.`,
+    'Código no Saldo do Estoque Geral sem COD TECIDO na programação de Corte.',
   ])
 }
 

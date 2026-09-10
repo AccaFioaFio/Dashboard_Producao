@@ -33,6 +33,7 @@ function applyMigrations(connection: Database.Database) {
     '0005_observacao.sql',
     '0006_corte_linha_observacao.sql',
     '0007_aproveitamento.sql',
+    '0008_tecido_estoque.sql',
   ]
   for (const file of files) {
     if (applied.has(file)) continue

@@ -11,28 +11,25 @@ import {
 import { YEAR } from '@/lib/year'
 import type { SignusTecidoMovimento, TipoTecidoNorm } from '@/lib/etl/types'
 
+/** Fallback do layout antigo (.xls longo). O layout novo (.xlsx) resolve só por cabeçalho. */
 const FALLBACK_COLS = {
-  almox: 3,
-  movimentoId: 4,
-  produtoId: 5,
-  codProduto: 6,
-  nomeProduto: 7,
-  categoria: 12,
-  data: 15,
-  es: 17,
-  qtd: 18,
-  custoBruto: 22,
-  valorTotalBruto: 26,
-  tipo: 29,
-  origemMov: 30,
-  linha: 36,
-  valorTotalContabil: 40,
-  valorUnitario: 41,
-  valorTotalLiq: 42,
-  valorUnitarioLiq: 43,
-  tipoDocSigla: 47,
-  tipoDocumento: 48,
-  unidade: 51,
+  almox: 1,
+  movimentoId: 2,
+  codProduto: 4,
+  nomeProduto: 5,
+  categoria: 6,
+  data: 9,
+  es: 11,
+  qtd: 12,
+  custoBruto: 14,
+  custoLiq: 15,
+  valorBruto: 16,
+  valorLiq: 17,
+  tipo: 19,
+  origemMov: 20,
+  documento: 21,
+  linha: -1,
+  unidade: -1,
 }
 
 function pickMoney(...values: unknown[]) {
@@ -50,7 +47,7 @@ function resolveTotal(total: number | null, unitario: number | null, qtd: number
 }
 
 function col(map: Map<string, number>, aliases: string[], fallback: number) {
-  return headerIndex(map, aliases) ?? fallback
+  return headerIndex(map, aliases) ?? (fallback >= 0 ? fallback : null)
 }
 
 function classifyTipo(tipoFold: string, esFold: string): TipoTecidoNorm {
@@ -97,7 +94,10 @@ function isTecidoLinha(linha: string | null, nome: string | null, categoria: str
   const linhaFold = foldSignus(linha ?? '')
   if (linhaFold === 'TECIDO') return true
   const catFold = foldSignus(categoria ?? '')
-  if (catFold.includes('PRIMA') && foldSignus(nome ?? '').includes('TECIDO')) return true
+  if (catFold === 'TECIDO') return true
+  if (catFold.includes('PRIMA') && foldSignus(nome ?? '').includes('TECIDO')) {
+    return true
+  }
   return false
 }
 
@@ -117,8 +117,14 @@ export function parseSignusTecidos(workbook: XLSX.WorkBook) {
     rowIndex = found.rowIndex
     map = found.map
   } catch {
-    rowIndex = 0
-    map = new Map()
+    try {
+      const found = findHeaderRow(rows, ['CODIGO PRODUTO', 'TIPO DE MOVIMENTO'])
+      rowIndex = found.rowIndex
+      map = found.map
+    } catch {
+      rowIndex = 0
+      map = new Map()
+    }
   }
   const colAlmox = col(map, ['NOME DO ALMOXARIFADO', 'ALMOX'], FALLBACK_COLS.almox)
   const colMovId = col(map, ['ID DO MOVIMENTO'], FALLBACK_COLS.movimentoId)
@@ -135,39 +141,46 @@ export function parseSignusTecidos(workbook: XLSX.WorkBook) {
   const colTipo = col(map, ['TIPO DE MOVIMENTADO', 'TIPO DE MOVIMENTO'], FALLBACK_COLS.tipo)
   const colOrig = col(map, ['ORIG MOV'], FALLBACK_COLS.origemMov)
   const colLinha = col(map, ['LINHA'], FALLBACK_COLS.linha)
-  const colUm = col(map, ['UNIDADE DE MEDIDA'], FALLBACK_COLS.unidade)
+  const colUm = col(map, ['UNIDADE DE MEDIDA', 'UNIDADE'], FALLBACK_COLS.unidade)
   const colVu = col(
     map,
     ['VALOR UNITARIO CONTABIL BRUTO', 'CUSTO BRUTO'],
-    FALLBACK_COLS.valorUnitario,
+    FALLBACK_COLS.custoBruto,
   )
   const colVuLiq = col(
     map,
     ['VALOR UNITARIO CONTABIL LIQUIDO', 'CUSTO LIQUIDO'],
-    FALLBACK_COLS.valorUnitarioLiq,
+    FALLBACK_COLS.custoLiq,
   )
   const colVt = col(
     map,
     [
       'VALOR TOTAL BRUTO DA MOVIMENT',
       'VALOR TOTAL CONTABIL BRUTO',
+      'VALOR BRUTO',
     ],
-    FALLBACK_COLS.valorTotalBruto,
+    FALLBACK_COLS.valorBruto,
   )
   const colVtLiq = col(
     map,
     [
       'VALOR TOTAL LIQUIDO DA MOVIMENT',
       'VALOR TOTAL CONTABIL LIQUIDO',
+      'VALOR LIQUIDO',
     ],
-    FALLBACK_COLS.valorTotalLiq,
+    FALLBACK_COLS.valorLiq,
   )
-  const colDoc = col(map, ['TIPO DE DOCUMENTO'], FALLBACK_COLS.tipoDocumento)
+  const colDoc = col(
+    map,
+    ['TIPO DE DOCUMENTO', 'DOCUMENTO DE RASTREAMENTO', 'DOCUMENTO'],
+    FALLBACK_COLS.documento,
+  )
   const colDocSigla = col(
     map,
     ['TIPO DE DOCUMENTO - SIGLA', 'TIPO DE DOCUMENTO SIGLA'],
-    FALLBACK_COLS.tipoDocSigla,
+    -1,
   )
+  const hasUnidadeCol = colUm != null
 
   const movimentos: SignusTecidoMovimento[] = []
 
@@ -194,10 +207,12 @@ export function parseSignusTecidos(workbook: XLSX.WorkBook) {
     const unidade = asText(cell(values, colUm))
     const qtd = asNumber(cell(values, colQtd)) ?? 0
     const isBaixa = tipoNorm === 'baixa_producao' || tipoNorm === 'baixa_canal'
-    const valorUnitario = pickMoney(cell(values, colVu), cell(values, FALLBACK_COLS.custoBruto))
+    // Layout .xlsx novo não traz unidade: para tecido filtrado, Qtd = metros.
+    const metros = hasUnidadeCol ? (isMetros(unidade) ? qtd : 0) : qtd
+    const valorUnitario = pickMoney(cell(values, colVu))
     const valorUnitarioLiq = pickMoney(cell(values, colVuLiq))
     const valorTotal = resolveTotal(
-      pickMoney(cell(values, colVt), cell(values, FALLBACK_COLS.valorTotalContabil)),
+      pickMoney(cell(values, colVt)),
       valorUnitario,
       qtd,
     )
@@ -213,13 +228,13 @@ export function parseSignusTecidos(workbook: XLSX.WorkBook) {
       data,
       es: esFold || esRaw,
       qtd,
-      metros: isMetros(unidade) ? qtd : 0,
+      metros,
       codProduto,
       nomeProduto,
       almox: asText(cell(values, colAlmox)),
       categoria,
       linha,
-      unidade,
+      unidade: unidade ?? (hasUnidadeCol ? null : 'MT'),
       tipoMovimento,
       tipoNorm,
       canalNorm: canalFromTipo(tipoFold),
