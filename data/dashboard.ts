@@ -2168,6 +2168,42 @@ export type TopClienteMesRow = {
   metros: number
 }
 
+/** Previsão de compra por tecido, estudando baixas dos meses anteriores. */
+export type TopClientePrevisaoTecidoRow = {
+  cod: string
+  nome: string | null
+  metrosHistorico: number
+  mesesComConsumo: number
+  mediaMensal: number
+  mediaRecente: number
+  previsaoProximoMes: number
+  saldoAtual: number
+  aComprar: number
+  tendenciaPct: number | null
+}
+
+function mesCalendarioNoAno() {
+  const now = new Date()
+  if (now.getFullYear() === YEAR) return now.getMonth() + 1
+  if (now.getFullYear() > YEAR) return 12
+  return 0
+}
+
+/** Média dos últimos N meses com consumo; se faltar histórico, cai na média geral. */
+function mediaRecenteDeMeses(
+  porMes: Map<number, number>,
+  ateMes: number,
+  janela = 3,
+) {
+  const recent: number[] = []
+  for (let m = ateMes; m >= 1 && recent.length < janela; m--) {
+    const v = porMes.get(m) ?? 0
+    if (v > 0) recent.push(v)
+  }
+  if (!recent.length) return 0
+  return recent.reduce((sum, v) => sum + v, 0) / recent.length
+}
+
 export const getTopClientes = cache(async (filters: DashFilters = {}) => {
   await ensureCloudDatabase()
   const empty = {
@@ -2183,12 +2219,18 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     concentracaoTop5Pct: 0,
     previsaoValorAno: 0,
     previsaoMetrosAno: 0,
+    previsaoProximoMesMetros: 0,
+    previsaoCompraProximoMes: 0,
     mediaMensalValor: 0,
     mediaMensalMetros: 0,
     mesesComVenda: 0,
+    mesReferencia: 0,
     ranking: [] as TopClienteRow[],
     tecidos: [] as TopClienteTecidoRow[],
+    previsaoTecidos: [] as TopClientePrevisaoTecidoRow[],
     porMes: [] as TopClienteMesRow[],
+    porMesHistorico: [] as TopClienteMesRow[],
+    porMesPrevisao: [] as number[],
     porCanal: [] as { nome: string; pedidos: number; valor: number; metros: number }[],
     options: {
       meses: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
@@ -2478,6 +2520,185 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
   const previsaoValorAno = mediaMensalValor * 12
   const previsaoMetrosAno = mediaMensalMetros * 12
 
+  // Histórico sem filtro de mês: a previsão estuda os meses anteriores mesmo
+  // quando a tela está recortada num mês específico.
+  const histFilter = emptyFilter()
+  applyComercialFilters(
+    histFilter,
+    'p',
+    { ...filters, mes: undefined },
+    { vendaFinal: true },
+  )
+  const histWhere = whereSql(histFilter)
+  const histParams = histFilter.params
+  const mesRef = mesCalendarioNoAno()
+  const mesEstudo = mesRef > 0 ? mesRef : 12
+
+  const porMesHistoricoBase = runAll<{
+    mes: number
+    pedidos: number
+    valor: number
+    pedidoNorm: string
+  }>(
+    `SELECT CAST(substr(COALESCE(p.data_venda, p.data_cadastro), 6, 2) as INTEGER) as mes,
+            p.pedido_norm as pedidoNorm,
+            p.valor_faturado as valor,
+            1 as pedidos
+     FROM fato_pedido_comercial p
+     WHERE ${histWhere} AND COALESCE(p.data_venda, p.data_cadastro) IS NOT NULL`,
+    histParams,
+  )
+
+  const metrosHistPorPedido = hasSignus
+    ? new Map(
+        runAll<{ pedidoNorm: string; metros: number }>(
+          `SELECT s.pedido_norm as pedidoNorm, COALESCE(SUM(s.metros), 0) as metros
+           FROM fato_tecido_signus s
+           WHERE s.is_baixa = 1
+             AND s.pedido_norm IN (
+               SELECT p.pedido_norm FROM fato_pedido_comercial p WHERE ${histWhere}
+             )
+           GROUP BY s.pedido_norm`,
+          histParams,
+        ).map((row) => [row.pedidoNorm, row.metros]),
+      )
+    : new Map<string, number>()
+
+  const histMesAgg = new Map<number, TopClienteMesRow>()
+  for (let m = 1; m <= 12; m++) {
+    histMesAgg.set(m, { mes: m, pedidos: 0, valor: 0, metros: 0 })
+  }
+  for (const row of porMesHistoricoBase) {
+    if (row.mes < 1 || row.mes > 12) continue
+    const current = histMesAgg.get(row.mes)!
+    current.pedidos += 1
+    current.valor += row.valor
+    current.metros += metrosHistPorPedido.get(row.pedidoNorm) ?? 0
+  }
+  const porMesHistorico = [...histMesAgg.values()]
+
+  const metrosPorMesHist = new Map(
+    porMesHistorico.map((row) => [row.mes, row.metros]),
+  )
+  const mesesComMetros = porMesHistorico.filter(
+    (row) => row.mes < mesEstudo && row.metros > 0,
+  )
+  const mediaMetrosEstudo = mesesComMetros.length
+    ? mesesComMetros.reduce((sum, row) => sum + row.metros, 0) /
+      mesesComMetros.length
+    : mediaMensalMetros
+  const previsaoProximoMesMetros =
+    mediaRecenteDeMeses(metrosPorMesHist, mesEstudo - 1) || mediaMetrosEstudo
+
+  const porMesPrevisao = Array.from({ length: 12 }, (_, i) => {
+    const mes = i + 1
+    if (mes < mesEstudo) return metrosPorMesHist.get(mes) ?? 0
+    if (mes === mesEstudo) {
+      const atual = metrosPorMesHist.get(mes) ?? 0
+      return atual > 0 ? atual : previsaoProximoMesMetros
+    }
+    return previsaoProximoMesMetros
+  })
+
+  const tecidoMesRows = hasSignus
+    ? runAll<{
+        mes: number
+        cod: string
+        nome: string | null
+        metros: number
+      }>(
+        `SELECT CAST(substr(COALESCE(p.data_venda, p.data_cadastro), 6, 2) as INTEGER) as mes,
+                s.cod_produto as cod,
+                MAX(s.nome_produto) as nome,
+                COALESCE(SUM(s.metros), 0) as metros
+         FROM fato_pedido_comercial p
+         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1
+         WHERE ${histWhere}
+           AND COALESCE(p.data_venda, p.data_cadastro) IS NOT NULL
+         GROUP BY CAST(substr(COALESCE(p.data_venda, p.data_cadastro), 6, 2) as INTEGER),
+                  s.cod_produto`,
+        histParams,
+      )
+    : []
+
+  type TecidoHist = {
+    cod: string
+    nome: string | null
+    porMes: Map<number, number>
+    metrosHistorico: number
+  }
+  const tecidoHistMap = new Map<string, TecidoHist>()
+  for (const row of tecidoMesRows) {
+    if (row.mes < 1 || row.mes > 12) continue
+    const current = tecidoHistMap.get(row.cod) ?? {
+      cod: row.cod,
+      nome: row.nome,
+      porMes: new Map<number, number>(),
+      metrosHistorico: 0,
+    }
+    current.nome = current.nome || row.nome
+    current.porMes.set(row.mes, (current.porMes.get(row.mes) ?? 0) + row.metros)
+    if (row.mes < mesEstudo) current.metrosHistorico += row.metros
+    tecidoHistMap.set(row.cod, current)
+  }
+
+  const estoquePorCod = new Map<string, number>()
+  if (hasEstoque) {
+    for (const row of runAll<{ cod: string; saldo: number }>(
+      `SELECT trim(cod_produto) as cod, COALESCE(saldo_atual, 0) as saldo
+       FROM fato_tecido_estoque`,
+      {},
+    )) {
+      estoquePorCod.set(row.cod.replace(/\s+/g, ''), row.saldo)
+    }
+  }
+
+  const previsaoTecidos: TopClientePrevisaoTecidoRow[] = [...tecidoHistMap.values()]
+    .map((item) => {
+      const mesesAnt = [...item.porMes.entries()].filter(
+        ([mes, metros]) => mes < mesEstudo && metros > 0,
+      )
+      const mesesComConsumo = mesesAnt.length
+      const mediaMensal = mesesComConsumo
+        ? mesesAnt.reduce((sum, [, m]) => sum + m, 0) / mesesComConsumo
+        : 0
+      const mediaRecente =
+        mediaRecenteDeMeses(item.porMes, mesEstudo - 1) || mediaMensal
+      const previsaoProximoMes = mediaRecente
+      const saldoAtual =
+        estoquePorCod.get(item.cod.replace(/\s+/g, '')) ?? 0
+      const aComprar = Math.max(0, previsaoProximoMes - Math.max(0, saldoAtual))
+      const tendenciaPct =
+        mediaMensal > 0
+          ? ((mediaRecente - mediaMensal) / mediaMensal) * 100
+          : null
+      return {
+        cod: item.cod,
+        nome: item.nome,
+        metrosHistorico: item.metrosHistorico,
+        mesesComConsumo,
+        mediaMensal,
+        mediaRecente,
+        previsaoProximoMes,
+        saldoAtual,
+        aComprar,
+        tendenciaPct,
+      }
+    })
+    .filter((row) => row.previsaoProximoMes > 0 || row.metrosHistorico > 0)
+    .sort(
+      (a, b) =>
+        b.aComprar - a.aComprar ||
+        b.previsaoProximoMes - a.previsaoProximoMes ||
+        b.metrosHistorico - a.metrosHistorico,
+    )
+    .slice(0, 25)
+
+  const previsaoCompraProximoMes = previsaoTecidos.reduce(
+    (sum, row) => sum + row.aComprar,
+    0,
+  )
+
   const options: FilterOptions = {
     meses: porMes.map((row) => row.mes),
     canais: (
@@ -2513,12 +2734,18 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     concentracaoTop5Pct,
     previsaoValorAno,
     previsaoMetrosAno,
+    previsaoProximoMesMetros,
+    previsaoCompraProximoMes,
     mediaMensalValor,
     mediaMensalMetros,
     mesesComVenda,
+    mesReferencia: mesEstudo,
     ranking: rankingFull,
     tecidos,
+    previsaoTecidos,
     porMes,
+    porMesHistorico,
+    porMesPrevisao,
     porCanal,
     options,
   }

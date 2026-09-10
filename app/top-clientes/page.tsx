@@ -19,6 +19,13 @@ import { YEAR } from '@/lib/year'
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Top Clientes' }
 
+function formatTendencia(pct: number | null) {
+  if (pct == null || !Number.isFinite(pct)) return '—'
+  const rounded = Math.round(pct)
+  if (rounded === 0) return 'estável'
+  return `${rounded > 0 ? '+' : ''}${rounded}%`
+}
+
 export default async function TopClientesPage({
   searchParams,
 }: {
@@ -27,11 +34,19 @@ export default async function TopClientesPage({
   const filters = parseFilters(await searchParams)
   const data = await getTopClientes(filters)
   const clienteAtivo = filters.cliente
+  const mesRefLabel =
+    data.mesReferencia > 0 ? MONTH_LABELS[data.mesReferencia - 1] : '—'
+  const proximoMesLabel =
+    data.mesReferencia > 0 && data.mesReferencia < 12
+      ? MONTH_LABELS[data.mesReferencia]
+      : data.mesReferencia === 12
+        ? `Jan/${YEAR + 1}`
+        : 'próximo mês'
 
   return (
     <PageShell
       title="Top Clientes"
-      description={`Pedidos comerciais ${YEAR} — só venda final (exclui remessa p/ industrialização e oficinas). Cruzado com baixas de tecido na movimentação Signus. Clique num cliente para ver o mix de tecidos e a tendência.`}
+      description={`Pedidos comerciais ${YEAR} — só venda final (exclui remessa p/ industrialização e oficinas). Cruzado com baixas de tecido na movimentação Signus. Clique num cliente para ver o mix de tecidos e a previsão de compra.`}
     >
       <FilterBar
         pathname="/top-clientes"
@@ -91,20 +106,17 @@ export default async function TopClientesPage({
               tone="indigo"
             />
             <KpiCard
+              label={`Previsão tecido · ${proximoMesLabel}`}
+              value={formatMeters(data.previsaoProximoMesMetros)}
+              hint={`Ref. até ${mesRefLabel} · compra sugerida ${formatMeters(data.previsaoCompraProximoMes)}`}
+              detail="Média dos últimos 3 meses com baixa Signus (venda final). Compra sugerida = previsão − saldo em estoque, por tecido."
+              tone="amber"
+            />
+            <KpiCard
               label="Valor total do pedido"
               value={formatMoney(data.valorTotal)}
               hint="Soma do valor total no recorte"
               detail="Pedidos.xlsx · coluna Pedido - Valor total (venda final)."
-            />
-            <KpiCard
-              label="Pedidos comerciais"
-              value={formatInt(data.pedidos)}
-              hint={
-                clienteAtivo
-                  ? `Filtro ativo: ${clienteAtivo}`
-                  : 'Venda final no recorte'
-              }
-              detail="Pedidos.xlsx · linhas de venda final (exclui remessa p/ industrialização)."
             />
           </KpiGrid>
 
@@ -131,19 +143,66 @@ export default async function TopClientesPage({
               ]}
             />
             <MonthlyAreaChart
-              title="Metros por cliente"
-              description="Baixas Signus ligadas aos pedidos do recorte."
-              labels={data.porMes.map((row) => MONTH_LABELS[row.mes - 1])}
+              title="Metros: histórico e previsão"
+              description={`Baixas Signus até ${mesRefLabel}; meses seguintes = média recente (últimos 3 com consumo).`}
+              labels={MONTH_LABELS}
               series={[
                 {
-                  key: 'metros',
-                  label: 'Metros',
+                  key: 'historico',
+                  label: 'Histórico',
                   color: 'var(--chart-3)',
-                  values: data.porMes.map((row) => Math.round(row.metros)),
+                  values: data.porMesHistorico.map((row) =>
+                    Math.round(row.metros),
+                  ),
+                },
+                {
+                  key: 'previsao',
+                  label: 'Previsão',
+                  color: 'var(--chart-1)',
+                  values: data.porMesPrevisao.map((v) => Math.round(v)),
                 },
               ]}
             />
           </div>
+
+          <section className="flex min-w-0 flex-col gap-2">
+            <h2 className="text-sm font-medium">
+              {clienteAtivo
+                ? `Previsão de compra · ${clienteAtivo}`
+                : 'Previsão de compra de tecido'}
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Estuda as baixas dos meses anteriores a {mesRefLabel}/{YEAR}
+              {clienteAtivo ? ` deste cliente` : ''}. Previsão do próximo mês =
+              média dos últimos 3 meses com consumo. A comprar = previsão −
+              saldo atual (quando o estoque não cobre).
+            </p>
+            <SimpleTable
+              columns={[
+                { key: 'tecido', label: 'Tecido' },
+                { key: 'mediaMensal', label: 'Média mensal', numeric: true },
+                { key: 'mediaRecente', label: 'Últimos 3 meses', numeric: true },
+                {
+                  key: 'previsao',
+                  label: `Prev. ${proximoMesLabel}`,
+                  numeric: true,
+                },
+                { key: 'saldo', label: 'Saldo', numeric: true },
+                { key: 'aComprar', label: 'A comprar', numeric: true },
+                { key: 'tendencia', label: 'Tendência', numeric: true },
+              ]}
+              rows={data.previsaoTecidos.map((row) => ({
+                tecido: formatTecido(row.cod, row.nome),
+                mediaMensal: formatMeters(row.mediaMensal),
+                mediaRecente: formatMeters(row.mediaRecente),
+                previsao: formatMeters(row.previsaoProximoMes),
+                saldo: formatMeters(row.saldoAtual),
+                aComprar:
+                  row.aComprar > 0 ? formatMeters(row.aComprar) : '—',
+                tendencia: formatTendencia(row.tendenciaPct),
+              }))}
+            />
+          </section>
 
           <section className="flex min-w-0 flex-col gap-2">
             <h2 className="text-sm font-medium">Mix por canal</h2>

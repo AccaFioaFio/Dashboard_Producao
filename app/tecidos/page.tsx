@@ -15,6 +15,7 @@ import {
   formatTecido,
 } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
+import { YEAR } from '@/lib/year'
 import {
   explainAguardandoTecido,
   explainEstoqueSemCorte,
@@ -50,7 +51,7 @@ export default async function TecidosPage({
   return (
     <PageShell
       title="Tecidos"
-      description="Consumo no Corte, baixa no Signus e saldo atual do Estoque Geral. Join pelo código do tecido. Saldo é snapshot da carga (não filtra por mês)."
+      description={`Consumo no Corte e baixa no Signus (${YEAR}), cruzados pelo código do tecido. Ambos já vêm filtrados pelo ano na carga — Corte pela data do pedido, Signus pela data do movimento. Saldo do estoque é snapshot (não filtra por mês/ano).`}
       actions={<TecidosSubNav filters={filters} current="metros" />}
     >
       <FilterBar
@@ -65,42 +66,42 @@ export default async function TecidosPage({
           label="Consumo de tecido no Corte"
           value={formatMeters(metrosCorte)}
           hint="Metros programados / apontados"
-          detail="Planilha de Corte · SUM de MTS / TECIDOS no recorte."
+          detail={`Planilha de Corte · SUM dos metros apontados (MTS / TECIDOS).\n\nSó entram pedidos com data de corte em ${YEAR} (filtro na carga). O filtro de mês da tela corta dentro desse ano.`}
           tone="teal"
         />
         <KpiCard
           label="Baixa de tecido no Signus"
           value={formatMeters(metrosSignus)}
           hint={`${formatInt(tecidos.movimentosBaixa)} movimentos · ${formatInt(tecidos.pedidosComBaixa)} pedidos`}
-          detail="Movimentação Signus · metros de baixa oficiais no recorte."
+          detail={`Movimentação Signus · só baixas oficiais (produção/insumo + SAÍDA FF/AC/TC).\n\nTambém só ${YEAR}, mas pela data do movimento — não pela data do corte. Inclui baixas sem nº de pedido e códigos que podem não existir no Corte.`}
           tone="indigo"
         />
         <KpiCard
           label="Diferença Corte − Signus"
           value={formatMeters(delta)}
           hint={`${formatNumber(cobertura, 1)}% da programação já baixada`}
-          detail="Consumo do Corte menos metros baixados no Signus (cobertura da programação)."
+          detail={`Cálculo: metros do Corte − metros baixados no Signus.\n\nNegativo = Signus baixou mais que o Corte apontou (cobertura > 100%).\n\nOs dois totais são de ${YEAR}, mas com datas diferentes (corte vs movimento) e universos distintos: Signus soma canal, baixas sem pedido e códigos fora da programação. Não é fechamento pedido a pedido.\n\nRetorno do corte e economia são contas separadas — não “fecham” este número.`}
           tone="amber"
         />
         <KpiCard
           label="Saldo atual em estoque"
           value={formatMeters(tecidos.saldoAtualMetros)}
           hint={`${formatInt(tecidos.estoqueCodigos)} códigos · só unidade metro`}
-          detail="Estoque Geral Signus · soma do saldo atual (metros)."
+          detail="Estoque Geral Signus · soma do saldo atual (metros).\n\nSnapshot da última carga — não filtra por mês nem por ano do dashboard."
           tone="teal"
         />
         <KpiCard
           label="Saldo reservado"
           value={formatMeters(tecidos.saldoReservadoMetros)}
           hint="Metros reservados no estoque"
-          detail="Estoque Geral Signus · soma do Saldo reservado (metros)."
+          detail="Estoque Geral Signus · soma do Saldo reservado (metros).\n\nTambém é snapshot da carga, sem filtro de mês/ano."
           tone="magenta"
         />
         <KpiCard
           label="Economia de tecido"
           value={formatMeters(metrosEconomia)}
           hint={`${formatNumber(economiaPct, 1)}% do consumo do Corte`}
-          detail="Quando a baixa Signus fica abaixo do consumo do Corte — metros ‘economizados’ no recorte."
+          detail={`Coluna de economia da planilha de Corte (quando a baixa fica abaixo do consumo na linha).\n\nNão é o inverso da “Diferença Corte − Signus”: pode haver economia positiva e diferença global negativa ao mesmo tempo.`}
           tone="teal"
           progress={Math.min(100, Math.max(12, economiaPct * 12))}
         />
@@ -108,14 +109,14 @@ export default async function TecidosPage({
           label="Aguardando tecido"
           value={`${formatInt(tecidos.tecidoPedidos)} / ${formatMeters(tecidos.tecidoMetros)}`}
           hint={`${formatInt(tecidos.tecidoPecas)} peças com status AGUARDANDO TECIDO`}
-          detail="Ordens de corte com status AGUARDANDO TECIDO (pedidos / metros)."
+          detail={`Ordens de corte ${YEAR} com status AGUARDANDO TECIDO (pedidos / metros). Não entra na diferença Corte − Signus.`}
           alert={tecidos.tecidoPedidos > 0}
         />
         <KpiCard
           label="Retorno de tecido do corte"
           value={formatMeters(tecidos.retornoCorte)}
           hint={`${formatInt(tecidos.baixasSemPedido)} baixas Signus sem nº de pedido`}
-          detail="Baixas Signus sem nº de pedido em Orig. Mov. (retorno/ajuste típico do corte)."
+          detail={`Movimentos Signus do tipo “Retorno do corte” em ${YEAR}.\n\nNão entram no KPI de baixa oficial — por isso não reduzem a diferença Corte − Signus.\n\nO subtítulo conta baixas oficiais sem nº de pedido em Orig. Mov. (essas sim somam no Signus e ajudam a explicar cobertura > 100%).`}
           tone="magenta"
         />
       </KpiGrid>
