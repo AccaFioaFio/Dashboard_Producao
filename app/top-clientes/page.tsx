@@ -47,7 +47,7 @@ export default async function TopClientesPage({
   return (
     <PageShell
       title="Top Clientes"
-      description={`Pedidos comerciais ${YEAR} — só venda final (exclui remessa p/ industrialização e oficinas). Cruzado com baixas de tecido na movimentação Signus (almox ${ALMOX_PRINCIPAIS_LABEL}, categoria MATÉRIA PRIMA por padrão). Clique num cliente para ver o mix de tecidos e a previsão de compra.`}
+      description={`Pedidos comerciais ${YEAR} — só venda final (exclui remessa p/ industrialização e oficinas). Metros = baixas Signus por data do movimento (almox ${ALMOX_PRINCIPAIS_LABEL}, categoria MATÉRIA PRIMA por padrão), cruzadas 1× por pedido. Clique num cliente para ver o mix de tecidos e a previsão de compra.`}
     >
       <FilterBar
         pathname="/top-clientes"
@@ -110,7 +110,7 @@ export default async function TopClientesPage({
               label={`Previsão tecido · ${proximoMesLabel}`}
               value={formatMeters(data.previsaoProximoMesMetros)}
               hint={`Ref. até ${mesRefLabel} · compra sugerida ${formatMeters(data.previsaoCompraProximoMes)}`}
-              detail={`Baixas e saldo só dos almox ${ALMOX_PRINCIPAIS_LABEL}. Por tecido: (metros ÷ pedidos) × média de pedidos dos últimos 3 meses. Compra = previsão − saldo.`}
+              detail={`Baixas Signus por data do movimento, só almox ${ALMOX_PRINCIPAIS_LABEL}, cruzadas com venda final (sem duplicar pedido). Por tecido: (metros ÷ pedidos) × média de pedidos dos últimos 3 meses. Compra = previsão − saldo.`}
               tone="amber"
             />
             <KpiCard
@@ -145,7 +145,7 @@ export default async function TopClientesPage({
             />
             <MonthlyAreaChart
               title="Metros: histórico e previsão"
-              description={`Baixas Signus (almox ACCA/FAF/TRU) até ${mesRefLabel}; meses seguintes = média recente (últimos 3 com consumo).`}
+              description={`Baixas Signus (almox ACCA/FAF/TRU) por data do movimento até ${mesRefLabel}; meses seguintes = ritmo recente (até 3 meses com consumo).`}
               labels={MONTH_LABELS}
               series={[
                 {
@@ -173,19 +173,21 @@ export default async function TopClientesPage({
                 : 'Previsão de compra de tecido'}
             </h2>
             <p className="text-xs text-muted-foreground">
-              Estuda as baixas dos meses anteriores a {mesRefLabel}/{YEAR}
+              Estuda baixas Signus (produção + SAIDA FF/AC/TC) dos meses
+              anteriores a {mesRefLabel}/{YEAR}
               {clienteAtivo ? ` deste cliente` : ''}, só nos almox{' '}
-              {ALMOX_PRINCIPAIS_LABEL}. Média mensal = total ÷
-              meses do período. Últimos 3 meses = média dos meses com consumo.
-              Previsão = (metros ÷ pedidos) × ritmo médio de pedidos dos
-              últimos 3 meses. A comprar = previsão − saldo desses almox
-              (quando o estoque não cobre).
+              {ALMOX_PRINCIPAIS_LABEL}, cruzadas com venda final. Mês = data do
+              movimento (como em Tecidos), não a data de venda do pedido. Média
+              mensal = total ÷ meses do período. Ritmo recente = média dos até 3
+              meses com consumo. Previsão = (metros ÷ pedidos) × ritmo médio de
+              pedidos dos últimos 3 meses. A comprar = previsão − saldo desses
+              almox (quando o estoque não cobre). Não usa metros do Corte.
             </p>
             <SimpleTable
               columns={[
                 { key: 'tecido', label: 'Tecido' },
                 { key: 'mediaMensal', label: 'Média mensal', numeric: true },
-                { key: 'mediaRecente', label: 'Últimos 3 meses', numeric: true },
+                { key: 'mediaRecente', label: 'Ritmo recente', numeric: true },
                 {
                   key: 'previsao',
                   label: `Prev. ${proximoMesLabel}`,

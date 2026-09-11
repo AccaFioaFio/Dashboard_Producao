@@ -2187,6 +2187,24 @@ function applyComercialFilters(
   }
 }
 
+/** Pedidos comerciais 1:1 por pedido_norm — evita multiplicar metros no join com Signus. */
+function sqlPedidoComercialDistinto(where: string) {
+  return `SELECT p.pedido_norm as pedido_norm,
+                 MAX(p.cliente) as cliente,
+                 MAX(p.canal) as canal
+          FROM fato_pedido_comercial p
+          WHERE ${where}
+          GROUP BY p.pedido_norm`
+}
+
+/** Baixa Signus ligada a pelo menos um pedido comercial do recorte (sem fan-out). */
+function sqlExistsPedidoComercial(signusAlias: string, where: string) {
+  return `EXISTS (
+    SELECT 1 FROM fato_pedido_comercial p
+    WHERE p.pedido_norm = ${signusAlias}.pedido_norm AND ${where}
+  )`
+}
+
 export type TopClienteRow = {
   cliente: string
   codCliente: string | null
@@ -2385,14 +2403,15 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
         tecidos: number
         pedidosComTecido: number
       }>(
-        `SELECT COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)') as cliente,
+        `SELECT COALESCE(NULLIF(trim(ped.cliente), ''), '(sem cliente)') as cliente,
                 COALESCE(SUM(s.metros), 0) as metros,
                 COUNT(DISTINCT s.cod_produto) as tecidos,
                 COUNT(DISTINCT s.pedido_norm) as pedidosComTecido
-         FROM fato_pedido_comercial p
-         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
-         WHERE ${rankingWhere}
-         GROUP BY COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)')`,
+         FROM fato_tecido_signus s
+         JOIN (${sqlPedidoComercialDistinto(rankingWhere)}) ped
+           ON ped.pedido_norm = s.pedido_norm
+         WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
+         GROUP BY COALESCE(NULLIF(trim(ped.cliente), ''), '(sem cliente)')`,
         params,
       )
     : []
@@ -2404,14 +2423,15 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
         nome: string | null
         metros: number
       }>(
-        `SELECT COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)') as cliente,
+        `SELECT COALESCE(NULLIF(trim(ped.cliente), ''), '(sem cliente)') as cliente,
                 s.cod_produto as cod,
                 MAX(s.nome_produto) as nome,
                 COALESCE(SUM(s.metros), 0) as metros
-         FROM fato_pedido_comercial p
-         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
-         WHERE ${rankingWhere}
-         GROUP BY COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)'), s.cod_produto
+         FROM fato_tecido_signus s
+         JOIN (${sqlPedidoComercialDistinto(rankingWhere)}) ped
+           ON ped.pedido_norm = s.pedido_norm
+         WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
+         GROUP BY COALESCE(NULLIF(trim(ped.cliente), ''), '(sem cliente)'), s.cod_produto
          ORDER BY metros DESC`,
         params,
       )
@@ -2470,11 +2490,12 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
                 COALESCE(SUM(s.metros), 0) as metros,
                 COUNT(DISTINCT s.pedido_norm) as pedidos,
                 COUNT(*) as movimentos,
-                COUNT(DISTINCT p.cliente) as clientes,
+                COUNT(DISTINCT ped.cliente) as clientes,
                 ${estoqueSelect} as saldoAtual
          FROM fato_tecido_signus s
-         JOIN fato_pedido_comercial p ON p.pedido_norm = s.pedido_norm
-         WHERE ${where} AND s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
+         JOIN (${sqlPedidoComercialDistinto(where)}) ped
+           ON ped.pedido_norm = s.pedido_norm
+         WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
          GROUP BY s.cod_produto
          ORDER BY metros DESC
          LIMIT 25`,
@@ -2503,9 +2524,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
           `SELECT s.pedido_norm as pedidoNorm, COALESCE(SUM(s.metros), 0) as metros
            FROM fato_tecido_signus s
            WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
-             AND s.pedido_norm IN (
-               SELECT p.pedido_norm FROM fato_pedido_comercial p WHERE ${where}
-             )
+             AND ${sqlExistsPedidoComercial('s', where)}
            GROUP BY s.pedido_norm`,
           params,
         ).map((row) => [row.pedidoNorm, row.metros]),
@@ -2513,6 +2532,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     : new Map<string, number>()
 
   const mesAgg = new Map<number, TopClienteMesRow>()
+  const metrosPedidosVistos = new Set<string>()
   for (const row of porMesBase) {
     if (row.mes < 1 || row.mes > 12) continue
     const current = mesAgg.get(row.mes) ?? {
@@ -2523,7 +2543,11 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     }
     current.pedidos += 1
     current.valor += row.valor
-    current.metros += metrosPorPedido.get(row.pedidoNorm) ?? 0
+    // Metros no gráfico comercial: 1× por pedido (não por linha duplicada).
+    if (!metrosPedidosVistos.has(row.pedidoNorm)) {
+      metrosPedidosVistos.add(row.pedidoNorm)
+      current.metros += metrosPorPedido.get(row.pedidoNorm) ?? 0
+    }
     mesAgg.set(row.mes, current)
   }
   const porMes = [...mesAgg.values()].sort((a, b) => a.mes - b.mes)
@@ -2548,12 +2572,13 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
 
   if (hasSignus) {
     const metrosCanal = runAll<{ nome: string; metros: number }>(
-      `SELECT COALESCE(p.canal, '(sem canal)') as nome,
+      `SELECT COALESCE(ped.canal, '(sem canal)') as nome,
               COALESCE(SUM(s.metros), 0) as metros
-       FROM fato_pedido_comercial p
-       JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
-       WHERE ${where}
-       GROUP BY p.canal`,
+       FROM fato_tecido_signus s
+       JOIN (${sqlPedidoComercialDistinto(where)}) ped
+         ON ped.pedido_norm = s.pedido_norm
+       WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
+       GROUP BY ped.canal`,
       params,
     )
     const canalMap = new Map(metrosCanal.map((row) => [row.nome, row.metros]))
@@ -2566,18 +2591,18 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     ? runGet<{ v: number }>(
         `SELECT COALESCE(SUM(s.metros), 0) as v
          FROM fato_tecido_signus s
-         JOIN fato_pedido_comercial p ON p.pedido_norm = s.pedido_norm
-         WHERE ${where} AND s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}`,
+         WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
+           AND ${sqlExistsPedidoComercial('s', where)}`,
         params,
       ).v
     : 0
 
   const pedidosComTecido = hasSignus
     ? runGet<{ v: number }>(
-        `SELECT COUNT(DISTINCT p.pedido_norm) as v
-         FROM fato_pedido_comercial p
-         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
-         WHERE ${where}`,
+        `SELECT COUNT(DISTINCT s.pedido_norm) as v
+         FROM fato_tecido_signus s
+         WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
+           AND ${sqlExistsPedidoComercial('s', where)}`,
         params,
       ).v
     : 0
@@ -2629,21 +2654,6 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     histParams,
   )
 
-  const metrosHistPorPedido = hasSignus
-    ? new Map(
-        runAll<{ pedidoNorm: string; metros: number }>(
-          `SELECT s.pedido_norm as pedidoNorm, COALESCE(SUM(s.metros), 0) as metros
-           FROM fato_tecido_signus s
-           WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
-             AND s.pedido_norm IN (
-               SELECT p.pedido_norm FROM fato_pedido_comercial p WHERE ${histWhere}
-             )
-           GROUP BY s.pedido_norm`,
-          histParams,
-        ).map((row) => [row.pedidoNorm, row.metros]),
-      )
-    : new Map<string, number>()
-
   const histMesAgg = new Map<number, TopClienteMesRow>()
   for (let m = 1; m <= 12; m++) {
     histMesAgg.set(m, { mes: m, pedidos: 0, valor: 0, metros: 0 })
@@ -2653,7 +2663,23 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     const current = histMesAgg.get(row.mes)!
     current.pedidos += 1
     current.valor += row.valor
-    current.metros += metrosHistPorPedido.get(row.pedidoNorm) ?? 0
+  }
+
+  // Metros do histórico/previsão: mês = data do movimento Signus (como Tecidos).
+  if (hasSignus) {
+    for (const row of runAll<{ mes: number; metros: number }>(
+      `SELECT CAST(substr(s.data, 6, 2) as INTEGER) as mes,
+              COALESCE(SUM(s.metros), 0) as metros
+       FROM fato_tecido_signus s
+       WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
+         AND s.data IS NOT NULL
+         AND ${sqlExistsPedidoComercial('s', histWhere)}
+       GROUP BY CAST(substr(s.data, 6, 2) as INTEGER)`,
+      histParams,
+    )) {
+      if (row.mes < 1 || row.mes > 12) continue
+      histMesAgg.get(row.mes)!.metros = row.metros
+    }
   }
   const porMesHistorico = [...histMesAgg.values()]
 
@@ -2688,16 +2714,16 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
         metros: number
         pedidos: number
       }>(
-        `SELECT CAST(substr(COALESCE(p.data_venda, p.data_cadastro), 6, 2) as INTEGER) as mes,
+        `SELECT CAST(substr(s.data, 6, 2) as INTEGER) as mes,
                 s.cod_produto as cod,
                 MAX(s.nome_produto) as nome,
                 COALESCE(SUM(s.metros), 0) as metros,
-                COUNT(DISTINCT p.pedido_norm) as pedidos
-         FROM fato_pedido_comercial p
-         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
-         WHERE ${histWhere}
-           AND COALESCE(p.data_venda, p.data_cadastro) IS NOT NULL
-         GROUP BY CAST(substr(COALESCE(p.data_venda, p.data_cadastro), 6, 2) as INTEGER),
+                COUNT(DISTINCT s.pedido_norm) as pedidos
+         FROM fato_tecido_signus s
+         WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
+           AND s.data IS NOT NULL
+           AND ${sqlExistsPedidoComercial('s', histWhere)}
+         GROUP BY CAST(substr(s.data, 6, 2) as INTEGER),
                   s.cod_produto`,
         histParams,
       )
