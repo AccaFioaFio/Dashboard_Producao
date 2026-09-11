@@ -1,5 +1,6 @@
 import { getSqlite } from '@/db'
 import { yearOf } from '@/lib/dates'
+import { isAlmoxPrincipal } from '@/lib/almox-principais'
 import type { HeaderKpis, Snapshot } from '@/lib/etl/types'
 
 function chunk<T>(rows: T[], size = 400) {
@@ -102,6 +103,7 @@ export function replaceSnapshot(
     }
     for (const row of snapshot.tecidosSignus) {
       if (!row.pedidoNorm) continue
+      if (!isAlmoxPrincipal(row.almox)) continue
       upsertPedido(row.pedidoNorm, {})
       pedidos.get(row.pedidoNorm)!.noSignus = true
     }

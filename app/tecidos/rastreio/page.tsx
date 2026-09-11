@@ -12,6 +12,7 @@ import {
   formatMeters,
   formatTecido,
 } from '@/lib/format'
+import { ALMOX_PRINCIPAIS_LABEL } from '@/lib/almox-principais'
 import { filtersToSearch, parseFilters, type DashFilters } from '@/lib/filters'
 import {
   explainTecidoProdutoAgg,
@@ -49,14 +50,14 @@ export default async function TecidosRastreioPage({
   return (
     <PageShell
       title="Rastrear baixa Signus"
-      description="Movimentos Signus linha a linha: produção, canal, inventário, ajuste e demais tipos. Pedido só aparece quando Orig. Mov. traz PED."
+      description={`Movimentos Signus linha a linha nos almox ${ALMOX_PRINCIPAIS_LABEL}: produção, canal, inventário, ajuste e demais tipos. Pedido só aparece quando Orig. Mov. traz PED.`}
       actions={<TecidosSubNav filters={filters} current="rastreio" />}
     >
       <FilterBar
         pathname="/tecidos/rastreio"
         values={filters}
         options={options}
-        fields={['mes', 'canal', 'cliente', 'tipo', 'q']}
+        fields={['mes', 'canal', 'cliente', 'categoria', 'tipo', 'q']}
       />
 
       <KpiGrid columns={3}>
@@ -64,14 +65,14 @@ export default async function TecidosRastreioPage({
           label="Metros movimentados no recorte"
           value={formatMeters(rastreio.metrosTotal)}
           hint={`${formatInt(rastreio.movimentos)} movimentos Signus`}
-          detail="Movimentação Signus · soma de metros no período/filtros."
+          detail={`Movimentação Signus · soma de metros no período/filtros, só almox ${ALMOX_PRINCIPAIS_LABEL}.`}
           tone="teal"
         />
         <KpiCard
           label="Baixa oficial de produção"
           value={formatMeters(rastreio.metrosBaixaOficial)}
           hint="Produção (insumos) + SAIDA FF/AC/TC"
-          detail="Signus · tipos de baixa oficiais: Produção (insumos) e SAIDA FF/AC/TC."
+          detail={`Signus · tipos de baixa oficiais nos almox ${ALMOX_PRINCIPAIS_LABEL}: Produção (insumos) e SAIDA FF/AC/TC.`}
           tone="indigo"
         />
         <KpiCard

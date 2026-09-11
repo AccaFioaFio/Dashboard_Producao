@@ -190,6 +190,14 @@ export function FilterBar({
             onChange={(value) => setField('tipo', value)}
           />
         ) : null}
+        {fields.includes('categoria') ? (
+          <FilterSelect
+            label="Categoria"
+            value={values.categoria}
+            items={options.categorias ?? []}
+            onChange={(value) => setField('categoria', value)}
+          />
+        ) : null}
       </div>
     </section>
   )

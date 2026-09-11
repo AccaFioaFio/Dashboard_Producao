@@ -16,6 +16,7 @@ import {
   tipoDocumentoLabel,
 } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
+import { ALMOX_PRINCIPAIS_LABEL } from '@/lib/almox-principais'
 import {
   explainDocumentoValor,
   explainTecidoValorGrupo,
@@ -52,14 +53,14 @@ export default async function TecidosValoresPage({
   return (
     <PageShell
       title="Valores do tecido"
-      description="Valor unitário do Signus e valor unitário × quantidade baixada. Clique em + para abrir os pedidos daquele tecido."
+      description={`Valor unitário do Signus e valor unitário × quantidade baixada (almox ${ALMOX_PRINCIPAIS_LABEL}). Clique em + para abrir os pedidos daquele tecido.`}
       actions={<TecidosSubNav filters={filters} current="valores" />}
     >
       <FilterBar
         pathname="/tecidos/valores"
         values={filters}
         options={options}
-        fields={['mes', 'canal', 'cliente', 'q']}
+        fields={['mes', 'canal', 'cliente', 'categoria', 'q']}
       />
 
       {!valores.hasValores || valores.movimentosComValor === 0 ? (
@@ -74,14 +75,14 @@ export default async function TecidosValoresPage({
           label="Valor da baixa de tecido"
           value={formatMoneyCompact(valores.valorBaixa)}
           hint="Valor unitário × quantidade baixada"
-          detail="Signus · VU × qtd baixada (produção + SAIDA FF/AC/TC)."
+          detail={`Signus · VU × qtd baixada (produção + SAIDA FF/AC/TC) nos almox ${ALMOX_PRINCIPAIS_LABEL}.`}
           tone="teal"
         />
         <KpiCard
           label="Valor unitário médio"
           value={formatMoney(valores.valorUnitarioMedio)}
           hint="Média ponderada pela quantidade baixada"
-          detail="Signus · média do valor unitário ponderada pela qtd baixada no recorte."
+          detail={`Signus · média do valor unitário ponderada pela qtd baixada no recorte (almox ${ALMOX_PRINCIPAIS_LABEL}).`}
           tone="indigo"
         />
         <KpiCard

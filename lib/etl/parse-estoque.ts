@@ -1,7 +1,9 @@
 import type * as XLSX from 'xlsx'
+import { isAlmoxPrincipal } from '@/lib/almox-principais'
 import { asNumber, headerIndex } from '@/lib/etl/excel'
 import { cell, findHeaderRow, sheetRows } from '@/lib/etl/parse'
 import { asText, asTecidoCode, foldSignus } from '@/lib/keys'
+import { isCategoriaTecido } from '@/lib/tecido-categoria'
 import type { EstoqueTecidoSaldo } from '@/lib/etl/types'
 
 function col(map: Map<string, number>, aliases: string[], fallback: number) {
@@ -27,6 +29,7 @@ function isTecidoEstoque(
   unidade: string | null,
   nomeUnidade: string | null,
 ) {
+  if (!isCategoriaTecido(categoria)) return false
   if (isMetros(unidade, nomeUnidade)) return true
   const catFold = foldSignus(categoria ?? '')
   if (catFold === 'TECIDO') return true
@@ -62,6 +65,7 @@ export function parseEstoqueTecidos(workbook: XLSX.WorkBook) {
     'SALDO ATUAL',
   ])
 
+  const colAlmox = col(map, ['NOME DO ALMOXARIFADO', 'ALMOX'], 1)
   const colCod = col(map, ['CODIGO PRODUTO', 'CÓDIGO PRODUTO'], 3)
   const colNome = col(map, ['NOME DO PRODUTO'], 4)
   const colCat = col(map, ['CATEGORIA'], 5)
@@ -77,6 +81,9 @@ export function parseEstoqueTecidos(workbook: XLSX.WorkBook) {
     const codProduto = asTecidoCode(cell(values, colCod))
     if (!codProduto) continue
     if (foldSignus(codProduto).includes('CODIGO PRODUTO')) continue
+
+    const almox = asText(cell(values, colAlmox))
+    if (!isAlmoxPrincipal(almox)) continue
 
     const nomeProduto = asText(cell(values, colNome))
     const categoria = asText(cell(values, colCat))

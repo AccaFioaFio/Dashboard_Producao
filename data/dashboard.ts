@@ -11,6 +11,8 @@ import { ocJoinLinhas, ocPecasExpr } from '@/lib/corte-oc'
 import { analyzeTempoProducao, type TempoPedidoRow } from '@/lib/etl/tempo'
 import { sqlPendentesOficina } from '@/lib/oficinas-qty'
 import { TIPO_TECIDO_LABEL } from '@/lib/format'
+import { sqlAlmoxPrincipais } from '@/lib/almox-principais'
+import { sqlCategoriaFilter, sqlCategoriaTecido } from '@/lib/tecido-categoria'
 
 export type CargaInfo = {
   id: number
@@ -170,6 +172,9 @@ function applyPedidoFilters(
 }
 
 function applySignusFilters(filter: SqlFilter, alias: string, filters: DashFilters) {
+  filter.clauses.push(sqlAlmoxPrincipais(alias))
+  filter.clauses.push(sqlCategoriaFilter(alias, filters.categoria))
+  if (filters.categoria) filter.params.categoria = filters.categoria
   if (filters.mes) {
     filter.clauses.push(`CAST(substr(${alias}.data, 6, 2) as INTEGER) = @mes`)
     filter.params.mes = filters.mes
@@ -200,6 +205,9 @@ function applySignusRastreioFilters(
   alias: string,
   filters: DashFilters,
 ) {
+  filter.clauses.push(sqlAlmoxPrincipais(alias))
+  filter.clauses.push(sqlCategoriaFilter(alias, filters.categoria))
+  if (filters.categoria) filter.params.categoria = filters.categoria
   if (filters.mes) {
     filter.clauses.push(`CAST(substr(${alias}.data, 6, 2) as INTEGER) = @mes`)
     filter.params.mes = filters.mes
@@ -231,6 +239,15 @@ function applySignusRastreioFilters(
       `EXISTS (SELECT 1 FROM fato_corte_pedido sp WHERE ${pedidoClauses.join(' AND ')})`,
     )
   }
+}
+
+function applyEstoqueCategoria(
+  filter: SqlFilter,
+  alias: string,
+  filters: DashFilters,
+) {
+  filter.clauses.push(sqlCategoriaFilter(alias, filters.categoria))
+  if (filters.categoria) filter.params.categoria = filters.categoria
 }
 
 function whereSql(filter: SqlFilter) {
@@ -314,6 +331,22 @@ export const getFilterOptions = cache(async (): Promise<FilterOptions> => {
       .map((row) => row.oficina)
       .filter(Boolean),
     tipos: Object.entries(TIPO_TECIDO_LABEL).map(([value, label]) => ({ value, label })),
+    categorias: (
+      db
+        .prepare(
+          `SELECT categoria FROM (
+             SELECT s.categoria as categoria FROM fato_tecido_signus s
+             WHERE s.categoria IS NOT NULL AND trim(s.categoria) != ''
+               AND ${sqlCategoriaTecido('s')}
+             UNION
+             SELECT e.categoria as categoria FROM fato_tecido_estoque e
+             WHERE e.categoria IS NOT NULL AND trim(e.categoria) != ''
+               AND ${sqlCategoriaTecido('e')}
+           )
+           ORDER BY categoria`,
+        )
+        .all() as { categoria: string }[]
+    ).map((row) => row.categoria),
   }
 })
 
@@ -718,7 +751,14 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
   const signusFilter = emptyFilter()
   applySignusFilters(signusFilter, 's', filters)
   const signusWhere = whereSql(signusFilter)
-  const params = { ...corteFilter.params, ...signusFilter.params }
+  const estoqueFilter = emptyFilter()
+  applyEstoqueCategoria(estoqueFilter, 'e', filters)
+  const estoqueCategoriaWhere = whereSql(estoqueFilter)
+  const params = {
+    ...corteFilter.params,
+    ...signusFilter.params,
+    ...estoqueFilter.params,
+  }
   const hasSignus = Boolean(
     db
       .prepare(
@@ -734,7 +774,8 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
       .get(),
   )
   const estoqueJoin = (codExpr: string) =>
-    `replace(trim(e.cod_produto), ' ', '') = replace(trim(COALESCE(${codExpr}, '')), ' ', '')`
+    `replace(trim(e.cod_produto), ' ', '') = replace(trim(COALESCE(${codExpr}, '')), ' ', '')
+     AND ${estoqueCategoriaWhere}`
   const metrosCorte = runGet<{ v: number }>(
     `SELECT COALESCE(SUM(p.metros), 0) as v FROM fato_corte_pedido p WHERE ${corteWhere}`,
     params,
@@ -782,21 +823,22 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
   const saldoAtualMetros = hasEstoque
     ? runGet<{ v: number }>(
         `SELECT COALESCE(SUM(e.saldo_atual), 0) as v FROM fato_tecido_estoque e
-         WHERE e.em_metros = 1`,
-        {},
+         WHERE e.em_metros = 1 AND ${estoqueCategoriaWhere}`,
+        params,
       ).v
     : 0
   const saldoReservadoMetros = hasEstoque
     ? runGet<{ v: number }>(
         `SELECT COALESCE(SUM(e.saldo_reservado), 0) as v FROM fato_tecido_estoque e
-         WHERE e.em_metros = 1`,
-        {},
+         WHERE e.em_metros = 1 AND ${estoqueCategoriaWhere}`,
+        params,
       ).v
     : 0
   const estoqueCodigos = hasEstoque
     ? runGet<{ v: number }>(
-        `SELECT COUNT(*) as v FROM fato_tecido_estoque`,
-        {},
+        `SELECT COUNT(*) as v FROM fato_tecido_estoque e
+         WHERE ${estoqueCategoriaWhere}`,
+        params,
       ).v
     : 0
   const aguardando = runGet<{ pedidos: number; pecas: number; metros: number }>(
@@ -974,13 +1016,14 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
               e.saldo_atual as saldoAtual, e.saldo_reservado as saldoReservado
          FROM fato_tecido_estoque e
          WHERE e.em_metros = 1 AND e.saldo_atual != 0
+           AND ${estoqueCategoriaWhere}
            AND NOT EXISTS (
              SELECT 1 FROM fato_corte_linha l
              WHERE replace(trim(l.cod_tecido), ' ', '') = replace(trim(e.cod_produto), ' ', '')
            )
          ORDER BY e.saldo_atual DESC
          LIMIT 12`,
-        {},
+        params,
       )
     : []
 
@@ -1002,7 +1045,8 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
      ${
        hasEstoque
          ? `LEFT JOIN fato_tecido_estoque e
-            ON replace(trim(e.cod_produto), ' ', '') = replace(trim(COALESCE(l.cod_tecido, '')), ' ', '')`
+            ON replace(trim(e.cod_produto), ' ', '') = replace(trim(COALESCE(l.cod_tecido, '')), ' ', '')
+            AND ${estoqueCategoriaWhere}`
          : ''
      }
      WHERE ${corteWhere} AND h.is_header = 1 AND h.status = 'AGUARDANDO TECIDO'
@@ -2204,6 +2248,23 @@ function mediaRecenteDeMeses(
   return recent.reduce((sum, v) => sum + v, 0) / recent.length
 }
 
+/** Média dos últimos N meses de calendário (inclui zeros). */
+function mediaCalendarioUltimosMeses(
+  porMes: Map<number, number>,
+  ateMes: number,
+  janela = 3,
+) {
+  if (ateMes < 1) return 0
+  const inicio = Math.max(1, ateMes - janela + 1)
+  let sum = 0
+  let n = 0
+  for (let m = inicio; m <= ateMes; m++) {
+    sum += porMes.get(m) ?? 0
+    n += 1
+  }
+  return n ? sum / n : 0
+}
+
 export const getTopClientes = cache(async (filters: DashFilters = {}) => {
   await ensureCloudDatabase()
   const empty = {
@@ -2263,6 +2324,8 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
       )
       .get(),
   )
+  const almoxSql = sqlAlmoxPrincipais('s')
+  const categoriaSql = sqlCategoriaTecido('s')
 
   const resumo = runGet<{
     clientes: number
@@ -2314,7 +2377,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
                 COUNT(DISTINCT s.cod_produto) as tecidos,
                 COUNT(DISTINCT s.pedido_norm) as pedidosComTecido
          FROM fato_pedido_comercial p
-         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1
+         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
          WHERE ${rankingWhere}
          GROUP BY COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)')`,
         params,
@@ -2333,7 +2396,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
                 MAX(s.nome_produto) as nome,
                 COALESCE(SUM(s.metros), 0) as metros
          FROM fato_pedido_comercial p
-         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1
+         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
          WHERE ${rankingWhere}
          GROUP BY COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)'), s.cod_produto
          ORDER BY metros DESC`,
@@ -2382,6 +2445,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     ? `COALESCE((
          SELECT e.saldo_atual FROM fato_tecido_estoque e
          WHERE replace(trim(e.cod_produto), ' ', '') = replace(trim(s.cod_produto), ' ', '')
+           AND ${sqlCategoriaTecido('e')}
          LIMIT 1
        ), 0)`
     : '0'
@@ -2397,7 +2461,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
                 ${estoqueSelect} as saldoAtual
          FROM fato_tecido_signus s
          JOIN fato_pedido_comercial p ON p.pedido_norm = s.pedido_norm
-         WHERE ${where} AND s.is_baixa = 1
+         WHERE ${where} AND s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
          GROUP BY s.cod_produto
          ORDER BY metros DESC
          LIMIT 25`,
@@ -2425,7 +2489,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
         runAll<{ pedidoNorm: string; metros: number }>(
           `SELECT s.pedido_norm as pedidoNorm, COALESCE(SUM(s.metros), 0) as metros
            FROM fato_tecido_signus s
-           WHERE s.is_baixa = 1
+           WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
              AND s.pedido_norm IN (
                SELECT p.pedido_norm FROM fato_pedido_comercial p WHERE ${where}
              )
@@ -2474,7 +2538,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
       `SELECT COALESCE(p.canal, '(sem canal)') as nome,
               COALESCE(SUM(s.metros), 0) as metros
        FROM fato_pedido_comercial p
-       JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1
+       JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
        WHERE ${where}
        GROUP BY p.canal`,
       params,
@@ -2490,7 +2554,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
         `SELECT COALESCE(SUM(s.metros), 0) as v
          FROM fato_tecido_signus s
          JOIN fato_pedido_comercial p ON p.pedido_norm = s.pedido_norm
-         WHERE ${where} AND s.is_baixa = 1`,
+         WHERE ${where} AND s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}`,
         params,
       ).v
     : 0
@@ -2499,7 +2563,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     ? runGet<{ v: number }>(
         `SELECT COUNT(DISTINCT p.pedido_norm) as v
          FROM fato_pedido_comercial p
-         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1
+         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
          WHERE ${where}`,
         params,
       ).v
@@ -2554,7 +2618,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
         runAll<{ pedidoNorm: string; metros: number }>(
           `SELECT s.pedido_norm as pedidoNorm, COALESCE(SUM(s.metros), 0) as metros
            FROM fato_tecido_signus s
-           WHERE s.is_baixa = 1
+           WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
              AND s.pedido_norm IN (
                SELECT p.pedido_norm FROM fato_pedido_comercial p WHERE ${histWhere}
              )
@@ -2606,13 +2670,15 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
         cod: string
         nome: string | null
         metros: number
+        pedidos: number
       }>(
         `SELECT CAST(substr(COALESCE(p.data_venda, p.data_cadastro), 6, 2) as INTEGER) as mes,
                 s.cod_produto as cod,
                 MAX(s.nome_produto) as nome,
-                COALESCE(SUM(s.metros), 0) as metros
+                COALESCE(SUM(s.metros), 0) as metros,
+                COUNT(DISTINCT p.pedido_norm) as pedidos
          FROM fato_pedido_comercial p
-         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1
+         JOIN fato_tecido_signus s ON s.pedido_norm = p.pedido_norm AND s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
          WHERE ${histWhere}
            AND COALESCE(p.data_venda, p.data_cadastro) IS NOT NULL
          GROUP BY CAST(substr(COALESCE(p.data_venda, p.data_cadastro), 6, 2) as INTEGER),
@@ -2625,7 +2691,9 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     cod: string
     nome: string | null
     porMes: Map<number, number>
+    pedidosPorMes: Map<number, number>
     metrosHistorico: number
+    pedidosHistorico: number
   }
   const tecidoHistMap = new Map<string, TecidoHist>()
   for (const row of tecidoMesRows) {
@@ -2634,11 +2702,20 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
       cod: row.cod,
       nome: row.nome,
       porMes: new Map<number, number>(),
+      pedidosPorMes: new Map<number, number>(),
       metrosHistorico: 0,
+      pedidosHistorico: 0,
     }
     current.nome = current.nome || row.nome
     current.porMes.set(row.mes, (current.porMes.get(row.mes) ?? 0) + row.metros)
-    if (row.mes < mesEstudo) current.metrosHistorico += row.metros
+    current.pedidosPorMes.set(
+      row.mes,
+      (current.pedidosPorMes.get(row.mes) ?? 0) + row.pedidos,
+    )
+    if (row.mes < mesEstudo) {
+      current.metrosHistorico += row.metros
+      current.pedidosHistorico += row.pedidos
+    }
     tecidoHistMap.set(row.cod, current)
   }
 
@@ -2646,25 +2723,39 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
   if (hasEstoque) {
     for (const row of runAll<{ cod: string; saldo: number }>(
       `SELECT trim(cod_produto) as cod, COALESCE(saldo_atual, 0) as saldo
-       FROM fato_tecido_estoque`,
+       FROM fato_tecido_estoque e
+       WHERE ${sqlCategoriaTecido('e')}`,
       {},
     )) {
       estoquePorCod.set(row.cod.replace(/\s+/g, ''), row.saldo)
     }
   }
 
+  const mesesNoPeriodo = Math.max(0, mesEstudo - 1)
   const previsaoTecidos: TopClientePrevisaoTecidoRow[] = [...tecidoHistMap.values()]
     .map((item) => {
       const mesesAnt = [...item.porMes.entries()].filter(
         ([mes, metros]) => mes < mesEstudo && metros > 0,
       )
       const mesesComConsumo = mesesAnt.length
-      const mediaMensal = mesesComConsumo
-        ? mesesAnt.reduce((sum, [, m]) => sum + m, 0) / mesesComConsumo
-        : 0
+      // Média do período inteiro (jan → mês anterior), incluindo meses sem baixa.
+      const mediaMensal =
+        mesesNoPeriodo > 0 ? item.metrosHistorico / mesesNoPeriodo : 0
       const mediaRecente =
         mediaRecenteDeMeses(item.porMes, mesEstudo - 1) || mediaMensal
-      const previsaoProximoMes = mediaRecente
+      // Previsão = (metros ÷ pedidos) × ritmo médio de pedidos dos últimos 3 meses.
+      const metrosPorPedido =
+        item.pedidosHistorico > 0
+          ? item.metrosHistorico / item.pedidosHistorico
+          : 0
+      const pedidosMesPrevistos = mediaCalendarioUltimosMeses(
+        item.pedidosPorMes,
+        mesEstudo - 1,
+      )
+      const previsaoProximoMes =
+        metrosPorPedido > 0
+          ? metrosPorPedido * pedidosMesPrevistos
+          : mediaMensal
       const saldoAtual =
         estoquePorCod.get(item.cod.replace(/\s+/g, '')) ?? 0
       const aComprar = Math.max(0, previsaoProximoMes - Math.max(0, saldoAtual))
@@ -2688,9 +2779,9 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     .filter((row) => row.previsaoProximoMes > 0 || row.metrosHistorico > 0)
     .sort(
       (a, b) =>
-        b.aComprar - a.aComprar ||
+        b.mediaMensal - a.mediaMensal ||
         b.previsaoProximoMes - a.previsaoProximoMes ||
-        b.metrosHistorico - a.metrosHistorico,
+        b.aComprar - a.aComprar,
     )
     .slice(0, 25)
 

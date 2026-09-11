@@ -16,6 +16,7 @@ import {
 } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
 import { YEAR } from '@/lib/year'
+import { ALMOX_PRINCIPAIS_LABEL } from '@/lib/almox-principais'
 import {
   explainAguardandoTecido,
   explainEstoqueSemCorte,
@@ -51,14 +52,14 @@ export default async function TecidosPage({
   return (
     <PageShell
       title="Tecidos"
-      description={`Consumo no Corte e baixa no Signus (${YEAR}), cruzados pelo código do tecido. Ambos já vêm filtrados pelo ano na carga — Corte pela data do pedido, Signus pela data do movimento. Saldo do estoque é snapshot (não filtra por mês/ano).`}
+      description={`Consumo no Corte e baixa no Signus (${YEAR}), cruzados pelo código do tecido. Signus e saldo só dos almox ${ALMOX_PRINCIPAIS_LABEL}, categorias MATÉRIA PRIMA / TECIDO. Ambos já vêm filtrados pelo ano na carga — Corte pela data do pedido, Signus pela data do movimento. Saldo do estoque é snapshot (não filtra por mês/ano).`}
       actions={<TecidosSubNav filters={filters} current="metros" />}
     >
       <FilterBar
         pathname="/tecidos"
         values={filters}
         options={options}
-        fields={['mes', 'canal', 'cliente', 'q']}
+        fields={['mes', 'canal', 'cliente', 'categoria', 'q']}
       />
 
       <KpiGrid columns={3}>
@@ -73,28 +74,28 @@ export default async function TecidosPage({
           label="Baixa de tecido no Signus"
           value={formatMeters(metrosSignus)}
           hint={`${formatInt(tecidos.movimentosBaixa)} movimentos · ${formatInt(tecidos.pedidosComBaixa)} pedidos`}
-          detail={`Movimentação Signus · só baixas oficiais (produção/insumo + SAÍDA FF/AC/TC).\n\nTambém só ${YEAR}, mas pela data do movimento — não pela data do corte. Inclui baixas sem nº de pedido e códigos que podem não existir no Corte.`}
+          detail={`Movimentação Signus · só baixas oficiais (produção/insumo + SAÍDA FF/AC/TC) nos almox ${ALMOX_PRINCIPAIS_LABEL}, categorias MATÉRIA PRIMA / TECIDO.\n\nTambém só ${YEAR}, mas pela data do movimento — não pela data do corte. Inclui baixas sem nº de pedido e códigos que podem não existir no Corte.`}
           tone="indigo"
         />
         <KpiCard
           label="Diferença Corte − Signus"
           value={formatMeters(delta)}
           hint={`${formatNumber(cobertura, 1)}% da programação já baixada`}
-          detail={`Cálculo: metros do Corte − metros baixados no Signus.\n\nNegativo = Signus baixou mais que o Corte apontou (cobertura > 100%).\n\nOs dois totais são de ${YEAR}, mas com datas diferentes (corte vs movimento) e universos distintos: Signus soma canal, baixas sem pedido e códigos fora da programação. Não é fechamento pedido a pedido.\n\nRetorno do corte e economia são contas separadas — não “fecham” este número.`}
+          detail={`Cálculo: metros do Corte − metros baixados no Signus (almox ${ALMOX_PRINCIPAIS_LABEL}).\n\nNegativo = Signus baixou mais que o Corte apontou (cobertura > 100%).\n\nOs dois totais são de ${YEAR}, mas com datas diferentes (corte vs movimento) e universos distintos: Signus soma canal, baixas sem pedido e códigos fora da programação. Não é fechamento pedido a pedido.\n\nRetorno do corte e economia são contas separadas — não “fecham” este número.`}
           tone="amber"
         />
         <KpiCard
           label="Saldo atual em estoque"
           value={formatMeters(tecidos.saldoAtualMetros)}
           hint={`${formatInt(tecidos.estoqueCodigos)} códigos · só unidade metro`}
-          detail="Estoque Geral Signus · soma do saldo atual (metros).\n\nSnapshot da última carga — não filtra por mês nem por ano do dashboard."
+          detail={`Estoque Signus · soma do saldo atual (metros) só nos almox ${ALMOX_PRINCIPAIS_LABEL}, categorias MATÉRIA PRIMA / TECIDO.\n\nSnapshot da última carga — não filtra por mês nem por ano do dashboard.`}
           tone="teal"
         />
         <KpiCard
           label="Saldo reservado"
           value={formatMeters(tecidos.saldoReservadoMetros)}
           hint="Metros reservados no estoque"
-          detail="Estoque Geral Signus · soma do Saldo reservado (metros).\n\nTambém é snapshot da carga, sem filtro de mês/ano."
+          detail={`Estoque Signus · soma do Saldo reservado (metros) só nos almox ${ALMOX_PRINCIPAIS_LABEL}, categorias MATÉRIA PRIMA / TECIDO.\n\nTambém é snapshot da carga, sem filtro de mês/ano.`}
           tone="magenta"
         />
         <KpiCard
@@ -153,7 +154,7 @@ export default async function TecidosPage({
       <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Tecidos mais usados</h2>
         <p className="text-xs text-muted-foreground">
-          Ranking do Corte 2026. Signus = baixa; Saldo = Estoque Geral no mesmo código.
+          Ranking do Corte 2026. Signus = baixa nos almox principais; Saldo = mesmos almox.
         </p>
         <SimpleTable
           columns={[
@@ -244,7 +245,7 @@ export default async function TecidosPage({
       <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Corte × Signus × Estoque</h2>
         <p className="text-xs text-muted-foreground">
-          COD TECIDO da programação × Código produto (Signus e Saldo do Estoque Geral).
+          COD TECIDO da programação × Código produto (Signus e estoque dos almox principais).
         </p>
         <SimpleTable
           columns={[
@@ -322,7 +323,7 @@ export default async function TecidosPage({
       <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Estoque com saldo e sem código no Corte</h2>
         <p className="text-xs text-muted-foreground">
-          Códigos em metro com saldo atual ≠ 0 no Estoque Geral e sem COD TECIDO no Corte.
+          Códigos em metro com saldo atual ≠ 0 nos almox principais e sem COD TECIDO no Corte.
         </p>
         <SimpleTable
           columns={[

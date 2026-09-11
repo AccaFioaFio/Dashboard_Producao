@@ -9,6 +9,7 @@ import { funilSliceWhere, type FunilSlice } from '@/lib/funil'
 import { ocPecasExpr } from '@/lib/corte-oc'
 import { sqlPendentesOficina } from '@/lib/oficinas-qty'
 import { pedidoDigits, parsePedidoParam } from '@/lib/pedido'
+import { sqlAlmoxPrincipais } from '@/lib/almox-principais'
 
 export type PedidoListaRow = {
   pedidoNorm: string
@@ -465,7 +466,9 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
     .prepare(
       `SELECT data, metros, cod_produto as codProduto, nome_produto as nomeProduto,
               tipo_norm as tipoNorm, is_baixa as isBaixa, origem_mov as origemMov
-       FROM fato_tecido_signus WHERE pedido_norm = ? ORDER BY data, excel_row`,
+       FROM fato_tecido_signus
+       WHERE pedido_norm = ? AND ${sqlAlmoxPrincipais()}
+       ORDER BY data, excel_row`,
     )
     .all(pedidoNorm) as PedidoFicha['signus']
 

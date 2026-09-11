@@ -9,6 +9,7 @@ export type DashFilters = {
   oficina?: string
   q?: string
   tipo?: string
+  categoria?: string
   fatia?: FunilSlice
 }
 
@@ -22,6 +23,7 @@ export type FilterOptions = {
   produtos: string[]
   oficinas: string[]
   tipos?: { value: string; label: string }[]
+  categorias?: string[]
 }
 
 const KEYS: FilterField[] = [
@@ -33,6 +35,7 @@ const KEYS: FilterField[] = [
   'oficina',
   'q',
   'tipo',
+  'categoria',
   'fatia',
 ]
 
@@ -57,6 +60,7 @@ export function parseFilters(
     oficina: first(searchParams.oficina) || undefined,
     q: q || undefined,
     tipo: first(searchParams.tipo)?.trim() || undefined,
+    categoria: first(searchParams.categoria)?.trim() || undefined,
     fatia: isFunilSlice(fatiaRaw) ? fatiaRaw : undefined,
   }
 }
@@ -71,6 +75,7 @@ export function filtersToSearch(filters: DashFilters) {
   if (filters.oficina) params.set('oficina', filters.oficina)
   if (filters.q) params.set('q', filters.q)
   if (filters.tipo) params.set('tipo', filters.tipo)
+  if (filters.categoria) params.set('categoria', filters.categoria)
   if (filters.fatia) params.set('fatia', filters.fatia)
   return params
 }

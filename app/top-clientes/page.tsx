@@ -15,6 +15,7 @@ import {
 } from '@/lib/format'
 import { filtersToSearch, parseFilters } from '@/lib/filters'
 import { YEAR } from '@/lib/year'
+import { ALMOX_PRINCIPAIS_LABEL } from '@/lib/almox-principais'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Top Clientes' }
@@ -109,7 +110,7 @@ export default async function TopClientesPage({
               label={`Previsão tecido · ${proximoMesLabel}`}
               value={formatMeters(data.previsaoProximoMesMetros)}
               hint={`Ref. até ${mesRefLabel} · compra sugerida ${formatMeters(data.previsaoCompraProximoMes)}`}
-              detail="Média dos últimos 3 meses com baixa Signus (venda final). Compra sugerida = previsão − saldo em estoque, por tecido."
+              detail={`Baixas e saldo só dos almox ${ALMOX_PRINCIPAIS_LABEL}. Por tecido: (metros ÷ pedidos) × média de pedidos dos últimos 3 meses. Compra = previsão − saldo.`}
               tone="amber"
             />
             <KpiCard
@@ -144,7 +145,7 @@ export default async function TopClientesPage({
             />
             <MonthlyAreaChart
               title="Metros: histórico e previsão"
-              description={`Baixas Signus até ${mesRefLabel}; meses seguintes = média recente (últimos 3 com consumo).`}
+              description={`Baixas Signus (almox ACCA/FAF/TRU) até ${mesRefLabel}; meses seguintes = média recente (últimos 3 com consumo).`}
               labels={MONTH_LABELS}
               series={[
                 {
@@ -173,9 +174,12 @@ export default async function TopClientesPage({
             </h2>
             <p className="text-xs text-muted-foreground">
               Estuda as baixas dos meses anteriores a {mesRefLabel}/{YEAR}
-              {clienteAtivo ? ` deste cliente` : ''}. Previsão do próximo mês =
-              média dos últimos 3 meses com consumo. A comprar = previsão −
-              saldo atual (quando o estoque não cobre).
+              {clienteAtivo ? ` deste cliente` : ''}, só nos almox{' '}
+              {ALMOX_PRINCIPAIS_LABEL}. Média mensal = total ÷
+              meses do período. Últimos 3 meses = média dos meses com consumo.
+              Previsão = (metros ÷ pedidos) × ritmo médio de pedidos dos
+              últimos 3 meses. A comprar = previsão − saldo desses almox
+              (quando o estoque não cobre).
             </p>
             <SimpleTable
               columns={[

@@ -187,7 +187,7 @@ export function explainTecidoRanking(row: {
     row.saldoAtual != null
       ? `Saldo atual ${formatMeters(row.saldoAtual)} · reservado ${formatMeters(row.saldoReservado ?? 0)}.`
       : null,
-    'Corte = MTS da programação. Signus = baixa real. Estoque = Saldo do Estoque Geral (snapshot).',
+    'Corte = MTS da programação. Signus = baixa real nos almox principais. Estoque = saldo dos mesmos almox (snapshot).',
   ])
 }
 
@@ -250,7 +250,7 @@ export function explainTecidoCruzado(row: {
     row.cortePedidos != null
       ? `Pedidos no Corte ${formatInt(row.cortePedidos)}${row.signusPedidos != null ? ` · com baixa Signus ${formatInt(row.signusPedidos)}` : ''}.`
       : null,
-    'Cruza COD TECIDO com Código produto (Signus e Estoque Geral).',
+    'Cruza COD TECIDO com Código produto (Signus e estoque dos almox principais).',
   ])
 }
 
@@ -285,7 +285,7 @@ export function explainEstoqueSemCorte(row: {
 }) {
   return hintLines([
     `${row.tecido}: saldo atual ${formatMeters(row.saldoAtual)} · reservado ${formatMeters(row.saldoReservado)}.`,
-    'Código no Saldo do Estoque Geral sem COD TECIDO na programação de Corte.',
+    'Código no estoque dos almox principais sem COD TECIDO na programação de Corte.',
   ])
 }
 
