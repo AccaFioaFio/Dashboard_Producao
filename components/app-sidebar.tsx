@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import {
   Sidebar,
@@ -15,6 +16,57 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar'
 import { findNavItem, navigation } from '@/lib/navigation'
+import { cn } from '@/lib/utils'
+
+const WATCHER_POLL_MS = 15_000
+
+function WatcherStatusFooter() {
+  const [online, setOnline] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function refresh() {
+      try {
+        const res = await fetch('/api/watcher-status', { cache: 'no-store' })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = (await res.json()) as { online?: boolean }
+        if (!cancelled) setOnline(Boolean(data.online))
+      } catch {
+        if (!cancelled) setOnline(false)
+      }
+    }
+
+    void refresh()
+    const id = setInterval(() => {
+      void refresh()
+    }, WATCHER_POLL_MS)
+
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [])
+
+  return (
+    <div className="flex items-center gap-2 px-2 py-2 group-data-[collapsible=icon]:hidden">
+      <span className="relative flex size-2.5">
+        {online ? (
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-chart-2 opacity-40" />
+        ) : null}
+        <span
+          className={cn(
+            'relative inline-flex size-2.5 rounded-full',
+            online ? 'bg-chart-2' : 'bg-sidebar-foreground/35',
+          )}
+        />
+      </span>
+      <p className="truncate text-xs text-sidebar-foreground/55">
+        {online ? 'Ao vivo' : 'Observador offline'}
+      </p>
+    </div>
+  )
+}
 
 export function AppSidebar() {
   const pathname = usePathname()
@@ -64,13 +116,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border/80">
-        <div className="flex items-center gap-2 px-2 py-2 group-data-[collapsible=icon]:hidden">
-          <span className="relative flex size-2.5">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-chart-2 opacity-40" />
-            <span className="relative inline-flex size-2.5 rounded-full bg-chart-2" />
-          </span>
-          <p className="truncate text-xs text-sidebar-foreground/55">Painel ao vivo · 2026</p>
-        </div>
+        <WatcherStatusFooter />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
