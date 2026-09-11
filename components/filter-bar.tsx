@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  CATEGORIA_TECIDO_PADRAO,
   countActiveFilters,
   filtersToSearch,
   type DashFilters,
@@ -40,9 +41,14 @@ export function FilterBar({
 }: FilterBarProps) {
   const router = useRouter()
   const active = countActiveFilters(values)
+  const hasCategoria = fields.includes('categoria')
 
   function push(next: DashFilters) {
-    const query = filtersToSearch(next).toString()
+    const withDefault =
+      hasCategoria && !next.categoria
+        ? { ...next, categoria: CATEGORIA_TECIDO_PADRAO }
+        : next
+    const query = filtersToSearch(withDefault).toString()
     router.push(query ? `${pathname}?${query}` : pathname)
   }
 
@@ -82,7 +88,9 @@ export function FilterBar({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => push({})}
+            onClick={() =>
+              push(hasCategoria ? { categoria: CATEGORIA_TECIDO_PADRAO } : {})
+            }
             className="h-7 text-xs"
           >
             <X className="size-3.5" />
@@ -193,9 +201,16 @@ export function FilterBar({
         {fields.includes('categoria') ? (
           <FilterSelect
             label="Categoria"
-            value={values.categoria}
-            items={options.categorias ?? []}
-            onChange={(value) => setField('categoria', value)}
+            value={values.categoria ?? CATEGORIA_TECIDO_PADRAO}
+            items={
+              options.categorias?.includes(CATEGORIA_TECIDO_PADRAO)
+                ? options.categorias
+                : [CATEGORIA_TECIDO_PADRAO, ...(options.categorias ?? [])]
+            }
+            required
+            onChange={(value) =>
+              setField('categoria', value || CATEGORIA_TECIDO_PADRAO)
+            }
           />
         ) : null}
       </div>
@@ -208,12 +223,14 @@ function FilterSelect({
   value,
   items,
   labels,
+  required,
   onChange,
 }: {
   label: string
   value?: string
   items: string[]
   labels?: Record<string, string>
+  required?: boolean
   onChange: (value: string | undefined) => void
 }) {
   return (
@@ -222,8 +239,14 @@ function FilterSelect({
         {label}
       </span>
       <Select
-        value={value ?? ALL}
-        onValueChange={(next) => onChange(!next || next === ALL ? undefined : String(next))}
+        value={value ?? (required ? undefined : ALL)}
+        onValueChange={(next) => {
+          if (!next || next === ALL) {
+            onChange(required ? value : undefined)
+            return
+          }
+          onChange(String(next))
+        }}
       >
         <SelectTrigger className="h-8 w-full min-w-0 bg-background/70">
           <SelectValue>
@@ -237,7 +260,7 @@ function FilterSelect({
           </SelectValue>
         </SelectTrigger>
         <SelectContent align="start" alignItemWithTrigger={false} className="max-h-72">
-          <SelectItem value={ALL}>Todos</SelectItem>
+          {required ? null : <SelectItem value={ALL}>Todos</SelectItem>}
           {items.map((item) => (
             <SelectItem key={item} value={item}>
               {labels?.[item] ?? item}

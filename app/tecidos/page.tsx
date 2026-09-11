@@ -14,7 +14,7 @@ import {
   formatNumber,
   formatTecido,
 } from '@/lib/format'
-import { parseFilters } from '@/lib/filters'
+import { parseFilters, withCategoriaPadrao } from '@/lib/filters'
 import { YEAR } from '@/lib/year'
 import { ALMOX_PRINCIPAIS_LABEL } from '@/lib/almox-principais'
 import {
@@ -37,7 +37,7 @@ export default async function TecidosPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const filters = parseFilters(await searchParams)
+  const filters = withCategoriaPadrao(parseFilters(await searchParams))
   const [tecidos, options] = await Promise.all([
     getTecidos(filters),
     getFilterOptions(),
@@ -52,7 +52,7 @@ export default async function TecidosPage({
   return (
     <PageShell
       title="Tecidos"
-      description={`Consumo no Corte e baixa no Signus (${YEAR}), cruzados pelo código do tecido. Signus e saldo só dos almox ${ALMOX_PRINCIPAIS_LABEL}, categorias MATÉRIA PRIMA / TECIDO. Ambos já vêm filtrados pelo ano na carga — Corte pela data do pedido, Signus pela data do movimento. Saldo do estoque é snapshot (não filtra por mês/ano).`}
+      description={`Consumo no Corte e baixa no Signus (${YEAR}), cruzados pelo código do tecido. Signus e saldo só dos almox ${ALMOX_PRINCIPAIS_LABEL}, categoria MATÉRIA PRIMA por padrão. Ambos já vêm filtrados pelo ano na carga — Corte pela data do pedido, Signus pela data do movimento. Saldo do estoque é snapshot (não filtra por mês/ano).`}
       actions={<TecidosSubNav filters={filters} current="metros" />}
     >
       <FilterBar
@@ -74,7 +74,7 @@ export default async function TecidosPage({
           label="Baixa de tecido no Signus"
           value={formatMeters(metrosSignus)}
           hint={`${formatInt(tecidos.movimentosBaixa)} movimentos · ${formatInt(tecidos.pedidosComBaixa)} pedidos`}
-          detail={`Movimentação Signus · só baixas oficiais (produção/insumo + SAÍDA FF/AC/TC) nos almox ${ALMOX_PRINCIPAIS_LABEL}, categorias MATÉRIA PRIMA / TECIDO.\n\nTambém só ${YEAR}, mas pela data do movimento — não pela data do corte. Inclui baixas sem nº de pedido e códigos que podem não existir no Corte.`}
+          detail={`Movimentação Signus · só baixas oficiais (produção/insumo + SAÍDA FF/AC/TC) nos almox ${ALMOX_PRINCIPAIS_LABEL}.\n\nTambém só ${YEAR}, mas pela data do movimento — não pela data do corte. Inclui baixas sem nº de pedido e códigos que podem não existir no Corte.`}
           tone="indigo"
         />
         <KpiCard
@@ -88,14 +88,14 @@ export default async function TecidosPage({
           label="Saldo atual em estoque"
           value={formatMeters(tecidos.saldoAtualMetros)}
           hint={`${formatInt(tecidos.estoqueCodigos)} códigos · só unidade metro`}
-          detail={`Estoque Signus · soma do saldo atual (metros) só nos almox ${ALMOX_PRINCIPAIS_LABEL}, categorias MATÉRIA PRIMA / TECIDO.\n\nSnapshot da última carga — não filtra por mês nem por ano do dashboard.`}
+          detail={`Estoque Signus · soma do saldo atual (metros) só nos almox ${ALMOX_PRINCIPAIS_LABEL}.\n\nSnapshot da última carga — não filtra por mês nem por ano do dashboard. Use o filtro Categoria para isolar MATÉRIA PRIMA, etc.`}
           tone="teal"
         />
         <KpiCard
           label="Saldo reservado"
           value={formatMeters(tecidos.saldoReservadoMetros)}
           hint="Metros reservados no estoque"
-          detail={`Estoque Signus · soma do Saldo reservado (metros) só nos almox ${ALMOX_PRINCIPAIS_LABEL}, categorias MATÉRIA PRIMA / TECIDO.\n\nTambém é snapshot da carga, sem filtro de mês/ano.`}
+          detail={`Estoque Signus · soma do Saldo reservado (metros) só nos almox ${ALMOX_PRINCIPAIS_LABEL}.\n\nTambém é snapshot da carga, sem filtro de mês/ano.`}
           tone="magenta"
         />
         <KpiCard

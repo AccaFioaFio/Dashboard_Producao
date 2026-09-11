@@ -1,27 +1,16 @@
-import { foldSignus } from '@/lib/keys'
-
 /**
- * Categorias Signus/estoque que entram na aba Tecidos.
- * Estoque em metros misturava acabados/embalagens sem este recorte.
+ * Filtro da coluna CATEGORIA (Signus / estoque).
+ * Sem seleção = todas as categorias; com seleção = match exato.
  */
-export function isCategoriaTecido(categoria: string | null | undefined) {
-  const catFold = foldSignus(categoria ?? '')
-  if (!catFold) return false
-  if (catFold === 'TECIDO') return true
-  if (catFold.includes('PRIMA')) return true
-  return false
+export function sqlCategoriaFilter(alias: string, categoria?: string) {
+  if (!categoria) return null
+  return `${alias}.categoria = @categoria`
 }
 
-/** Cláusula SQL: só MATÉRIA PRIMA / TECIDO (quando não há filtro explícito). */
+/** Recorte fixo MATÉRIA PRIMA / TECIDO (legado; preferir sqlCategoriaFilter). */
 export function sqlCategoriaTecido(alias: string) {
   return `(
     COALESCE(${alias}.categoria, '') LIKE '%PRIMA%'
     OR upper(COALESCE(${alias}.categoria, '')) = 'TECIDO'
   )`
-}
-
-/** Filtro opcional por categoria exata; senão mantém só categorias de tecido. */
-export function sqlCategoriaFilter(alias: string, categoria?: string) {
-  if (categoria) return `${alias}.categoria = @categoria`
-  return sqlCategoriaTecido(alias)
 }

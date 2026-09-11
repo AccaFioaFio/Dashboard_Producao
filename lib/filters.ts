@@ -1,5 +1,8 @@
 import { isFunilSlice, type FunilSlice } from '@/lib/funil'
 
+/** Padrão do filtro Categoria na aba Tecidos (igual ao Excel). */
+export const CATEGORIA_TECIDO_PADRAO = 'MATÉRIA PRIMA'
+
 export type DashFilters = {
   mes?: number
   canal?: string
@@ -65,6 +68,14 @@ export function parseFilters(
   }
 }
 
+/** Garante MATÉRIA PRIMA quando a URL não traz categoria. */
+export function withCategoriaPadrao(filters: DashFilters): DashFilters {
+  return {
+    ...filters,
+    categoria: filters.categoria || CATEGORIA_TECIDO_PADRAO,
+  }
+}
+
 export function filtersToSearch(filters: DashFilters) {
   const params = new URLSearchParams()
   if (filters.mes) params.set('mes', String(filters.mes))
@@ -81,7 +92,13 @@ export function filtersToSearch(filters: DashFilters) {
 }
 
 export function countActiveFilters(filters: DashFilters) {
-  return KEYS.reduce((count, key) => (filters[key] ? count + 1 : count), 0)
+  return KEYS.reduce((count, key) => {
+    const value = filters[key]
+    if (!value) return count
+    // Padrão da aba Tecidos não conta como "recorte extra".
+    if (key === 'categoria' && value === CATEGORIA_TECIDO_PADRAO) return count
+    return count + 1
+  }, 0)
 }
 
 export function hasActiveFilters(filters: DashFilters) {

@@ -12,7 +12,7 @@ import { analyzeTempoProducao, type TempoPedidoRow } from '@/lib/etl/tempo'
 import { sqlPendentesOficina } from '@/lib/oficinas-qty'
 import { TIPO_TECIDO_LABEL } from '@/lib/format'
 import { sqlAlmoxPrincipais } from '@/lib/almox-principais'
-import { sqlCategoriaFilter, sqlCategoriaTecido } from '@/lib/tecido-categoria'
+import { sqlCategoriaFilter } from '@/lib/tecido-categoria'
 
 export type CargaInfo = {
   id: number
@@ -173,8 +173,11 @@ function applyPedidoFilters(
 
 function applySignusFilters(filter: SqlFilter, alias: string, filters: DashFilters) {
   filter.clauses.push(sqlAlmoxPrincipais(alias))
-  filter.clauses.push(sqlCategoriaFilter(alias, filters.categoria))
-  if (filters.categoria) filter.params.categoria = filters.categoria
+  const categoriaSql = sqlCategoriaFilter(alias, filters.categoria)
+  if (categoriaSql) {
+    filter.clauses.push(categoriaSql)
+    filter.params.categoria = filters.categoria
+  }
   if (filters.mes) {
     filter.clauses.push(`CAST(substr(${alias}.data, 6, 2) as INTEGER) = @mes`)
     filter.params.mes = filters.mes
@@ -206,8 +209,11 @@ function applySignusRastreioFilters(
   filters: DashFilters,
 ) {
   filter.clauses.push(sqlAlmoxPrincipais(alias))
-  filter.clauses.push(sqlCategoriaFilter(alias, filters.categoria))
-  if (filters.categoria) filter.params.categoria = filters.categoria
+  const categoriaSql = sqlCategoriaFilter(alias, filters.categoria)
+  if (categoriaSql) {
+    filter.clauses.push(categoriaSql)
+    filter.params.categoria = filters.categoria
+  }
   if (filters.mes) {
     filter.clauses.push(`CAST(substr(${alias}.data, 6, 2) as INTEGER) = @mes`)
     filter.params.mes = filters.mes
@@ -246,8 +252,10 @@ function applyEstoqueCategoria(
   alias: string,
   filters: DashFilters,
 ) {
-  filter.clauses.push(sqlCategoriaFilter(alias, filters.categoria))
-  if (filters.categoria) filter.params.categoria = filters.categoria
+  const categoriaSql = sqlCategoriaFilter(alias, filters.categoria)
+  if (!categoriaSql) return
+  filter.clauses.push(categoriaSql)
+  filter.params.categoria = filters.categoria
 }
 
 function whereSql(filter: SqlFilter) {
@@ -337,11 +345,9 @@ export const getFilterOptions = cache(async (): Promise<FilterOptions> => {
           `SELECT categoria FROM (
              SELECT s.categoria as categoria FROM fato_tecido_signus s
              WHERE s.categoria IS NOT NULL AND trim(s.categoria) != ''
-               AND ${sqlCategoriaTecido('s')}
              UNION
              SELECT e.categoria as categoria FROM fato_tecido_estoque e
              WHERE e.categoria IS NOT NULL AND trim(e.categoria) != ''
-               AND ${sqlCategoriaTecido('e')}
            )
            ORDER BY categoria`,
         )
@@ -753,7 +759,8 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
   const signusWhere = whereSql(signusFilter)
   const estoqueFilter = emptyFilter()
   applyEstoqueCategoria(estoqueFilter, 'e', filters)
-  const estoqueCategoriaWhere = whereSql(estoqueFilter)
+  const estoqueCategoriaWhere =
+    estoqueFilter.clauses.length > 0 ? whereSql(estoqueFilter) : '1=1'
   const params = {
     ...corteFilter.params,
     ...signusFilter.params,
@@ -2300,6 +2307,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
       responsaveis: [] as string[],
       produtos: [] as string[],
       oficinas: [] as string[],
+      categorias: [] as string[],
     } satisfies FilterOptions,
   }
 
@@ -2325,7 +2333,12 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
       .get(),
   )
   const almoxSql = sqlAlmoxPrincipais('s')
-  const categoriaSql = sqlCategoriaTecido('s')
+  const categoriaSqlSignus = sqlCategoriaFilter('s', filters.categoria)
+  const categoriaSql = categoriaSqlSignus ?? '1=1'
+  const categoriaSqlEstoque = sqlCategoriaFilter('e', filters.categoria) ?? '1=1'
+  if (filters.categoria) {
+    params.categoria = filters.categoria
+  }
 
   const resumo = runGet<{
     clientes: number
@@ -2445,7 +2458,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     ? `COALESCE((
          SELECT e.saldo_atual FROM fato_tecido_estoque e
          WHERE replace(trim(e.cod_produto), ' ', '') = replace(trim(s.cod_produto), ' ', '')
-           AND ${sqlCategoriaTecido('e')}
+           AND ${categoriaSqlEstoque}
          LIMIT 1
        ), 0)`
     : '0'
@@ -2594,7 +2607,10 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     { vendaFinal: true },
   )
   const histWhere = whereSql(histFilter)
-  const histParams = histFilter.params
+  const histParams = { ...histFilter.params }
+  if (filters.categoria) {
+    histParams.categoria = filters.categoria
+  }
   const mesRef = mesCalendarioNoAno()
   const mesEstudo = mesRef > 0 ? mesRef : 12
 
@@ -2724,8 +2740,8 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     for (const row of runAll<{ cod: string; saldo: number }>(
       `SELECT trim(cod_produto) as cod, COALESCE(saldo_atual, 0) as saldo
        FROM fato_tecido_estoque e
-       WHERE ${sqlCategoriaTecido('e')}`,
-      {},
+       WHERE ${categoriaSqlEstoque}`,
+      filters.categoria ? { categoria: filters.categoria } : {},
     )) {
       estoquePorCod.set(row.cod.replace(/\s+/g, ''), row.saldo)
     }
@@ -2805,6 +2821,19 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     responsaveis: [],
     produtos: [],
     oficinas: [],
+    categorias: (
+      runAll<{ categoria: string }>(
+        `SELECT categoria FROM (
+           SELECT s.categoria as categoria FROM fato_tecido_signus s
+           WHERE s.categoria IS NOT NULL AND trim(s.categoria) != ''
+           UNION
+           SELECT e.categoria as categoria FROM fato_tecido_estoque e
+           WHERE e.categoria IS NOT NULL AND trim(e.categoria) != ''
+         )
+         ORDER BY categoria`,
+        {},
+      )
+    ).map((row) => row.categoria),
   }
   if (!options.meses.length) {
     options.meses = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]

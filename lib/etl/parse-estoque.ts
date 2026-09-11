@@ -3,7 +3,6 @@ import { isAlmoxPrincipal } from '@/lib/almox-principais'
 import { asNumber, headerIndex } from '@/lib/etl/excel'
 import { cell, findHeaderRow, sheetRows } from '@/lib/etl/parse'
 import { asText, asTecidoCode, foldSignus } from '@/lib/keys'
-import { isCategoriaTecido } from '@/lib/tecido-categoria'
 import type { EstoqueTecidoSaldo } from '@/lib/etl/types'
 
 function col(map: Map<string, number>, aliases: string[], fallback: number) {
@@ -29,7 +28,6 @@ function isTecidoEstoque(
   unidade: string | null,
   nomeUnidade: string | null,
 ) {
-  if (!isCategoriaTecido(categoria)) return false
   if (isMetros(unidade, nomeUnidade)) return true
   const catFold = foldSignus(categoria ?? '')
   if (catFold === 'TECIDO') return true

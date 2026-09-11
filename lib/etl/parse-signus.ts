@@ -90,17 +90,6 @@ function isMetros(unidade: string | null) {
   return folded === 'MT' || folded === 'M' || folded === 'MTS' || folded === 'METRO'
 }
 
-function isTecidoLinha(linha: string | null, nome: string | null, categoria: string | null) {
-  const linhaFold = foldSignus(linha ?? '')
-  if (linhaFold === 'TECIDO') return true
-  const catFold = foldSignus(categoria ?? '')
-  if (catFold === 'TECIDO') return true
-  if (catFold.includes('PRIMA') && foldSignus(nome ?? '').includes('TECIDO')) {
-    return true
-  }
-  return false
-}
-
 export function parseSignusTecidos(workbook: XLSX.WorkBook) {
   let rows: unknown[][]
   try {
@@ -195,7 +184,8 @@ export function parseSignusTecidos(workbook: XLSX.WorkBook) {
     const nomeProduto = asText(cell(values, colNome))
     const linha = asText(cell(values, colLinha))
     const categoria = asText(cell(values, colCat))
-    if (!isTecidoLinha(linha, nomeProduto, categoria)) continue
+    // Mantém todas as categorias da planilha; o recorte (ex. MATÉRIA PRIMA)
+    // é feito no dashboard pelo filtro Categoria.
 
     const data = toIsoDate(cell(values, colData))
     if (!data || !isYear(data, YEAR)) continue

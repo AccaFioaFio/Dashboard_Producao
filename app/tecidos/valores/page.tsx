@@ -15,7 +15,7 @@ import {
   formatTecido,
   tipoDocumentoLabel,
 } from '@/lib/format'
-import { parseFilters } from '@/lib/filters'
+import { parseFilters, withCategoriaPadrao } from '@/lib/filters'
 import { ALMOX_PRINCIPAIS_LABEL } from '@/lib/almox-principais'
 import {
   explainDocumentoValor,
@@ -37,7 +37,7 @@ export default async function TecidosValoresPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const filters = parseFilters(await searchParams)
+  const filters = withCategoriaPadrao(parseFilters(await searchParams))
   const [valores, options] = await Promise.all([
     getTecidosValores(filters),
     getFilterOptions(),

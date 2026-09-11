@@ -13,7 +13,7 @@ import {
   formatTecido,
 } from '@/lib/format'
 import { ALMOX_PRINCIPAIS_LABEL } from '@/lib/almox-principais'
-import { filtersToSearch, parseFilters, type DashFilters } from '@/lib/filters'
+import { filtersToSearch, parseFilters, withCategoriaPadrao, type DashFilters } from '@/lib/filters'
 import {
   explainTecidoProdutoAgg,
   explainTecidoRastreio,
@@ -38,7 +38,7 @@ export default async function TecidosRastreioPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const filters = parseFilters(await searchParams)
+  const filters = withCategoriaPadrao(parseFilters(await searchParams))
   const [rastreio, options] = await Promise.all([
     getTecidosRastreio(filters),
     getFilterOptions(),

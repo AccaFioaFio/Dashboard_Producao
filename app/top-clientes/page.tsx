@@ -13,7 +13,7 @@ import {
   formatNumber,
   formatTecido,
 } from '@/lib/format'
-import { filtersToSearch, parseFilters } from '@/lib/filters'
+import { filtersToSearch, parseFilters, withCategoriaPadrao } from '@/lib/filters'
 import { YEAR } from '@/lib/year'
 import { ALMOX_PRINCIPAIS_LABEL } from '@/lib/almox-principais'
 
@@ -32,7 +32,7 @@ export default async function TopClientesPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const filters = parseFilters(await searchParams)
+  const filters = withCategoriaPadrao(parseFilters(await searchParams))
   const data = await getTopClientes(filters)
   const clienteAtivo = filters.cliente
   const mesRefLabel =
@@ -47,13 +47,13 @@ export default async function TopClientesPage({
   return (
     <PageShell
       title="Top Clientes"
-      description={`Pedidos comerciais ${YEAR} — só venda final (exclui remessa p/ industrialização e oficinas). Cruzado com baixas de tecido na movimentação Signus. Clique num cliente para ver o mix de tecidos e a previsão de compra.`}
+      description={`Pedidos comerciais ${YEAR} — só venda final (exclui remessa p/ industrialização e oficinas). Cruzado com baixas de tecido na movimentação Signus (almox ${ALMOX_PRINCIPAIS_LABEL}, categoria MATÉRIA PRIMA por padrão). Clique num cliente para ver o mix de tecidos e a previsão de compra.`}
     >
       <FilterBar
         pathname="/top-clientes"
         values={filters}
         options={data.options}
-        fields={['mes', 'canal', 'cliente', 'q']}
+        fields={['mes', 'canal', 'cliente', 'categoria', 'q']}
       />
 
       {!data.loaded ? (
