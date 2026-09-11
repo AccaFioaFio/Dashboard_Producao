@@ -466,9 +466,9 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
     .prepare(
       `SELECT data, metros, cod_produto as codProduto, nome_produto as nomeProduto,
               tipo_norm as tipoNorm, is_baixa as isBaixa, origem_mov as origemMov
-       FROM fato_tecido_signus
-       WHERE pedido_norm = ? AND ${sqlAlmoxPrincipais()}
-       ORDER BY data, excel_row`,
+       FROM fato_tecido_signus s
+       WHERE s.pedido_norm = ? AND ${sqlAlmoxPrincipais('s')}
+       ORDER BY s.data, s.excel_row`,
     )
     .all(pedidoNorm) as PedidoFicha['signus']
 
