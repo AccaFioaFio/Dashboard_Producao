@@ -145,7 +145,7 @@ export default async function TopClientesPage({
             />
             <MonthlyAreaChart
               title="Metros: histórico e previsão"
-              description={`Baixas Signus (almox ACCA/FAF/TRU) por data do movimento até ${mesRefLabel}; meses seguintes = ritmo recente (até 3 meses com consumo).`}
+              description={`Histórico = baixas Signus (almox ACCA/FAF/TRU) por data do movimento até ${mesRefLabel}. Previsão = ritmo recente (até 3 meses com consumo) só de ${mesRefLabel} em diante.`}
               labels={MONTH_LABELS}
               series={[
                 {
@@ -153,14 +153,18 @@ export default async function TopClientesPage({
                   label: 'Histórico',
                   color: 'var(--chart-3)',
                   values: data.porMesHistorico.map((row) =>
-                    Math.round(row.metros),
+                    row.mes > data.mesReferencia
+                      ? null
+                      : Math.round(row.metros),
                   ),
                 },
                 {
                   key: 'previsao',
                   label: 'Previsão',
                   color: 'var(--chart-1)',
-                  values: data.porMesPrevisao.map((v) => Math.round(v)),
+                  values: data.porMesPrevisao.map((v) =>
+                    v == null ? null : Math.round(v),
+                  ),
                 },
               ]}
             />

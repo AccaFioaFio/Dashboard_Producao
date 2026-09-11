@@ -7,7 +7,7 @@ export type AreaSeries = {
   key: string
   label: string
   color: string
-  values: number[]
+  values: (number | null)[]
 }
 
 type Point = { x: number; y: number; value: number }
@@ -52,7 +52,12 @@ export function MonthlyAreaChart({
   const innerH = height - pad.top - pad.bottom
   const baseline = pad.top + innerH
 
-  const max = Math.max(1, ...series.flatMap((item) => item.values))
+  const max = Math.max(
+    1,
+    ...series.flatMap((item) =>
+      item.values.filter((value): value is number => value != null),
+    ),
+  )
   const count = Math.max(labels.length, 1)
   const step = count > 1 ? innerW / (count - 1) : 0
 
@@ -60,14 +65,18 @@ export function MonthlyAreaChart({
     () =>
       series.map((item) => {
         const points = item.values.map((value, index) => {
+          if (value == null) return null
           const x = pad.left + index * step
           const y = pad.top + innerH - (value / max) * innerH
           return { x, y, value }
         })
-        const line = toSmoothPath(points)
+        const drawn = points.filter(
+          (point): point is Point => point != null,
+        )
+        const line = toSmoothPath(drawn)
         const area =
-          points.length > 0
-            ? `${line} L${points[points.length - 1].x} ${baseline} L${points[0].x} ${baseline} Z`
+          drawn.length > 0
+            ? `${line} L${drawn[drawn.length - 1].x} ${baseline} L${drawn[0].x} ${baseline} Z`
             : ''
         return { ...item, points, line, area }
       }),
@@ -224,17 +233,19 @@ export function MonthlyAreaChart({
         })}
 
         {built.map((item) =>
-          item.points.map((point, index) => (
-            <circle
-              key={`${item.key}-${index}`}
-              cx={point.x}
-              cy={point.y}
-              r={active === index ? 4 : 3}
-              fill="var(--card)"
-              stroke={item.color}
-              strokeWidth="2"
-            />
-          )),
+          item.points.map((point, index) =>
+            point ? (
+              <circle
+                key={`${item.key}-${index}`}
+                cx={point.x}
+                cy={point.y}
+                r={active === index ? 4 : 3}
+                fill="var(--card)"
+                stroke={item.color}
+                strokeWidth="2"
+              />
+            ) : null,
+          ),
         )}
 
         {labelPlacements.flatMap((group, index) => {

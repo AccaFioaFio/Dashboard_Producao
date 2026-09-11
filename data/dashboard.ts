@@ -2316,7 +2316,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     previsaoTecidos: [] as TopClientePrevisaoTecidoRow[],
     porMes: [] as TopClienteMesRow[],
     porMesHistorico: [] as TopClienteMesRow[],
-    porMesPrevisao: [] as number[],
+    porMesPrevisao: [] as (number | null)[],
     porCanal: [] as { nome: string; pedidos: number; valor: number; metros: number }[],
     options: {
       meses: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
@@ -2696,13 +2696,10 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
   const previsaoProximoMesMetros =
     mediaRecenteDeMeses(metrosPorMesHist, mesEstudo - 1) || mediaMetrosEstudo
 
+  // Previsão só no mês atual em diante — não repetir o histórico nos meses fechados.
   const porMesPrevisao = Array.from({ length: 12 }, (_, i) => {
     const mes = i + 1
-    if (mes < mesEstudo) return metrosPorMesHist.get(mes) ?? 0
-    if (mes === mesEstudo) {
-      const atual = metrosPorMesHist.get(mes) ?? 0
-      return atual > 0 ? atual : previsaoProximoMesMetros
-    }
+    if (mes < mesEstudo) return null
     return previsaoProximoMesMetros
   })
 
