@@ -3,7 +3,13 @@ import { notFound } from 'next/navigation'
 import { PageShell } from '@/components/page-shell'
 import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
-import { FlagChips, PedidoTimeline } from '@/components/pedido-ficha'
+import {
+  PedidoTimeline,
+  SectionMeta,
+  SectionNote,
+  isGenericProduto,
+  uniqueLabels,
+} from '@/components/pedido-ficha'
 import { getPedidoFicha } from '@/data/pedidos'
 import { QUALIDADE_TIPO_LABEL } from '@/lib/pedido'
 import {
@@ -29,6 +35,11 @@ export async function generateMetadata({
   return { title: `Pedido ${parsePedidoParam(pedido)}` }
 }
 
+function formatMetrosCell(value: number | null | undefined) {
+  if (value == null) return '—'
+  return formatMeters(value, value >= 10 ? 0 : 1)
+}
+
 export default async function PedidoFichaPage({
   params,
 }: {
@@ -38,20 +49,101 @@ export default async function PedidoFichaPage({
   const ficha = await getPedidoFicha(pedido)
   if (!ficha) notFound()
 
-  const status =
-    ficha.ocs.length > 0
-      ? [...new Set(ficha.ocs.map((oc) => oc.status).filter(Boolean))].join(' · ')
-      : ficha.corte?.statusVigente
+  const statusLabels = uniqueLabels(
+    ficha.ocs.length
+      ? ficha.ocs.map((oc) => oc.status)
+      : [ficha.corte?.statusVigente],
+  )
+  const status = statusLabels.join(' · ') || null
   const cliente = ficha.corte?.cliente
+  const statusMix = statusLabels.length > 1
+
+  const linhaByExcel = new Map(
+    ficha.linhas.map((row) => [row.excelRow, row] as const),
+  )
+  const corteRows =
+    ficha.ocs.length > 0
+      ? ficha.ocs.map((oc) => {
+          const linha = linhaByExcel.get(oc.excelRow)
+          return {
+            excelRow: oc.excelRow,
+            data: oc.data,
+            tecido: formatProduto(oc),
+            metros: linha?.metros ?? null,
+            economia: linha?.economia ?? null,
+            pecas: oc.pecas,
+            status: oc.status,
+            responsavel: oc.responsavel,
+            isHeader: true,
+          }
+        })
+      : ficha.linhas
+          .filter(
+            (row) =>
+              row.isHeader ||
+              row.metros != null ||
+              row.pecas != null ||
+              row.tecido,
+          )
+          .map((row) => ({
+            excelRow: row.excelRow,
+            data: null as string | null,
+            tecido: formatTecido(row.codTecido, row.tecido),
+            metros: row.metros,
+            economia: row.economia,
+            pecas: row.pecas,
+            status: row.status,
+            responsavel: null as string | null,
+            isHeader: row.isHeader,
+          }))
+
+  const corteResponsaveis = uniqueLabels(corteRows.map((row) => row.responsavel))
+  const showCorteResponsavel = corteResponsaveis.length > 1
+  const showEconomia = corteRows.some(
+    (row) => row.economia != null && row.economia !== 0,
+  )
+
+  const pecasRef =
+    ficha.totais.pecasCorte ||
+    ficha.totais.pecasCosturaProd ||
+    ficha.totais.pecasRevisao
+
+  const hideOficinasProduto = ficha.oficinas
+    .map((row) => formatProduto(row))
+    .every(isGenericProduto)
+
+  const metrosMeta = [
+    ficha.totais.metrosCorte
+      ? `${formatMeters(ficha.totais.metrosCorte)} no corte`
+      : null,
+    ficha.totais.metrosSignusBaixa
+      ? `Signus ${formatMeters(ficha.totais.metrosSignusBaixa)}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  const corteMeta = [
+    corteRows.length
+      ? `${formatInt(corteRows.length)} OC${corteRows.length === 1 ? '' : 's'}`
+      : null,
+    !showCorteResponsavel && corteResponsaveis[0]
+      ? corteResponsaveis[0]
+      : null,
+    metrosMeta || null,
+    pecasRef ? `${formatInt(pecasRef)} pç` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   return (
     <PageShell
       title={`Pedido ${ficha.pedidoNorm}`}
-      description={[cliente, ficha.corte?.canal, status].filter(Boolean).join(' · ') ||
-        'Pedido 2026 sem cabeçalho de Corte neste ano.'}
+      description={
+        [cliente, ficha.corte?.canal, status].filter(Boolean).join(' · ') ||
+        'Pedido 2026 sem cabeçalho de Corte neste ano.'
+      }
     >
-      <FlagChips flags={ficha.flags} />
-
       {ficha.qualidade.length ? (
         <ul className="card-surface flex flex-col gap-1 px-3 py-2 text-xs text-destructive">
           {ficha.qualidade.map((item) => (
@@ -125,65 +217,39 @@ export default async function PedidoFichaPage({
         />
       </KpiGrid>
 
-      {ficha.ocs.length ? (
+      {corteRows.length ? (
         <section className="flex min-w-0 flex-col gap-2">
-          <h2 className="text-sm font-medium">Ordens de corte</h2>
-          <p className="text-xs text-muted-foreground">
-            Cada cabeçalho da planilha é uma OC. Quando o pedido gera várias OCs,
-            o status e o produto/tecido mostram o que já foi cortado e o que
-            ainda aguarda tecido.
-          </p>
+          <h2 className="text-sm font-medium">Corte</h2>
+          <SectionMeta>{corteMeta}</SectionMeta>
+          {statusMix ? (
+            <SectionNote>
+              Status mistos neste pedido — cada OC mostra o seu.
+            </SectionNote>
+          ) : null}
           <SimpleTable
             columns={[
-              { key: 'linha', label: 'Linha Excel', numeric: true },
               { key: 'data', label: 'Data' },
-              { key: 'produto', label: 'Produto / observação', wrap: true },
-              { key: 'status', label: 'Status' },
+              { key: 'tecido', label: 'Tecido', wrap: true },
+              { key: 'metros', label: 'Metros', numeric: true },
+              ...(showEconomia
+                ? [{ key: 'economia', label: 'Economia', numeric: true as const }]
+                : []),
               { key: 'pecas', label: 'Peças', numeric: true },
-              { key: 'responsavel', label: 'Responsável' },
+              { key: 'status', label: 'Status' },
+              ...(showCorteResponsavel
+                ? [{ key: 'responsavel', label: 'Responsável' }]
+                : []),
             ]}
-            rows={ficha.ocs.map((row) => ({
-              linha: row.excelRow,
+            rows={corteRows.map((row) => ({
               data: formatDate(row.data),
-              produto: formatProduto(row),
+              tecido: row.tecido,
+              metros: formatMetrosCell(row.metros),
+              economia: formatMetrosCell(row.economia),
+              pecas: row.pecas != null ? formatInt(row.pecas) : '—',
               status: row.status,
-              pecas: formatInt(row.pecas),
               responsavel: row.responsavel,
               alert: row.status === 'EM PRODUÇÃO',
               warning: row.status === 'AGUARDANDO TECIDO',
-            }))}
-          />
-        </section>
-      ) : null}
-
-      {ficha.linhas.length ? (
-        <section className="flex min-w-0 flex-col gap-2">
-          <h2 className="text-sm font-medium">Tecido no Corte</h2>
-          <p className="text-xs text-muted-foreground">
-            {formatMeters(ficha.totais.metrosCorte)} programados · Signus{' '}
-            {formatMeters(ficha.totais.metrosSignusBaixa)}.
-          </p>
-          <SimpleTable
-            columns={[
-              { key: 'linha', label: 'Linha', numeric: true },
-              { key: 'tecido', label: 'Tecido', wrap: true },
-              { key: 'metros', label: 'Metros', numeric: true },
-              { key: 'economia', label: 'Economia', numeric: true },
-              { key: 'pecas', label: 'Peças', numeric: true },
-              { key: 'status', label: 'Status' },
-            ]}
-            rows={ficha.linhas.map((row) => ({
-              linha: row.excelRow,
-              tecido: formatTecido(row.codTecido, row.tecido),
-              metros: row.metros != null ? formatMeters(row.metros, row.metros >= 10 ? 0 : 1) : '—',
-              economia:
-                row.economia != null
-                  ? formatMeters(row.economia, row.economia >= 10 ? 0 : 1)
-                  : '—',
-              pecas: row.pecas != null ? formatInt(row.pecas) : '—',
-              status: row.status,
-              alert: row.isHeader && row.status === 'EM PRODUÇÃO',
-              warning: row.isHeader && row.status === 'AGUARDANDO TECIDO',
             }))}
           />
         </section>
@@ -211,7 +277,7 @@ export default async function PedidoFichaPage({
           />
         </section>
       ) : (
-        <p className="text-xs text-muted-foreground">Sem lançamento de Costura em 2026.</p>
+        <SectionNote>Sem lançamento de Costura em 2026.</SectionNote>
       )}
 
       {ficha.revisao.length ? (
@@ -233,20 +299,31 @@ export default async function PedidoFichaPage({
           />
         </section>
       ) : (
-        <p className="text-xs text-muted-foreground">Sem lançamento de Revisão em 2026.</p>
+        <SectionNote>Sem lançamento de Revisão em 2026.</SectionNote>
       )}
 
       {ficha.oficinas.length ? (
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Oficinas</h2>
-          <p className="text-xs text-muted-foreground">
-            Cada linha é um lote com a descrição do produto. Pendentes ainda na
-            oficina; retornadas já voltaram para a produção.
-          </p>
+          <SectionMeta>
+            {[
+              `${formatInt(ficha.oficinas.length)} lote${ficha.oficinas.length === 1 ? '' : 's'}`,
+              ficha.totais.pendentes
+                ? `${formatInt(ficha.totais.pendentes)} pendentes`
+                : 'sem pendentes',
+              ficha.totais.defeitos
+                ? `${formatInt(ficha.totais.defeitos)} defeitos`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </SectionMeta>
           <SimpleTable
             columns={[
               { key: 'oficina', label: 'Oficina' },
-              { key: 'produto', label: 'Produto', wrap: true },
+              ...(!hideOficinasProduto
+                ? [{ key: 'produto', label: 'Produto', wrap: true as const }]
+                : []),
               { key: 'envio', label: 'Envio' },
               { key: 'retorno', label: 'Retorno' },
               { key: 'enviadas', label: 'Enviadas', numeric: true },
@@ -270,35 +347,32 @@ export default async function PedidoFichaPage({
             }))}
           />
         </section>
-      ) : (
-        <p className="text-xs text-muted-foreground">Sem lote de oficina em 2026.</p>
-      )}
+      ) : null}
 
       {ficha.signus.length ? (
         <section className="flex min-w-0 flex-col gap-2">
-          <h2 className="text-sm font-medium">Movimentos Signus</h2>
+          <h2 className="text-sm font-medium">Signus</h2>
+          <SectionMeta>
+            {`${formatInt(ficha.signus.length)} movimento${ficha.signus.length === 1 ? '' : 's'} · ${formatMeters(ficha.totais.metrosSignusBaixa)} em baixa`}
+          </SectionMeta>
           <SimpleTable
             columns={[
               { key: 'data', label: 'Data' },
               { key: 'tecido', label: 'Tecido', wrap: true },
               { key: 'metros', label: 'Metros', numeric: true },
               { key: 'tipo', label: 'Tipo' },
-              { key: 'origem', label: 'Orig. Mov.' },
             ]}
             rows={ficha.signus.map((row) => ({
               data: formatDate(row.data),
               tecido: formatTecido(row.codProduto, row.nomeProduto),
               metros: formatMeters(row.metros, row.metros >= 10 ? 0 : 1),
               tipo: TIPO_TECIDO_LABEL[row.tipoNorm] ?? row.tipoNorm,
-              origem: row.origemMov,
               warning: !row.isBaixa,
             }))}
           />
         </section>
       ) : (
-        <p className="text-xs text-muted-foreground">
-          Sem movimento Signus com este PED em Orig. Mov.
-        </p>
+        <SectionNote>Sem movimento Signus com este PED em Orig. Mov.</SectionNote>
       )}
     </PageShell>
   )

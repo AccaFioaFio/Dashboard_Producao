@@ -28,39 +28,34 @@ export function PedidoTimeline({ steps }: { steps: Step[] }) {
   )
 }
 
-export function FlagChips({
-  flags,
-}: {
-  flags: {
-    corte: boolean
-    costuraProd: boolean
-    revisao: boolean
-    oficinas: boolean
-    signus: boolean
-  }
-}) {
-  const items = [
-    { on: flags.corte, label: 'Corte' },
-    { on: flags.costuraProd, label: 'Costura Produção' },
-    { on: flags.revisao, label: 'Revisão' },
-    { on: flags.oficinas, label: 'Oficina' },
-    { on: flags.signus, label: 'Signus' },
+export function uniqueLabels(values: (string | null | undefined)[]) {
+  return [
+    ...new Set(
+      values
+        .map((value) => (value ?? '').replace(/\s+/g, ' ').trim())
+        .filter(Boolean),
+    ),
   ]
+}
+
+export function isGenericProduto(value: string | null | undefined) {
+  const v = (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+  return !v || v === '—' || v === '-' || v === 'diversos'
+}
+
+export function SectionMeta({ children }: { children: string }) {
+  if (!children.trim()) return null
+  return <p className="text-xs text-muted-foreground">{children}</p>
+}
+
+export function SectionNote({
+  children,
+  className,
+}: {
+  children: string
+  className?: string
+}) {
   return (
-    <ul className="flex flex-wrap gap-1.5">
-      {items.map((item) => (
-        <li
-          key={item.label}
-          className={cn(
-            'rounded-full border px-2.5 py-0.5 text-[11px] font-medium',
-            item.on
-              ? 'border-primary/40 bg-primary/12 text-foreground'
-              : 'border-border/70 bg-muted/40 text-muted-foreground',
-          )}
-        >
-          {item.label}
-        </li>
-      ))}
-    </ul>
+    <p className={cn('text-xs text-muted-foreground', className)}>{children}</p>
   )
 }
