@@ -199,7 +199,7 @@ export function explainTecidoMes(args: {
   const delta = args.corte - args.signus
   return hintLines([
     `${args.mes}: Corte ${formatMeters(args.corte)} · baixa Signus ${formatMeters(args.signus)} · delta ${formatMeters(delta)}.`,
-    'O gap é esperado: o Signus não cobre o ano no mesmo ritmo e Orig. Mov. nem sempre traz o pedido.',
+    'Gap esperado: Signus soma tipos de baixa (Produção/insumos + SAÍDA FF/AC/TC), não só o consumo do Corte — e as datas/Orig. Mov. não batem 1:1.',
   ])
 }
 

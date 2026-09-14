@@ -56,6 +56,7 @@ async function runWatch() {
   log(`signus   ${paths.signus}`)
   log(`estoque  ${paths.estoque}`)
   log(`pedidos  ${paths.pedidos}`)
+  log(`itens    ${paths.itens}`)
 
   let lastSuccess: SourceMtimes | null = null
   let lastPermanentFail: SourceMtimes | null = null
@@ -123,7 +124,7 @@ async function runWatch() {
           lastSuccess = mtimes
           lastPermanentFail = null
           backoffIndex = 0
-          log(`[carga] ok sqlite publicado\n  corte    ${mtimes.corte}  ${paths.corte}\n  oficinas ${mtimes.oficinas}  ${paths.oficinas}\n  signus   ${mtimes.signus}  ${paths.signus}\n  estoque  ${mtimes.estoque}  ${paths.estoque}\n  pedidos  ${mtimes.pedidos ?? '—'}  ${paths.pedidos}`)
+          log(`[carga] ok sqlite publicado\n  corte    ${mtimes.corte}  ${paths.corte}\n  oficinas ${mtimes.oficinas}  ${paths.oficinas}\n  signus   ${mtimes.signus}  ${paths.signus}\n  estoque  ${mtimes.estoque}  ${paths.estoque}\n  pedidos  ${mtimes.pedidos ?? '—'}  ${paths.pedidos}\n  itens    ${mtimes.itens ?? '—'}  ${paths.itens}`)
           return
         }
         if (!isRetryablePublishError(persisted.error)) {
@@ -147,6 +148,7 @@ async function runWatch() {
           signus: result.signusLastWrite,
           estoque: result.estoqueLastWrite,
           pedidos: result.pedidosLastWrite,
+          itens: result.itensLastWrite,
         }
         lastPermanentFail = null
         backoffIndex = 0

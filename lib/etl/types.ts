@@ -171,6 +171,37 @@ export type PedidoComercial = {
   vendedor: string | null
 }
 
+/** Linha de item do Itens.xlsx (produto por pedido comercial). */
+export type PedidoItem = {
+  excelRow: number
+  pedidoNorm: string
+  pedidoRaw: string
+  unidadeNegocio: string | null
+  canal: string | null
+  parceiroCodigo: string | null
+  parceiroCnpj: string | null
+  cliente: string | null
+  razaoSocial: string | null
+  tipoComercializacao: string | null
+  status: string | null
+  valorPedidoTotal: number
+  valorPedidoFaturado: number
+  codProduto: string
+  nomeProduto: string | null
+  categoriaProduto: string | null
+  pedidoCliente: string | null
+  qtdPedida: number
+  qtdFaturada: number
+  precoBruto: number | null
+  precoLiquido: number | null
+  valorBruto: number
+  valorLiquido: number
+  descontoTotal: number
+  dataVenda: string | null
+  dataEntrega: string | null
+  dataCadastro: string | null
+}
+
 export type AproveitamentoTipo = 'entrada' | 'saida'
 
 export type AproveitamentoMovimento = {
@@ -194,6 +225,7 @@ export type Snapshot = {
   tecidosSignus: SignusTecidoMovimento[]
   tecidosEstoque: EstoqueTecidoSaldo[]
   pedidosComerciais: PedidoComercial[]
+  pedidosItens: PedidoItem[]
   qualidade: QualidadeEvento[]
   aproveitamento: AproveitamentoMovimento[]
 }
@@ -242,9 +274,11 @@ export type SnapshotPayload = {
   signusPath: string
   estoquePath: string
   pedidosPath: string
+  itensPath: string
   corteLastWrite: string
   oficinasLastWrite: string
   signusLastWrite: string
   estoqueLastWrite: string
   pedidosLastWrite: string | null
+  itensLastWrite: string | null
 }

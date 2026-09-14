@@ -52,7 +52,7 @@ export default async function TecidosPage({
   return (
     <PageShell
       title="Tecidos"
-      description={`Consumo no Corte e baixa no Signus (${YEAR}), cruzados pelo código do tecido. Signus e saldo só dos almox ${ALMOX_PRINCIPAIS_LABEL}, categoria MATÉRIA PRIMA por padrão. Ambos já vêm filtrados pelo ano na carga — Corte pela data do pedido, Signus pela data do movimento. Saldo do estoque é snapshot (não filtra por mês/ano).`}
+      description={`Consumo no Corte e baixa no Signus (${YEAR}), cruzados pelo código do tecido. Signus e saldo só dos almox ${ALMOX_PRINCIPAIS_LABEL}, categoria MATÉRIA PRIMA por padrão. A baixa oficial soma dois tipos de movimentação (Produção/insumos + SAÍDA FF/AC/TC) — por isso a diferença Corte − Signus não é auditoria de erro. Ambos já vêm filtrados pelo ano na carga — Corte pela data do pedido, Signus pela data do movimento. Saldo do estoque é snapshot (não filtra por mês/ano).`}
       actions={<TecidosSubNav filters={filters} current="metros" />}
     >
       <FilterBar
@@ -74,14 +74,18 @@ export default async function TecidosPage({
           label="Baixa de tecido no Signus"
           value={formatMeters(metrosSignus)}
           hint={`${formatInt(tecidos.movimentosBaixa)} movimentos · ${formatInt(tecidos.pedidosComBaixa)} pedidos`}
-          detail={`Movimentação Signus · só baixas oficiais (produção/insumo + SAÍDA FF/AC/TC) nos almox ${ALMOX_PRINCIPAIS_LABEL}.\n\nTambém só ${YEAR}, mas pela data do movimento — não pela data do corte. Inclui baixas sem nº de pedido e códigos que podem não existir no Corte.`}
+          detail={`Movimentação Signus · soma dos tipos oficiais de baixa nos almox ${ALMOX_PRINCIPAIS_LABEL}:\n• Produção (insumos)\n• SAÍDA FF / AC / TC (baixa de canal)\n\nNão é um único tipo — o total mistura baixas ligadas à programação de corte com saídas de canal. Também só ${YEAR}, mas pela data do movimento (não do corte). Inclui baixas sem nº de pedido e códigos fora do Corte.`}
           tone="indigo"
         />
         <KpiCard
           label="Diferença Corte − Signus"
           value={formatMeters(delta)}
-          hint={`${formatNumber(cobertura, 1)}% da programação já baixada`}
-          detail={`Cálculo: metros do Corte − metros baixados no Signus (almox ${ALMOX_PRINCIPAIS_LABEL}).\n\nNegativo = Signus baixou mais que o Corte apontou (cobertura > 100%).\n\nOs dois totais são de ${YEAR}, mas com datas diferentes (corte vs movimento) e universos distintos: Signus soma canal, baixas sem pedido e códigos fora da programação. Não é fechamento pedido a pedido.\n\nRetorno do corte e economia são contas separadas — não “fecham” este número.`}
+          hint={
+            delta < 0
+              ? `Negativo esperado · Signus cobre ${formatNumber(cobertura, 1)}% do Corte`
+              : `${formatNumber(cobertura, 1)}% da programação já baixada`
+          }
+          detail={`Cálculo: metros do Corte − metros baixados no Signus (almox ${ALMOX_PRINCIPAIS_LABEL}).\n\nNão indica erro no Corte nem no Signus. São medidas diferentes:\n• Corte = consumo apontado na planilha de programação\n• Signus = soma de todos os tipos oficiais de baixa (Produção/insumos + SAÍDA FF/AC/TC)\n\nNegativo = o Signus baixou mais metros do que a programação do Corte — comum porque o Signus inclui saídas de canal, baixas sem pedido e códigos fora da programação, e as datas (pedido vs movimento) não batem 1:1.\n\nRetorno do corte e economia são contas separadas — não “fecham” este número.`}
           tone="amber"
         />
         <KpiCard
@@ -217,6 +221,11 @@ export default async function TecidosPage({
         </section>
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Baixa Signus por tipo</h2>
+          <p className="text-xs text-muted-foreground">
+            O KPI de baixa (e a diferença Corte − Signus) soma só Produção
+            (insumos) + SAÍDA FF/AC/TC. Os demais tipos aparecem aqui para
+            contexto e não entram nesse total.
+          </p>
           <SimpleTable
             columns={[
               { key: 'tipo', label: 'Tipo' },

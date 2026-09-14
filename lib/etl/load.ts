@@ -17,11 +17,13 @@ export function replaceSnapshot(
     signusPath: string
     estoquePath: string
     pedidosPath: string
+    itensPath: string
     corteLastWrite: string
     oficinasLastWrite: string
     signusLastWrite: string
     estoqueLastWrite: string
     pedidosLastWrite: string | null
+    itensLastWrite: string | null
     header: HeaderKpis
   },
 ) {
@@ -30,6 +32,7 @@ export function replaceSnapshot(
     sqlite.exec(`
       DELETE FROM qualidade_evento;
       DELETE FROM fato_aproveitamento;
+      DELETE FROM fato_pedido_item;
       DELETE FROM fato_pedido_comercial;
       DELETE FROM fato_tecido_estoque;
       DELETE FROM fato_tecido_signus;
@@ -332,6 +335,27 @@ export function replaceSnapshot(
       for (const row of group) insertPedidoComercial.run(row)
     }
 
+    const insertPedidoItem = sqlite.prepare(`
+      INSERT INTO fato_pedido_item (
+        pedido_norm, pedido_raw, unidade_negocio, canal, parceiro_codigo,
+        parceiro_cnpj, cliente, razao_social, tipo_comercializacao, status,
+        valor_pedido_total, valor_pedido_faturado, cod_produto, nome_produto,
+        categoria_produto, pedido_cliente, qtd_pedida, qtd_faturada,
+        preco_bruto, preco_liquido, valor_bruto, valor_liquido, desconto_total,
+        data_venda, data_entrega, data_cadastro, excel_row
+      ) VALUES (
+        @pedidoNorm, @pedidoRaw, @unidadeNegocio, @canal, @parceiroCodigo,
+        @parceiroCnpj, @cliente, @razaoSocial, @tipoComercializacao, @status,
+        @valorPedidoTotal, @valorPedidoFaturado, @codProduto, @nomeProduto,
+        @categoriaProduto, @pedidoCliente, @qtdPedida, @qtdFaturada,
+        @precoBruto, @precoLiquido, @valorBruto, @valorLiquido, @descontoTotal,
+        @dataVenda, @dataEntrega, @dataCadastro, @excelRow
+      )
+    `)
+    for (const group of chunk(snapshot.pedidosItens)) {
+      for (const row of group) insertPedidoItem.run(row)
+    }
+
     const insertQualidade = sqlite.prepare(`
       INSERT INTO qualidade_evento (tipo, pedido_norm, detalhe, excel_row, valor)
       VALUES (@tipo, @pedidoNorm, @detalhe, @excelRow, @valor)
@@ -341,12 +365,12 @@ export function replaceSnapshot(
     sqlite
       .prepare(
         `INSERT INTO carga (
-          lida_em, corte_path, oficinas_path, signus_path, estoque_path, pedidos_path,
-          corte_last_write, oficinas_last_write, signus_last_write, estoque_last_write, pedidos_last_write,
+          lida_em, corte_path, oficinas_path, signus_path, estoque_path, pedidos_path, itens_path,
+          corte_last_write, oficinas_last_write, signus_last_write, estoque_last_write, pedidos_last_write, itens_last_write,
           pecas_cortadas, pedidos_corte, pecas_costura_prod, pecas_revisao,
           wip_pedidos, wip_pecas, tecido_pedidos, tecido_pecas, oficinas_pendentes,
           ok, erro
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL)`,
       )
       .run(
         new Date().toISOString(),
@@ -355,11 +379,13 @@ export function replaceSnapshot(
         meta.signusPath,
         meta.estoquePath,
         meta.pedidosPath,
+        meta.itensPath,
         meta.corteLastWrite,
         meta.oficinasLastWrite,
         meta.signusLastWrite,
         meta.estoqueLastWrite,
         meta.pedidosLastWrite,
+        meta.itensLastWrite,
         meta.header.pecasCortadas,
         meta.header.pedidosCorte,
         meta.header.pecasCosturaProd,

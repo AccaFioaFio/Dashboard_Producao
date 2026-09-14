@@ -4,6 +4,7 @@ import { refreshFromExcel } from '../lib/etl/refresh'
 import {
   corteXlsxPath,
   estoqueXlsxPath,
+  itensXlsxPath,
   oficinasXlsxPath,
   pedidosXlsxPath,
   signusXlsPath,
@@ -21,6 +22,7 @@ async function main() {
     const signus = signusXlsPath()
     const estoque = estoqueXlsxPath()
     const pedidos = pedidosXlsxPath()
+    const itens = itensXlsxPath()
     if (
       !existsSync(corte) ||
       !existsSync(oficinas) ||
@@ -35,6 +37,7 @@ async function main() {
       signus,
       estoque,
       existsSync(pedidos) ? pedidos : null,
+      existsSync(itens) ? itens : null,
     )
     const header = computeHeaderKpis(snapshot)
     const funil = computeFunil(snapshot)

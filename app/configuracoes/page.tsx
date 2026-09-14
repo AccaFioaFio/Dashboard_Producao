@@ -4,6 +4,7 @@ import { getLatestCarga } from '@/data/dashboard'
 import {
   corteXlsxPath,
   estoqueXlsxPath,
+  itensXlsxPath,
   oficinasXlsxPath,
   pedidosXlsxPath,
   signusXlsPath,
@@ -32,8 +33,9 @@ export default async function ConfiguracoesPage() {
         <span className="font-mono text-xs">OFICINAS_XLSX</span>,{' '}
         <span className="font-mono text-xs">SIGNUS_XLS</span> (ou{' '}
         <span className="font-mono text-xs">SIGNUS_XLSX</span>),{' '}
-        <span className="font-mono text-xs">ESTOQUE_XLSX</span> e{' '}
-        <span className="font-mono text-xs">PEDIDOS_XLSX</span>.
+        <span className="font-mono text-xs">ESTOQUE_XLSX</span>,{' '}
+        <span className="font-mono text-xs">PEDIDOS_XLSX</span> e{' '}
+        <span className="font-mono text-xs">ITENS_XLSX</span>.
       </p>
       <dl className="card-surface grid gap-3 p-3 text-sm sm:grid-cols-2">
         <div className="flex flex-col gap-1 sm:col-span-2">
@@ -55,6 +57,10 @@ export default async function ConfiguracoesPage() {
         <div className="flex flex-col gap-1 sm:col-span-2">
           <dt className="text-xs text-muted-foreground">PEDIDOS_XLSX</dt>
           <dd className="break-all font-mono text-xs">{pedidosXlsxPath()}</dd>
+        </div>
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <dt className="text-xs text-muted-foreground">ITENS_XLSX</dt>
+          <dd className="break-all font-mono text-xs">{itensXlsxPath()}</dd>
         </div>
         <div className="flex flex-col gap-1">
           <dt className="text-xs text-muted-foreground">Última leitura</dt>
@@ -83,6 +89,10 @@ export default async function ConfiguracoesPage() {
         <div className="flex flex-col gap-1 sm:col-span-2">
           <dt className="text-xs text-muted-foreground">LastWriteTime Pedidos</dt>
           <dd>{formatDateTime(carga?.pedidosLastWrite)}</dd>
+        </div>
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <dt className="text-xs text-muted-foreground">LastWriteTime Itens</dt>
+          <dd>{formatDateTime(carga?.itensLastWrite)}</dd>
         </div>
       </dl>
     </PageShell>

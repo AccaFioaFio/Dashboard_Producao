@@ -1,12 +1,12 @@
 import type { Metadata } from 'next'
+import { MousePointerClick } from 'lucide-react'
 import { PageShell } from '@/components/page-shell'
 import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
-import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { FilterBar } from '@/components/filter-bar'
+import { TopClientesSubNav } from '@/components/top-clientes-nav'
 import { getTopClientes } from '@/data/dashboard'
 import {
-  MONTH_LABELS,
   formatInt,
   formatMeters,
   formatMoney,
@@ -20,13 +20,6 @@ import { ALMOX_PRINCIPAIS_LABEL } from '@/lib/almox-principais'
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Top Clientes' }
 
-function formatTendencia(pct: number | null) {
-  if (pct == null || !Number.isFinite(pct)) return '—'
-  const rounded = Math.round(pct)
-  if (rounded === 0) return 'estável'
-  return `${rounded > 0 ? '+' : ''}${rounded}%`
-}
-
 export default async function TopClientesPage({
   searchParams,
 }: {
@@ -35,19 +28,15 @@ export default async function TopClientesPage({
   const filters = withCategoriaPadrao(parseFilters(await searchParams))
   const data = await getTopClientes(filters)
   const clienteAtivo = filters.cliente
-  const mesRefLabel =
-    data.mesReferencia > 0 ? MONTH_LABELS[data.mesReferencia - 1] : '—'
-  const proximoMesLabel =
-    data.mesReferencia > 0 && data.mesReferencia < 12
-      ? MONTH_LABELS[data.mesReferencia]
-      : data.mesReferencia === 12
-        ? `Jan/${YEAR + 1}`
-        : 'próximo mês'
+  const resumoCliente = clienteAtivo
+    ? data.ranking.find((row) => row.cliente === clienteAtivo)
+    : undefined
 
   return (
     <PageShell
       title="Top Clientes"
-      description={`Pedidos comerciais ${YEAR} — só venda final (exclui remessa p/ industrialização e oficinas). Metros = baixas Signus por data do movimento (almox ${ALMOX_PRINCIPAIS_LABEL}, categoria MATÉRIA PRIMA por padrão), cruzadas 1× por pedido. Clique num cliente para ver o mix de tecidos e a previsão de compra.`}
+      description={`Ranking comercial ${YEAR} — só venda final (exclui remessa p/ industrialização e oficinas). Metros = baixas Signus por data do movimento (almox ${ALMOX_PRINCIPAIS_LABEL}, categoria MATÉRIA PRIMA por padrão), cruzadas 1× por pedido. Clique num cliente para ver o resumo e os produtos já comprados (Itens.xlsx).`}
+      actions={<TopClientesSubNav filters={filters} current="ranking" />}
     >
       <FilterBar
         pathname="/top-clientes"
@@ -63,179 +52,95 @@ export default async function TopClientesPage({
         </p>
       ) : (
         <>
-          <KpiGrid columns={4}>
-            <KpiCard
-              label="Clientes com pedido"
-              value={formatInt(data.clientesAtivos)}
-              hint={`${formatInt(data.pedidos)} pedidos no recorte`}
-              detail="Pedidos.xlsx · clientes distintos com venda final, no período/filtros atuais."
-              tone="indigo"
-            />
-            <KpiCard
-              label="Valor faturado"
-              value={formatMoney(data.valorFaturado)}
-              hint={`Ticket médio ${formatMoney(data.ticketMedio)}`}
-              detail="Pedidos.xlsx · coluna Pedido - Valor faturado (só venda final)."
-              tone="teal"
-            />
-            <KpiCard
-              label="Metros baixados"
-              value={formatMeters(data.metrosSignus)}
-              hint={`${formatInt(data.pedidosComTecido)} pedidos com baixa · ${formatNumber(data.coberturaTecidoPct, 0)}% cobertura`}
-              detail="Movimentação Signus · metros de baixa cruzados com o nº do pedido comercial."
-              tone="amber"
-            />
-            <KpiCard
-              label="Concentração dos 5 maiores"
-              value={`${formatNumber(data.concentracaoTop5Pct, 0)}%`}
-              hint="Participação dos 5 maiores no total de pedidos"
-              detail="Soma dos pedidos dos 5 clientes com maior faturamento ÷ total de pedidos do recorte."
-              tone="magenta"
-            />
-            <KpiCard
-              label="Média mensal de faturamento"
-              value={formatMoney(data.mediaMensalValor)}
-              hint={`${formatMeters(data.mediaMensalMetros)} · ${formatInt(data.mesesComVenda)} meses com venda`}
-              detail="Valor faturado ÷ meses com pelo menos uma venda no recorte."
-              tone="teal"
-            />
-            <KpiCard
-              label={`Previsão de faturamento ${YEAR}`}
-              value={formatMoney(data.previsaoValorAno)}
-              hint={`Projeção linear · tecido ${formatMeters(data.previsaoMetrosAno)}`}
-              detail="Média mensal de faturamento × 12 (run-rate). Não é meta — é ritmo atual anualizado."
-              tone="indigo"
-            />
-            <KpiCard
-              label={`Previsão tecido · ${proximoMesLabel}`}
-              value={formatMeters(data.previsaoProximoMesMetros)}
-              hint={`Ref. até ${mesRefLabel} · compra sugerida ${formatMeters(data.previsaoCompraProximoMes)}`}
-              detail={`Baixas Signus por data do movimento, só almox ${ALMOX_PRINCIPAIS_LABEL}, cruzadas com venda final (sem duplicar pedido). Por tecido: (metros ÷ pedidos) × média de pedidos dos últimos 3 meses. Compra = previsão − saldo.`}
-              tone="amber"
-            />
-            <KpiCard
-              label="Valor total do pedido"
-              value={formatMoney(data.valorTotal)}
-              hint="Soma do valor total no recorte"
-              detail="Pedidos.xlsx · coluna Pedido - Valor total (venda final)."
-            />
-          </KpiGrid>
+          {resumoCliente ? (
+            <>
+              <section className="flex min-w-0 flex-col gap-2">
+                <h2 className="text-sm font-medium">
+                  Resumo · {resumoCliente.cliente}
+                </h2>
+                <KpiGrid columns={4}>
+                  <KpiCard
+                    label="Cód. cliente"
+                    value={resumoCliente.codCliente || '—'}
+                    hint="Parceiro · Código"
+                    detail="Código do parceiro no Pedidos.xlsx / Itens.xlsx."
+                    tone="indigo"
+                  />
+                  <KpiCard
+                    label="Pedidos"
+                    value={formatInt(resumoCliente.pedidos)}
+                    hint={`Ticket ${formatMoney(resumoCliente.ticketMedio)}`}
+                    detail="Pedidos comerciais de venda final deste cliente no recorte."
+                    tone="teal"
+                  />
+                  <KpiCard
+                    label="Faturado"
+                    value={formatMoney(resumoCliente.valorFaturado)}
+                    hint={`Total ${formatMoney(resumoCliente.valorTotal)}`}
+                    detail="Soma do valor faturado nos pedidos deste cliente."
+                    tone="amber"
+                  />
+                  <KpiCard
+                    label="Metros / top tecido"
+                    value={formatMeters(resumoCliente.metros)}
+                    hint={
+                      resumoCliente.topTecido
+                        ? formatTecido(
+                            resumoCliente.topTecido,
+                            resumoCliente.topTecidoNome,
+                          )
+                        : 'Sem baixa Signus'
+                    }
+                    detail="Metros baixados no Signus cruzados com os pedidos deste cliente."
+                    tone="magenta"
+                  />
+                </KpiGrid>
+              </section>
 
-          <div className="grid min-w-0 gap-[var(--page-gap)] lg:grid-cols-2">
-            <MonthlyAreaChart
-              title="Pedidos e valor"
-              description="Volume comercial mês a mês (data de venda)."
-              labels={data.porMes.map((row) => MONTH_LABELS[row.mes - 1])}
-              series={[
-                {
-                  key: 'pedidos',
-                  label: 'Pedidos',
-                  color: 'var(--chart-1)',
-                  values: data.porMes.map((row) => row.pedidos),
-                },
-                {
-                  key: 'valor',
-                  label: 'Valor (mil)',
-                  color: 'var(--chart-2)',
-                  values: data.porMes.map((row) =>
-                    Math.round(row.valor / 1000),
-                  ),
-                },
-              ]}
-            />
-            <MonthlyAreaChart
-              title="Metros: histórico e previsão"
-              description={`Histórico = baixas Signus (almox ACCA/FAF/TRU) por data do movimento até ${mesRefLabel}. Previsão = ritmo recente (até 3 meses com consumo) só de ${mesRefLabel} em diante.`}
-              labels={MONTH_LABELS}
-              series={[
-                {
-                  key: 'historico',
-                  label: 'Histórico',
-                  color: 'var(--chart-3)',
-                  values: data.porMesHistorico.map((row) =>
-                    row.mes > data.mesReferencia
-                      ? null
-                      : Math.round(row.metros),
-                  ),
-                },
-                {
-                  key: 'previsao',
-                  label: 'Previsão',
-                  color: 'var(--chart-1)',
-                  values: data.porMesPrevisao.map((v) =>
-                    v == null ? null : Math.round(v),
-                  ),
-                },
-              ]}
-            />
-          </div>
-
-          <section className="flex min-w-0 flex-col gap-2">
-            <h2 className="text-sm font-medium">
-              {clienteAtivo
-                ? `Previsão de compra · ${clienteAtivo}`
-                : 'Previsão de compra de tecido'}
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Estuda baixas Signus (produção + SAIDA FF/AC/TC) dos meses
-              anteriores a {mesRefLabel}/{YEAR}
-              {clienteAtivo ? ` deste cliente` : ''}, só nos almox{' '}
-              {ALMOX_PRINCIPAIS_LABEL}, cruzadas com venda final. Mês = data do
-              movimento (como em Tecidos), não a data de venda do pedido. Média
-              mensal = total ÷ meses do período. Ritmo recente = média dos até 3
-              meses com consumo. Previsão = (metros ÷ pedidos) × ritmo médio de
-              pedidos dos últimos 3 meses. A comprar = previsão − saldo desses
-              almox (quando o estoque não cobre). Não usa metros do Corte.
-            </p>
-            <SimpleTable
-              columns={[
-                { key: 'tecido', label: 'Tecido' },
-                { key: 'mediaMensal', label: 'Média mensal', numeric: true },
-                { key: 'mediaRecente', label: 'Ritmo recente', numeric: true },
-                {
-                  key: 'previsao',
-                  label: `Prev. ${proximoMesLabel}`,
-                  numeric: true,
-                },
-                { key: 'saldo', label: 'Saldo', numeric: true },
-                { key: 'aComprar', label: 'A comprar', numeric: true },
-                { key: 'tendencia', label: 'Tendência', numeric: true },
-              ]}
-              rows={data.previsaoTecidos.map((row) => ({
-                tecido: formatTecido(row.cod, row.nome),
-                mediaMensal: formatMeters(row.mediaMensal),
-                mediaRecente: formatMeters(row.mediaRecente),
-                previsao: formatMeters(row.previsaoProximoMes),
-                saldo: formatMeters(row.saldoAtual),
-                aComprar:
-                  row.aComprar > 0 ? formatMeters(row.aComprar) : '—',
-                tendencia: formatTendencia(row.tendenciaPct),
-              }))}
-            />
-          </section>
-
-          <section className="flex min-w-0 flex-col gap-2">
-            <h2 className="text-sm font-medium">Mix por canal</h2>
-            <SimpleTable
-              columns={[
-                { key: 'nome', label: 'Canal' },
-                { key: 'pedidos', label: 'Pedidos', numeric: true },
-                { key: 'valor', label: 'Faturado', numeric: true },
-                { key: 'metros', label: 'Metros', numeric: true },
-              ]}
-              rows={data.porCanal.map((row) => ({
-                nome: row.nome,
-                pedidos: formatInt(row.pedidos),
-                valor: formatMoney(row.valor),
-                metros: formatMeters(row.metros),
-              }))}
-            />
-          </section>
+              <section className="flex min-w-0 flex-col gap-2">
+                <h2 className="text-sm font-medium">
+                  Produtos já comprados
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Itens.xlsx · produtos acabados em venda final, cruzados por
+                  pedido e código do cliente. Qtd = faturada (ou pedida). Valor =
+                  total líquido do item.
+                </p>
+                <SimpleTable
+                  columns={[
+                    { key: 'cod', label: 'Cód.' },
+                    { key: 'produto', label: 'Produto', wrap: true },
+                    { key: 'qtd', label: 'Qtd', numeric: true },
+                    { key: 'valor', label: 'Valor', numeric: true },
+                    { key: 'pedidos', label: 'Pedidos', numeric: true },
+                  ]}
+                  rows={data.produtos.map((row) => ({
+                    cod: row.cod,
+                    produto: row.nome
+                      ? `${row.nome}${row.categoria ? ` · ${row.categoria}` : ''}`
+                      : row.categoria || '—',
+                    qtd: formatNumber(row.qtd, row.qtd % 1 ? 2 : 0),
+                    valor: formatMoney(row.valor),
+                    pedidos: formatInt(row.pedidos),
+                  }))}
+                  empty="Nenhum produto acabado neste recorte. Confira se a carga leu Itens.xlsx (ITENS_XLSX)."
+                />
+              </section>
+            </>
+          ) : null}
 
           <section className="flex min-w-0 flex-col gap-2">
             <h2 className="text-sm font-medium">
               {clienteAtivo ? `Cliente · ${clienteAtivo}` : 'Maiores clientes'}
             </h2>
+            <p className="card-surface flex items-start gap-2 border-l-[3px] border-l-primary bg-primary/[0.08] px-3 py-2.5 text-sm font-medium text-foreground">
+              <MousePointerClick
+                className="mt-0.5 size-4 shrink-0 text-primary"
+                aria-hidden
+              />
+              Clique na linha do cliente para ver o resumo e os produtos já
+              comprados.
+            </p>
             <SimpleTable
               columns={[
                 { key: 'codCliente', label: 'Cód.' },
@@ -271,30 +176,6 @@ export default async function TopClientesPage({
                   href: query ? `/top-clientes?${query}` : '/top-clientes',
                 }
               })}
-            />
-          </section>
-
-          <section className="flex min-w-0 flex-col gap-2">
-            <h2 className="text-sm font-medium">
-              {clienteAtivo
-                ? 'Tecidos que este cliente mais compra'
-                : 'Tecidos mais comprados (cruzamento)'}
-            </h2>
-            <SimpleTable
-              columns={[
-                { key: 'tecido', label: 'Tecido' },
-                { key: 'metros', label: 'Metros', numeric: true },
-                { key: 'pedidos', label: 'Pedidos', numeric: true },
-                { key: 'clientes', label: 'Clientes', numeric: true },
-                { key: 'saldo', label: 'Saldo', numeric: true },
-              ]}
-              rows={data.tecidos.map((row) => ({
-                tecido: formatTecido(row.cod, row.nome),
-                metros: formatMeters(row.metros),
-                pedidos: formatInt(row.pedidos),
-                clientes: formatInt(row.clientes),
-                saldo: formatMeters(row.saldoAtual),
-              }))}
             />
           </section>
         </>

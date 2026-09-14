@@ -22,11 +22,13 @@ export type CargaInfo = {
   signusPath: string | null
   estoquePath: string | null
   pedidosPath: string | null
+  itensPath: string | null
   corteLastWrite: string | null
   oficinasLastWrite: string | null
   signusLastWrite: string | null
   estoqueLastWrite: string | null
   pedidosLastWrite: string | null
+  itensLastWrite: string | null
   pecasCortadas: number | null
   pedidosCorte: number | null
   pecasCosturaProd: number | null
@@ -362,9 +364,10 @@ export const getLatestCarga = cache(async (): Promise<CargaInfo | null> => {
     .prepare(
       `SELECT id, lida_em as lidaEm, corte_path as cortePath, oficinas_path as oficinasPath,
               signus_path as signusPath, estoque_path as estoquePath, pedidos_path as pedidosPath,
+              itens_path as itensPath,
               corte_last_write as corteLastWrite, oficinas_last_write as oficinasLastWrite,
               signus_last_write as signusLastWrite, estoque_last_write as estoqueLastWrite,
-              pedidos_last_write as pedidosLastWrite,
+              pedidos_last_write as pedidosLastWrite, itens_last_write as itensLastWrite,
               pecas_cortadas as pecasCortadas, pedidos_corte as pedidosCorte,
               pecas_costura_prod as pecasCosturaProd, pecas_revisao as pecasRevisao,
               wip_pedidos as wipPedidos, wip_pecas as wipPecas,
@@ -2140,6 +2143,16 @@ function hasPedidoComercialTable() {
   )
 }
 
+function hasPedidoItemTable() {
+  return Boolean(
+    sqlite()
+      .prepare(
+        `SELECT 1 as v FROM sqlite_master WHERE type = 'table' AND name = 'fato_pedido_item'`,
+      )
+      .get(),
+  )
+}
+
 /** Venda final no Signus (exclui remessa p/ industrialização e similares). */
 function sqlVendaFinal(alias: string) {
   const t = `upper(COALESCE(${alias}.tipo_comercializacao, ''))`
@@ -2251,6 +2264,15 @@ export type TopClientePrevisaoTecidoRow = {
   tendenciaPct: number | null
 }
 
+export type TopClienteProdutoRow = {
+  cod: string
+  nome: string | null
+  categoria: string | null
+  qtd: number
+  valor: number
+  pedidos: number
+}
+
 function mesCalendarioNoAno() {
   const now = new Date()
   if (now.getFullYear() === YEAR) return now.getMonth() + 1
@@ -2318,6 +2340,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     porMesHistorico: [] as TopClienteMesRow[],
     porMesPrevisao: [] as (number | null)[],
     porCanal: [] as { nome: string; pedidos: number; valor: number; metros: number }[],
+    produtos: [] as TopClienteProdutoRow[],
     options: {
       meses: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
       canais: [] as string[],
@@ -2862,6 +2885,51 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     options.meses = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
   }
 
+  let produtos: TopClienteProdutoRow[] = []
+  if (filters.cliente && hasPedidoItemTable()) {
+    const filtersSemCliente = { ...filters, cliente: undefined }
+    const itemFilter = emptyFilter()
+    applyComercialFilters(itemFilter, 'i', filtersSemCliente, { vendaFinal: true })
+    const codCliente =
+      rankingFull.find((row) => row.cliente === filters.cliente)?.codCliente ??
+      null
+    itemFilter.params.cliente = filters.cliente
+    if (codCliente) {
+      itemFilter.clauses.push(
+        `(i.cliente = @cliente OR trim(COALESCE(i.parceiro_codigo, '')) = @codParceiro)`,
+      )
+      itemFilter.params.codParceiro = codCliente
+    } else {
+      itemFilter.clauses.push(`i.cliente = @cliente`)
+    }
+    itemFilter.clauses.push(
+      `upper(COALESCE(i.categoria_produto, '')) LIKE '%PRODUTO%ACABAD%'`,
+    )
+    const itemWhere = whereSql(itemFilter)
+
+    produtos = runAll<{
+      cod: string
+      nome: string | null
+      categoria: string | null
+      qtd: number
+      valor: number
+      pedidos: number
+    }>(
+      `SELECT i.cod_produto as cod,
+              MAX(i.nome_produto) as nome,
+              MAX(i.categoria_produto) as categoria,
+              COALESCE(SUM(CASE WHEN i.qtd_faturada > 0 THEN i.qtd_faturada ELSE i.qtd_pedida END), 0) as qtd,
+              COALESCE(SUM(CASE WHEN i.valor_liquido > 0 THEN i.valor_liquido ELSE i.valor_bruto END), 0) as valor,
+              COUNT(DISTINCT i.pedido_norm) as pedidos
+       FROM fato_pedido_item i
+       WHERE ${itemWhere}
+       GROUP BY i.cod_produto
+       ORDER BY valor DESC, qtd DESC
+       LIMIT 80`,
+      itemFilter.params,
+    )
+  }
+
   return {
     loaded: true as const,
     clientesAtivos: resumo.clientes,
@@ -2890,6 +2958,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     porMesHistorico,
     porMesPrevisao,
     porCanal,
+    produtos,
     options,
   }
 })

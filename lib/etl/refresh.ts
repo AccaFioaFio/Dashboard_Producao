@@ -12,6 +12,7 @@ import {
   IS_CLOUD,
   corteXlsxPath,
   estoqueXlsxPath,
+  itensXlsxPath,
   oficinasXlsxPath,
   pedidosXlsxPath,
   signusXlsPath,
@@ -28,6 +29,7 @@ export type RefreshResult =
       signusLastWrite: string
       estoqueLastWrite: string
       pedidosLastWrite: string | null
+      itensLastWrite: string | null
       lidaEm: string
     }
   | {
@@ -56,11 +58,13 @@ export async function applySnapshotPayload(
     signusPath: payload.signusPath,
     estoquePath: payload.estoquePath,
     pedidosPath: payload.pedidosPath,
+    itensPath: payload.itensPath,
     corteLastWrite: payload.corteLastWrite,
     oficinasLastWrite: payload.oficinasLastWrite,
     signusLastWrite: payload.signusLastWrite,
     estoqueLastWrite: payload.estoqueLastWrite,
     pedidosLastWrite: payload.pedidosLastWrite,
+    itensLastWrite: payload.itensLastWrite,
     header,
   })
 
@@ -94,6 +98,7 @@ export async function applySnapshotPayload(
     signusLastWrite: payload.signusLastWrite,
     estoqueLastWrite: payload.estoqueLastWrite,
     pedidosLastWrite: payload.pedidosLastWrite,
+    itensLastWrite: payload.itensLastWrite,
     lidaEm: new Date().toISOString(),
   }
 }
@@ -104,6 +109,7 @@ export async function refreshFromExcel(): Promise<RefreshResult> {
   const signusPath = signusXlsPath()
   const estoquePath = estoqueXlsxPath()
   const pedidosPath = pedidosXlsxPath()
+  const itensPath = itensXlsxPath()
 
   let copied: ReturnType<typeof copySources>
   try {
@@ -113,6 +119,7 @@ export async function refreshFromExcel(): Promise<RefreshResult> {
       signusPath,
       estoquePath,
       pedidosPath,
+      itensPath,
     )
   } catch (error) {
     const message =
@@ -130,6 +137,7 @@ export async function refreshFromExcel(): Promise<RefreshResult> {
       copied.signusCache,
       copied.estoqueCache,
       copied.pedidosCache,
+      copied.itensCache,
     )
     return await applySnapshotPayload({
       snapshot,
@@ -138,11 +146,13 @@ export async function refreshFromExcel(): Promise<RefreshResult> {
       signusPath,
       estoquePath,
       pedidosPath,
+      itensPath,
       corteLastWrite: copied.corteLastWrite,
       oficinasLastWrite: copied.oficinasLastWrite,
       signusLastWrite: copied.signusLastWrite,
       estoqueLastWrite: copied.estoqueLastWrite,
       pedidosLastWrite: copied.pedidosLastWrite,
+      itensLastWrite: copied.itensLastWrite,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

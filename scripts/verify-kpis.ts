@@ -5,6 +5,7 @@ import { diffGolden } from '../lib/etl/golden'
 import {
   corteXlsxPath,
   estoqueXlsxPath,
+  itensXlsxPath,
   oficinasXlsxPath,
   pedidosXlsxPath,
   signusXlsPath,
@@ -12,12 +13,14 @@ import {
 
 async function main() {
   const pedidos = pedidosXlsxPath()
+  const itens = itensXlsxPath()
   const snapshot = await parseWorkbookFiles(
     corteXlsxPath(),
     oficinasXlsxPath(),
     signusXlsPath(),
     estoqueXlsxPath(),
     existsSync(pedidos) ? pedidos : null,
+    existsSync(itens) ? itens : null,
   )
   const header = computeHeaderKpis(snapshot)
   const funil = computeFunil(snapshot)
@@ -33,6 +36,7 @@ async function main() {
   console.log('signus tecidos', snapshot.tecidosSignus.length)
   console.log('estoque tecidos', snapshot.tecidosEstoque.length)
   console.log('pedidos comerciais', snapshot.pedidosComerciais.length)
+  console.log('itens pedido', snapshot.pedidosItens.length)
   console.log('qualidade', snapshot.qualidade.length)
 
   if (invariants.length || golden.length) {
