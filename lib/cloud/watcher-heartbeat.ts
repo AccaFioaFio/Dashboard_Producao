@@ -1,8 +1,12 @@
 import { CLOUD_WATCHER_HEARTBEAT_BLOB } from '@/lib/cloud/constants'
 import { blobEnabled } from '@/lib/cloud/carga'
 
-export const WATCHER_HEARTBEAT_INTERVAL_MS = 30_000
-export const WATCHER_ONLINE_TTL_MS = 90_000
+/**
+ * put no Blob = Advanced Operation (Hobby: 2k/mês).
+ * 30 min × 8 h/dia ≈ 16 ops/dia → ~480/mês de heartbeat, folga p/ put do SQLite.
+ */
+export const WATCHER_HEARTBEAT_INTERVAL_MS = 30 * 60_000
+export const WATCHER_ONLINE_TTL_MS = 75 * 60_000
 
 export type WatcherHeartbeat = {
   at: string
