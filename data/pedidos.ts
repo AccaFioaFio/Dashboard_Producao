@@ -118,6 +118,15 @@ export type PedidoFicha = {
     isBaixa: boolean
     origemMov: string | null
   }[]
+  itens: {
+    codProduto: string
+    nomeProduto: string | null
+    categoriaProduto: string | null
+    qtdPedida: number
+    qtdFaturada: number
+    valorLiquido: number
+    valorBruto: number
+  }[]
   qualidade: { tipo: string; detalhe: string; valor: number | null }[]
   datas: {
     pcpProntas: string | null
@@ -184,6 +193,16 @@ function hasCorteLinhaObservacaoColumn() {
     sqlite()
       .prepare(
         `SELECT 1 as v FROM pragma_table_info('fato_corte_linha') WHERE name = 'observacao'`,
+      )
+      .get(),
+  )
+}
+
+function hasPedidoItemTable() {
+  return Boolean(
+    sqlite()
+      .prepare(
+        `SELECT 1 as v FROM sqlite_master WHERE type = 'table' AND name = 'fato_pedido_item'`,
       )
       .get(),
   )
@@ -478,6 +497,20 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
     )
     .all(pedidoNorm) as PedidoFicha['qualidade']
 
+  const itens = hasPedidoItemTable()
+    ? (db
+        .prepare(
+          `SELECT cod_produto as codProduto, nome_produto as nomeProduto,
+                  categoria_produto as categoriaProduto,
+                  qtd_pedida as qtdPedida, qtd_faturada as qtdFaturada,
+                  valor_liquido as valorLiquido, valor_bruto as valorBruto
+           FROM fato_pedido_item
+           WHERE pedido_norm = ?
+           ORDER BY excel_row`,
+        )
+        .all(pedidoNorm) as PedidoFicha['itens'])
+    : []
+
   const pecasCosturaProd = costura
     .filter((row) => row.origemNorm === 'Producao')
     .reduce((sum, row) => sum + row.pecas, 0)
@@ -509,6 +542,7 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
     revisao,
     oficinas,
     signus: signus.map((row) => ({ ...row, isBaixa: Boolean(row.isBaixa) })),
+    itens,
     qualidade,
     datas: {
       pcpProntas,

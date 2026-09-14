@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { MousePointerClick } from 'lucide-react'
 import { PageShell } from '@/components/page-shell'
 import { SimpleTable } from '@/components/simple-table'
 import { PedidoQueue } from '@/components/pedido-queue'
@@ -9,6 +10,7 @@ import { getPedidosLista } from '@/data/pedidos'
 import { funilSliceMeta } from '@/lib/funil'
 import { parseFilters } from '@/lib/filters'
 import { formatDate, formatInt, formatProduto } from '@/lib/format'
+import { pedidoHref } from '@/lib/pedido'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Pedidos' }
@@ -29,7 +31,7 @@ export default async function PedidosPage({
   return (
     <PageShell
       title="Pedidos"
-      description={`${meta.label}: ${formatInt(lista.total)} ${ocFatia ? 'ordem(ns) de corte' : `pedido${lista.total === 1 ? '' : 's'}`}. ${meta.hint} Clique no número para a ficha.`}
+      description={`${meta.label}: ${formatInt(lista.total)} ${ocFatia ? 'ordem(ns) de corte' : `pedido${lista.total === 1 ? '' : 's'}`}. ${meta.hint}`}
     >
       <FilterBar
         pathname="/pedidos"
@@ -38,6 +40,15 @@ export default async function PedidosPage({
         fields={['mes', 'canal', 'cliente', 'responsavel', 'q']}
       />
       <FatiaChips pathname="/pedidos" values={{ ...filters, fatia: lista.fatia }} />
+
+      <p className="card-surface flex items-start gap-2 border-l-[3px] border-l-primary bg-primary/[0.08] px-3 py-2.5 text-sm font-medium text-foreground">
+        <MousePointerClick
+          className="mt-0.5 size-4 shrink-0 text-primary"
+          aria-hidden
+        />
+        Clique na linha do pedido para abrir a ficha e ver os produtos
+        (Itens.xlsx) daquele número.
+      </p>
 
       <PedidoQueue
         empty="Nenhum pedido nesta fatia"
@@ -121,6 +132,7 @@ export default async function PedidosPage({
               ]
                 .filter(Boolean)
                 .join(' · '),
+              href: pedidoHref(row.pedidoNorm),
               warning,
               alert,
             }

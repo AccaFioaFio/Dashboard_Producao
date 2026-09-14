@@ -18,6 +18,7 @@ import {
   formatInt,
   formatMeters,
   formatMoney,
+  formatNumber,
   formatProduto,
   formatTecido,
   TIPO_TECIDO_LABEL,
@@ -216,6 +217,45 @@ export default async function PedidoFichaPage({
           tone="teal"
         />
       </KpiGrid>
+
+      <section className="flex min-w-0 flex-col gap-2">
+        <h2 className="text-sm font-medium">Produtos</h2>
+        {ficha.itens.length ? (
+          <>
+            <SectionMeta>
+              {`Itens.xlsx · ${formatInt(ficha.itens.length)} linha${ficha.itens.length === 1 ? '' : 's'} deste pedido. Qtd = pedida; valor = líquido do item.`}
+            </SectionMeta>
+            <SimpleTable
+              columns={[
+                { key: 'cod', label: 'Código' },
+                { key: 'produto', label: 'Produto', wrap: true },
+                { key: 'qtd', label: 'Qtd', numeric: true },
+                { key: 'valor', label: 'Valor', numeric: true },
+              ]}
+              rows={ficha.itens.map((row) => {
+                const valor =
+                  row.valorLiquido > 0 ? row.valorLiquido : row.valorBruto
+                const nome = row.nomeProduto
+                  ? `${row.nomeProduto}${row.categoriaProduto ? ` · ${row.categoriaProduto}` : ''}`
+                  : row.categoriaProduto || '—'
+                return {
+                  cod: row.codProduto,
+                  produto: nome,
+                  qtd: formatNumber(
+                    row.qtdPedida,
+                    row.qtdPedida % 1 ? 2 : 0,
+                  ),
+                  valor: valor > 0 ? formatMoney(valor) : '—',
+                }
+              })}
+            />
+          </>
+        ) : (
+          <SectionNote>
+            Sem itens deste pedido na carga de Itens.xlsx.
+          </SectionNote>
+        )}
+      </section>
 
       {corteRows.length ? (
         <section className="flex min-w-0 flex-col gap-2">
