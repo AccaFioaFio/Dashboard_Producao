@@ -2307,6 +2307,10 @@ export type TopClienteRow = {
   metros: number
   tecidos: number
   pedidosComTecido: number
+  /** Pedidos no canal TERCEIROS (unidade 9-7 / faturamento externo). */
+  pedidosTerceiros: number
+  /** Faturado sem baixa Signus — produto de terceiros (sem tecido nosso). */
+  produtoTerceiros: boolean
   topTecido: string | null
   topTecidoNome: string | null
   topTecidoMetros: number
@@ -2482,12 +2486,14 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
     cliente: string
     codCliente: string | null
     pedidos: number
+    pedidosTerceiros: number
     valorTotal: number
     valorFaturado: number
   }>(
     `SELECT COALESCE(NULLIF(trim(p.cliente), ''), '(sem cliente)') as cliente,
             MAX(NULLIF(trim(p.parceiro_codigo), '')) as codCliente,
             COUNT(*) as pedidos,
+            SUM(CASE WHEN p.canal = 'TERCEIROS' THEN 1 ELSE 0 END) as pedidosTerceiros,
             COALESCE(SUM(p.valor_total), 0) as valorTotal,
             COALESCE(SUM(p.valor_faturado), 0) as valorFaturado
      FROM fato_pedido_comercial p
@@ -2560,6 +2566,14 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
   const rankingFull: TopClienteRow[] = ranking.map((row) => {
     const tecido = tecidoMap.get(row.cliente)
     const top = topTecidoMap.get(row.cliente)
+    const metros = tecido?.metros ?? 0
+    const topTecido = top?.cod ?? null
+    const pedidosTerceiros = row.pedidosTerceiros ?? 0
+    // Faturado sem baixa Signus = produto de terceiros (não há tecido nosso).
+    const produtoTerceiros =
+      metros === 0 &&
+      !topTecido &&
+      (pedidosTerceiros > 0 || row.valorFaturado > 0)
     return {
       cliente: row.cliente,
       codCliente: row.codCliente,
@@ -2567,10 +2581,12 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
       valorTotal: row.valorTotal,
       valorFaturado: row.valorFaturado,
       ticketMedio: row.pedidos ? row.valorFaturado / row.pedidos : 0,
-      metros: tecido?.metros ?? 0,
+      metros,
       tecidos: tecido?.tecidos ?? 0,
       pedidosComTecido: tecido?.pedidosComTecido ?? 0,
-      topTecido: top?.cod ?? null,
+      pedidosTerceiros,
+      produtoTerceiros,
+      topTecido,
       topTecidoNome: top?.nome ?? null,
       topTecidoMetros: top?.metros ?? 0,
     }

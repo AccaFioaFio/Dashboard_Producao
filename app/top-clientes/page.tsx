@@ -89,9 +89,15 @@ export default async function TopClientesPage({
                             resumoCliente.topTecido,
                             resumoCliente.topTecidoNome,
                           )
-                        : 'Sem baixa Signus'
+                        : resumoCliente.produtoTerceiros
+                          ? 'Produto de terceiros'
+                          : 'Sem baixa Signus'
                     }
-                    detail="Metros baixados no Signus neste cliente (pedido de venda ou OC de produção) — sem rateio entre clientes."
+                    detail={
+                      resumoCliente.produtoTerceiros
+                        ? 'Cliente faturado sem baixa Signus — produto de terceiros (não há tecido nosso neste recorte).'
+                        : 'Metros baixados no Signus neste cliente (pedido de venda ou OC de produção) — sem rateio entre clientes.'
+                    }
                     tone="magenta"
                   />
                 </KpiGrid>
@@ -160,7 +166,7 @@ export default async function TopClientesPage({
                 const query = filtersToSearch(next).toString()
                 const tecidoLabel = row.topTecido
                   ? formatTecido(row.topTecido, row.topTecidoNome)
-                  : '—'
+                  : null
                 return {
                   codCliente: row.codCliente || '—',
                   cliente: row.cliente,
@@ -168,10 +174,11 @@ export default async function TopClientesPage({
                   valor: formatMoney(row.valorFaturado),
                   ticket: formatMoney(row.ticketMedio),
                   metros: formatMeters(row.metros),
-                  topTecido:
-                    tecidoLabel === '—'
-                      ? '—'
-                      : `${tecidoLabel} (${formatMeters(row.topTecidoMetros)})`,
+                  topTecido: tecidoLabel
+                    ? `${tecidoLabel} (${formatMeters(row.topTecidoMetros)})`
+                    : row.produtoTerceiros
+                      ? 'Produto de terceiros'
+                      : '—',
                   selected: filters.cliente === row.cliente,
                   href: query ? `/top-clientes?${query}` : '/top-clientes',
                 }
