@@ -2247,11 +2247,53 @@ function sqlPedidoComercialDistinto(where: string) {
           GROUP BY p.pedido_norm`
 }
 
-/** Baixa Signus ligada a pelo menos um pedido comercial do recorte (sem fan-out). */
-function sqlExistsPedidoComercial(signusAlias: string, where: string) {
+/**
+ * Pedidos atribuíveis aos clientes do recorte comercial:
+ * venda do filtro + produção (dim/corte) do mesmo cliente.
+ * A baixa Signus costuma ir no OC de produção, não no pedido de faturamento.
+ */
+function sqlPedidoClienteAtributo(comercialWhere: string) {
+  const cli = (alias: string) =>
+    `COALESCE(NULLIF(trim(${alias}.cliente), ''), '(sem cliente)')`
+  const clientesRecorte = `
+    SELECT DISTINCT ${cli('p')} as cliente
+    FROM fato_pedido_comercial p
+    WHERE ${comercialWhere}`
+
+  return `SELECT pedido_norm,
+                 MAX(cliente) as cliente,
+                 MAX(canal) as canal
+          FROM (
+            SELECT ped.pedido_norm as pedido_norm,
+                   ped.cliente as cliente,
+                   ped.canal as canal
+            FROM (${sqlPedidoComercialDistinto(comercialWhere)}) ped
+            UNION ALL
+            SELECT d.pedido_norm,
+                   ${cli('d')} as cliente,
+                   d.canal as canal
+            FROM dim_pedido d
+            WHERE NULLIF(trim(d.cliente), '') IS NOT NULL
+              AND ${cli('d')} IN (${clientesRecorte})
+            UNION ALL
+            SELECT c.pedido_norm,
+                   ${cli('c')} as cliente,
+                   c.canal as canal
+            FROM fato_corte_pedido c
+            WHERE NULLIF(trim(c.cliente), '') IS NOT NULL
+              AND ${cli('c')} IN (${clientesRecorte})
+          )
+          GROUP BY pedido_norm`
+}
+
+/** Baixa Signus em pedido de venda ou de produção do cliente do recorte. */
+function sqlExistsPedidoClienteAtributo(
+  signusAlias: string,
+  comercialWhere: string,
+) {
   return `EXISTS (
-    SELECT 1 FROM fato_pedido_comercial p
-    WHERE p.pedido_norm = ${signusAlias}.pedido_norm AND ${where}
+    SELECT 1 FROM (${sqlPedidoClienteAtributo(comercialWhere)}) ped
+    WHERE ped.pedido_norm = ${signusAlias}.pedido_norm
   )`
 }
 
@@ -2468,7 +2510,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
                 COUNT(DISTINCT s.cod_produto) as tecidos,
                 COUNT(DISTINCT s.pedido_norm) as pedidosComTecido
          FROM fato_tecido_signus s
-         JOIN (${sqlPedidoComercialDistinto(rankingWhere)}) ped
+         JOIN (${sqlPedidoClienteAtributo(rankingWhere)}) ped
            ON ped.pedido_norm = s.pedido_norm
          WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
          GROUP BY COALESCE(NULLIF(trim(ped.cliente), ''), '(sem cliente)')`,
@@ -2488,7 +2530,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
                 MAX(s.nome_produto) as nome,
                 COALESCE(SUM(s.metros), 0) as metros
          FROM fato_tecido_signus s
-         JOIN (${sqlPedidoComercialDistinto(rankingWhere)}) ped
+         JOIN (${sqlPedidoClienteAtributo(rankingWhere)}) ped
            ON ped.pedido_norm = s.pedido_norm
          WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
          GROUP BY COALESCE(NULLIF(trim(ped.cliente), ''), '(sem cliente)'), s.cod_produto
@@ -2553,7 +2595,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
                 COUNT(DISTINCT ped.cliente) as clientes,
                 ${estoqueSelect} as saldoAtual
          FROM fato_tecido_signus s
-         JOIN (${sqlPedidoComercialDistinto(where)}) ped
+         JOIN (${sqlPedidoClienteAtributo(where)}) ped
            ON ped.pedido_norm = s.pedido_norm
          WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
          GROUP BY s.cod_produto
@@ -2584,7 +2626,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
           `SELECT s.pedido_norm as pedidoNorm, COALESCE(SUM(s.metros), 0) as metros
            FROM fato_tecido_signus s
            WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
-             AND ${sqlExistsPedidoComercial('s', where)}
+             AND ${sqlExistsPedidoClienteAtributo('s', where)}
            GROUP BY s.pedido_norm`,
           params,
         ).map((row) => [row.pedidoNorm, row.metros]),
@@ -2635,7 +2677,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
       `SELECT COALESCE(ped.canal, '(sem canal)') as nome,
               COALESCE(SUM(s.metros), 0) as metros
        FROM fato_tecido_signus s
-       JOIN (${sqlPedidoComercialDistinto(where)}) ped
+       JOIN (${sqlPedidoClienteAtributo(where)}) ped
          ON ped.pedido_norm = s.pedido_norm
        WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
        GROUP BY ped.canal`,
@@ -2652,7 +2694,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
         `SELECT COALESCE(SUM(s.metros), 0) as v
          FROM fato_tecido_signus s
          WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
-           AND ${sqlExistsPedidoComercial('s', where)}`,
+           AND ${sqlExistsPedidoClienteAtributo('s', where)}`,
         params,
       ).v
     : 0
@@ -2662,7 +2704,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
         `SELECT COUNT(DISTINCT s.pedido_norm) as v
          FROM fato_tecido_signus s
          WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
-           AND ${sqlExistsPedidoComercial('s', where)}`,
+           AND ${sqlExistsPedidoClienteAtributo('s', where)}`,
         params,
       ).v
     : 0
@@ -2733,7 +2775,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
        FROM fato_tecido_signus s
        WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
          AND s.data IS NOT NULL
-         AND ${sqlExistsPedidoComercial('s', histWhere)}
+         AND ${sqlExistsPedidoClienteAtributo('s', histWhere)}
        GROUP BY CAST(substr(s.data, 6, 2) as INTEGER)`,
       histParams,
     )) {
@@ -2779,7 +2821,7 @@ export const getTopClientes = cache(async (filters: DashFilters = {}) => {
          FROM fato_tecido_signus s
          WHERE s.is_baixa = 1 AND ${almoxSql} AND ${categoriaSql}
            AND s.data IS NOT NULL
-           AND ${sqlExistsPedidoComercial('s', histWhere)}
+           AND ${sqlExistsPedidoClienteAtributo('s', histWhere)}
          GROUP BY CAST(substr(s.data, 6, 2) as INTEGER),
                   s.cod_produto`,
         histParams,

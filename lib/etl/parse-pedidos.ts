@@ -2,7 +2,7 @@ import type * as XLSX from 'xlsx'
 import { toIsoDate, yearOf } from '@/lib/dates'
 import { asNumber, headerIndex } from '@/lib/etl/excel'
 import { cell, findHeaderRow, sheetRows } from '@/lib/etl/parse'
-import { asText, fold } from '@/lib/keys'
+import { asText, canonicalizePedido, fold } from '@/lib/keys'
 import { YEAR } from '@/lib/year'
 import type { PedidoComercial } from '@/lib/etl/types'
 
@@ -10,14 +10,9 @@ function col(map: Map<string, number>, aliases: string[], fallback: number | nul
   return headerIndex(map, aliases) ?? fallback
 }
 
-/** Alinha ao pedido_norm do Signus/Corte (sem zeros à esquerda). */
+/** Alinha ao pedido_norm canônico (número base, sem zeros/sufixo). */
 export function normalizePedidoComercial(value: unknown): string | null {
-  const text = asText(value)
-  if (!text) return null
-  const digits = text.replace(/\D/g, '')
-  if (!digits) return null
-  const stripped = digits.replace(/^0+/, '')
-  return stripped || '0'
+  return canonicalizePedido(value)
 }
 
 function canalFromPedido(

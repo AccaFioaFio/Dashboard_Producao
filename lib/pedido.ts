@@ -1,3 +1,5 @@
+import { canonicalizePedido } from '@/lib/keys'
+
 export function pedidoHref(pedido: string) {
   return `/pedidos/${encodeURIComponent(pedido)}`
 }
@@ -11,9 +13,7 @@ export function parsePedidoParam(raw: string) {
 }
 
 export function pedidoDigits(value: string) {
-  const digits = value.replace(/\D/g, '')
-  if (!digits) return null
-  return digits.replace(/^0+/, '') || digits
+  return canonicalizePedido(value)
 }
 
 export const QUALIDADE_TIPO_LABEL: Record<string, string> = {

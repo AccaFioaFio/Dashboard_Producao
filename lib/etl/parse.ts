@@ -8,6 +8,7 @@ import {
   normalizeOrigem,
   normalizePedido,
   normalizeStatus,
+  splitPedidoRefs,
 } from '@/lib/keys'
 import { YEAR } from '@/lib/year'
 import { pendentesOficina } from '@/lib/oficinas-qty'
@@ -396,39 +397,45 @@ export function parseOficinas(workbook: XLSX.WorkBook) {
     const qtdEnviadas = asNumber(cell(values, colEnviadas)) ?? 0
     const qtdRetornadas = asNumber(cell(values, colRetornadas)) ?? 0
     const qtdPendentesExcel = asNumber(cell(values, colPendentes)) ?? 0
-    const lote: OficinaLote = {
-      excelRow: i + 1,
-      pedidoNorm: normalizePedido(cell(values, colPedido)),
-      oficina: oficinaRaw,
-      dataEnvio,
-      qtdEnviadas,
-      qtdRetornadas,
-      // Saldo real: não confiar na coluna Excel (pode ficar desatualizada após retorno).
-      qtdPendentes: pendentesOficina(qtdEnviadas, qtdRetornadas),
-      qtdDefeitos: asNumber(cell(values, colDefeitos)) ?? 0,
-      statusEntrega: asText(cell(values, colStatus)),
-      dataPrometida: toIsoDate(cell(values, colPrometida)),
-      // Data Retorno no Excel costuma ser =TODAY(); só vale se houve retorno na linha.
-      dataRetorno:
-        qtdRetornadas > 0 ? toIsoDate(cell(values, colRetorno)) : null,
-      produto: asText(cell(values, colProduto)),
-      valorTotal: asNumber(cell(values, colValor)),
-    }
-    lotes.push(lote)
+    const pedidoRefs = splitPedidoRefs(cell(values, colPedido))
+    const pedidos: Array<string | null> =
+      pedidoRefs.length > 0 ? pedidoRefs : [null]
 
-    if (
-      foldSafe(oficinaRaw) === 'LILICA' &&
-      qtdEnviadas > 0 &&
-      qtdRetornadas === 0 &&
-      qtdPendentesExcel === 0
-    ) {
-      qualidade.push({
-        tipo: 'lilica',
-        pedidoNorm: lote.pedidoNorm,
-        detalhe: 'Lilica: enviadas sem retorno e sem pendente',
+    for (const pedidoNorm of pedidos) {
+      const lote: OficinaLote = {
         excelRow: i + 1,
-        valor: qtdEnviadas,
-      })
+        pedidoNorm,
+        oficina: oficinaRaw,
+        dataEnvio,
+        qtdEnviadas,
+        qtdRetornadas,
+        // Saldo real: não confiar na coluna Excel (pode ficar desatualizada após retorno).
+        qtdPendentes: pendentesOficina(qtdEnviadas, qtdRetornadas),
+        qtdDefeitos: asNumber(cell(values, colDefeitos)) ?? 0,
+        statusEntrega: asText(cell(values, colStatus)),
+        dataPrometida: toIsoDate(cell(values, colPrometida)),
+        // Data Retorno no Excel costuma ser =TODAY(); só vale se houve retorno na linha.
+        dataRetorno:
+          qtdRetornadas > 0 ? toIsoDate(cell(values, colRetorno)) : null,
+        produto: asText(cell(values, colProduto)),
+        valorTotal: asNumber(cell(values, colValor)),
+      }
+      lotes.push(lote)
+
+      if (
+        foldSafe(oficinaRaw) === 'LILICA' &&
+        qtdEnviadas > 0 &&
+        qtdRetornadas === 0 &&
+        qtdPendentesExcel === 0
+      ) {
+        qualidade.push({
+          tipo: 'lilica',
+          pedidoNorm: lote.pedidoNorm,
+          detalhe: 'Lilica: enviadas sem retorno e sem pendente',
+          excelRow: i + 1,
+          valor: qtdEnviadas,
+        })
+      }
     }
   }
 

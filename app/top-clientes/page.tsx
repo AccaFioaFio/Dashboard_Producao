@@ -35,7 +35,7 @@ export default async function TopClientesPage({
   return (
     <PageShell
       title="Top Clientes"
-      description={`Ranking comercial ${YEAR} — só venda final (exclui remessa p/ industrialização e oficinas). Metros = baixas Signus por data do movimento (almox ${ALMOX_PRINCIPAIS_LABEL}, categoria MATÉRIA PRIMA por padrão), cruzadas 1× por pedido. Clique num cliente para ver o resumo e os produtos já comprados (Itens.xlsx).`}
+      description={`Ranking comercial ${YEAR} — só venda final (exclui remessa p/ industrialização e oficinas). Metros = baixas Signus de MATÉRIA PRIMA (almox ${ALMOX_PRINCIPAIS_LABEL}) cruzadas pelo nº do pedido: venda comercial e OC de produção do mesmo cliente (sem rateio entre clientes). Clique na linha para ver produtos comprados.`}
       actions={<TopClientesSubNav filters={filters} current="ranking" />}
     >
       <FilterBar
@@ -91,7 +91,7 @@ export default async function TopClientesPage({
                           )
                         : 'Sem baixa Signus'
                     }
-                    detail="Metros baixados no Signus cruzados com os pedidos deste cliente."
+                    detail="Metros baixados no Signus neste cliente (pedido de venda ou OC de produção) — sem rateio entre clientes."
                     tone="magenta"
                   />
                 </KpiGrid>

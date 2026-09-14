@@ -31,7 +31,7 @@ export default async function TopClientesResumoPage({
   return (
     <PageShell
       title="Mix e resumo"
-      description={`KPIs, evolução mensal e mix por canal dos pedidos comerciais ${YEAR} (só venda final). Metros = baixas Signus (almox ${ALMOX_PRINCIPAIS_LABEL}), cruzadas 1× por pedido.`}
+      description={`KPIs, evolução mensal e mix por canal dos pedidos comerciais ${YEAR} (só venda final). Metros = baixas Signus (almox ${ALMOX_PRINCIPAIS_LABEL}) por nº de pedido — venda e OC de produção do mesmo cliente, sem rateio.`}
       actions={<TopClientesSubNav filters={filters} current="resumo" />}
     >
       <FilterBar

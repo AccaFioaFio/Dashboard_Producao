@@ -47,10 +47,13 @@ export default async function TecidosPage({
   const metrosSignusComPedido = tecidos.metrosSignusComPedido
   const metrosSignusSemPedido = metrosSignus - metrosSignusComPedido
   const metrosEconomia = tecidos.metrosEconomia
+  const metrosCorteAproveitado = metrosCorte - metrosEconomia
   const economiaPct = metrosCorte > 0 ? (metrosEconomia / metrosCorte) * 100 : 0
-  const deltaReal = metrosCorte - metrosSignusComPedido
+  const deltaReal = metrosCorteAproveitado - metrosSignusComPedido
   const coberturaReal =
-    metrosCorte > 0 ? (metrosSignusComPedido / metrosCorte) * 100 : 0
+    metrosCorteAproveitado > 0
+      ? (metrosSignusComPedido / metrosCorteAproveitado) * 100
+      : 0
   const baixaProducao = tecidos.baixaPorTipoOficial.find(
     (row) => row.tipoNorm === 'baixa_producao',
   )
@@ -77,12 +80,12 @@ export default async function TecidosPage({
         fields={['mes', 'canal', 'cliente', 'categoria', 'q']}
       />
 
-      <KpiGrid columns={3}>
+      <KpiGrid columns={5}>
         <KpiCard
           label="Consumo de tecido no Corte"
-          value={formatMeters(metrosCorte)}
-          hint="Metros programados / apontados"
-          detail={`Planilha de Corte · SUM dos metros apontados (MTS / TECIDOS).\n\nSó entram pedidos com data de corte em ${YEAR} (filtro na carga). O filtro de mês da tela corta dentro desse ano.`}
+          value={`${formatMeters(metrosCorte)} · ${formatMeters(metrosCorteAproveitado)}`}
+          hint="Total · c/ aproveitamento (consumo − economia)"
+          detail={`Planilha de Corte · dois números no mesmo card:\n• Total: SUM dos metros apontados (MTS / TECIDOS) = ${formatMeters(metrosCorte)}\n• C/ aproveitamento: total − economia = ${formatMeters(metrosCorteAproveitado)} (economia ${formatMeters(metrosEconomia)})\n\nSó entram pedidos com data de corte em ${YEAR} (filtro na carga). O filtro de mês da tela corta dentro desse ano.`}
           tone="teal"
         />
         <KpiCard
@@ -95,8 +98,8 @@ export default async function TecidosPage({
         <KpiCard
           label="Diferença Corte − Signus"
           value={formatMeters(deltaReal)}
-          hint={`${formatNumber(coberturaReal, 1)}% do Corte já baixado c/ pedido`}
-          detail={`Cálculo: consumo do Corte − baixa Signus com nº de pedido.\n\nÉ a diferença que “fecha” com a programação. Não inclui baixas sem pedido (card ao lado) nem retorno do corte.\n\nAinda não é fechamento pedido a pedido: datas (corte vs movimento) e tipos (Produção + canal) podem divergir.`}
+          hint={`${formatNumber(coberturaReal, 1)}% do Corte c/ aproveitamento já baixado`}
+          detail={`Cálculo: consumo do Corte c/ aproveitamento (${formatMeters(metrosCorteAproveitado)}) − baixa Signus com nº de pedido (${formatMeters(metrosSignusComPedido)}).\n\nUsa o consumo após economia (total − economia), não o total bruto do Corte.\n\nNão inclui baixas sem pedido nem retorno do corte. Ainda não é fechamento pedido a pedido: datas e tipos (Produção + canal) podem divergir.`}
           tone="amber"
         />
         <KpiCard
@@ -151,7 +154,7 @@ export default async function TecidosPage({
         />
       </KpiGrid>
 
-      <div className="grid min-w-0 gap-[var(--page-gap)]">
+      <div className="grid min-w-0 gap-[var(--page-gap)] lg:grid-cols-2">
         <MonthlyAreaChart
           title="Corte"
           description="Metros apontados no Corte, mês a mês."
