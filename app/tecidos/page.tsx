@@ -44,15 +44,30 @@ export default async function TecidosPage({
   ])
   const metrosCorte = tecidos.metrosCorte
   const metrosSignus = tecidos.metrosSignus
+  const metrosSignusComPedido = tecidos.metrosSignusComPedido
+  const metrosSignusSemPedido = metrosSignus - metrosSignusComPedido
   const metrosEconomia = tecidos.metrosEconomia
   const economiaPct = metrosCorte > 0 ? (metrosEconomia / metrosCorte) * 100 : 0
-  const delta = metrosCorte - metrosSignus
-  const cobertura = metrosCorte > 0 ? (metrosSignus / metrosCorte) * 100 : 0
+  const deltaReal = metrosCorte - metrosSignusComPedido
+  const coberturaReal =
+    metrosCorte > 0 ? (metrosSignusComPedido / metrosCorte) * 100 : 0
+  const baixaProducao = tecidos.baixaPorTipoOficial.find(
+    (row) => row.tipoNorm === 'baixa_producao',
+  )
+  const baixaCanal = tecidos.baixaPorTipoOficial.find(
+    (row) => row.tipoNorm === 'baixa_canal',
+  )
+  const metrosProducao = baixaProducao?.metros ?? 0
+  const metrosCanal = baixaCanal?.metros ?? 0
+  const movProducao = baixaProducao?.movimentos ?? 0
+  const movCanal = baixaCanal?.movimentos ?? 0
+  const pedidosProducao = baixaProducao?.pedidos ?? 0
+  const pedidosCanal = baixaCanal?.pedidos ?? 0
 
   return (
     <PageShell
       title="Tecidos"
-      description={`Consumo no Corte e baixa no Signus (${YEAR}), cruzados pelo código do tecido. Signus e saldo só dos almox ${ALMOX_PRINCIPAIS_LABEL}, categoria MATÉRIA PRIMA por padrão. A baixa oficial soma dois tipos de movimentação (Produção/insumos + SAÍDA FF/AC/TC) — por isso a diferença Corte − Signus não é auditoria de erro. Ambos já vêm filtrados pelo ano na carga — Corte pela data do pedido, Signus pela data do movimento. Saldo do estoque é snapshot (não filtra por mês/ano).`}
+      description={`Consumo no Corte e baixa no Signus (${YEAR}), cruzados pelo código do tecido. Signus e saldo só dos almox ${ALMOX_PRINCIPAIS_LABEL}, categoria MATÉRIA PRIMA por padrão. A diferença com o Corte usa só baixas com nº de pedido; baixas sem pedido ficam em card separado. Ambos já vêm filtrados pelo ano na carga — Corte pela data do pedido, Signus pela data do movimento. Saldo do estoque é snapshot (não filtra por mês/ano).`}
       actions={<TecidosSubNav filters={filters} current="metros" />}
     >
       <FilterBar
@@ -71,22 +86,32 @@ export default async function TecidosPage({
           tone="teal"
         />
         <KpiCard
-          label="Baixa de tecido no Signus"
-          value={formatMeters(metrosSignus)}
-          hint={`${formatInt(tecidos.movimentosBaixa)} movimentos · ${formatInt(tecidos.pedidosComBaixa)} pedidos`}
-          detail={`Movimentação Signus · soma dos tipos oficiais de baixa nos almox ${ALMOX_PRINCIPAIS_LABEL}:\n• Produção (insumos)\n• SAÍDA FF / AC / TC (baixa de canal)\n\nNão é um único tipo — o total mistura baixas ligadas à programação de corte com saídas de canal. Também só ${YEAR}, mas pela data do movimento (não do corte). Inclui baixas sem nº de pedido e códigos fora do Corte.`}
+          label="Baixa Signus c/ pedido"
+          value={formatMeters(metrosSignusComPedido)}
+          hint={`${formatInt(tecidos.movimentosBaixaComPedido)} movimentos · ${formatInt(tecidos.pedidosComBaixa)} pedidos`}
+          detail={`Baixas oficiais no Signus (almox ${ALMOX_PRINCIPAIS_LABEL}) que trazem nº de pedido em Orig. Mov.\n\nTipos: Produção (insumos) + SAÍDA FF/AC/TC. É o recorte comparável com o consumo do Corte — o card ao lado mostra a diferença real.`}
           tone="indigo"
         />
         <KpiCard
           label="Diferença Corte − Signus"
-          value={formatMeters(delta)}
-          hint={
-            delta < 0
-              ? `Negativo esperado · Signus cobre ${formatNumber(cobertura, 1)}% do Corte`
-              : `${formatNumber(cobertura, 1)}% da programação já baixada`
-          }
-          detail={`Cálculo: metros do Corte − metros baixados no Signus (almox ${ALMOX_PRINCIPAIS_LABEL}).\n\nNão indica erro no Corte nem no Signus. São medidas diferentes:\n• Corte = consumo apontado na planilha de programação\n• Signus = soma de todos os tipos oficiais de baixa (Produção/insumos + SAÍDA FF/AC/TC)\n\nNegativo = o Signus baixou mais metros do que a programação do Corte — comum porque o Signus inclui saídas de canal, baixas sem pedido e códigos fora da programação, e as datas (pedido vs movimento) não batem 1:1.\n\nRetorno do corte e economia são contas separadas — não “fecham” este número.`}
+          value={formatMeters(deltaReal)}
+          hint={`${formatNumber(coberturaReal, 1)}% do Corte já baixado c/ pedido`}
+          detail={`Cálculo: consumo do Corte − baixa Signus com nº de pedido.\n\nÉ a diferença que “fecha” com a programação. Não inclui baixas sem pedido (card ao lado) nem retorno do corte.\n\nAinda não é fechamento pedido a pedido: datas (corte vs movimento) e tipos (Produção + canal) podem divergir.`}
           tone="amber"
+        />
+        <KpiCard
+          label="Baixa Signus sem pedido"
+          value={formatMeters(metrosSignusSemPedido)}
+          hint={`${formatInt(tecidos.baixasSemPedido)} movimentos · fora da diferença com o Corte`}
+          detail={`Baixas oficiais no Signus sem nº de pedido em Orig. Mov. (${formatInt(tecidos.baixasSemPedido)} movimentos · ${formatMeters(metrosSignusSemPedido)}).\n\nNão entram na diferença Corte − Signus. Somadas à baixa c/ pedido dão o total oficial: ${formatMeters(metrosSignus)} (${formatInt(tecidos.movimentosBaixa)} movimentos).\n\nCostumam ser lançamentos auxiliares, canal ou códigos fora da programação.`}
+          tone="magenta"
+        />
+        <KpiCard
+          label="Baixa por tipo de movimentação"
+          value={`${formatMeters(metrosProducao)} · ${formatMeters(metrosCanal)}`}
+          hint={`${formatInt(movProducao)} mov. Produção · ${formatInt(movCanal)} mov. Canal`}
+          detail={`Split da baixa oficial no Signus (almox ${ALMOX_PRINCIPAIS_LABEL}) — c/ e s/ pedido:\n• Produção (insumos): ${formatMeters(metrosProducao)} · ${formatInt(movProducao)} movimentos · ${formatInt(pedidosProducao)} pedidos\n• SAÍDA FF/AC/TC (canal): ${formatMeters(metrosCanal)} · ${formatInt(movCanal)} movimentos · ${formatInt(pedidosCanal)} pedidos\n\nOutros tipos (retorno, transferência, etc.) ficam na tabela “Baixa Signus por tipo”.`}
+          tone="indigo"
         />
         <KpiCard
           label="Saldo atual em estoque"
@@ -106,7 +131,7 @@ export default async function TecidosPage({
           label="Economia de tecido"
           value={formatMeters(metrosEconomia)}
           hint={`${formatNumber(economiaPct, 1)}% do consumo do Corte`}
-          detail={`Coluna de economia da planilha de Corte (quando a baixa fica abaixo do consumo na linha).\n\nNão é o inverso da “Diferença Corte − Signus”: pode haver economia positiva e diferença global negativa ao mesmo tempo.`}
+          detail={`Coluna de economia da planilha de Corte (quando a baixa fica abaixo do consumo na linha).\n\nNão é o inverso da diferença Corte − Signus: pode haver economia positiva e saldo de baixas sem pedido ao mesmo tempo.`}
           tone="teal"
           progress={Math.min(100, Math.max(12, economiaPct * 12))}
         />
@@ -120,8 +145,8 @@ export default async function TecidosPage({
         <KpiCard
           label="Retorno de tecido do corte"
           value={formatMeters(tecidos.retornoCorte)}
-          hint={`${formatInt(tecidos.baixasSemPedido)} baixas Signus sem nº de pedido`}
-          detail={`Movimentos Signus do tipo “Retorno do corte” em ${YEAR}.\n\nNão entram no KPI de baixa oficial — por isso não reduzem a diferença Corte − Signus.\n\nO subtítulo conta baixas oficiais sem nº de pedido em Orig. Mov. (essas sim somam no Signus e ajudam a explicar cobertura > 100%).`}
+          hint="Tipo “Retorno do corte” · fora da baixa oficial"
+          detail={`Movimentos Signus do tipo “Retorno do corte” em ${YEAR}.\n\nNão entram no KPI de baixa oficial nem na diferença com o Corte.`}
           tone="magenta"
         />
       </KpiGrid>
@@ -222,9 +247,9 @@ export default async function TecidosPage({
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Baixa Signus por tipo</h2>
           <p className="text-xs text-muted-foreground">
-            O KPI de baixa (e a diferença Corte − Signus) soma só Produção
-            (insumos) + SAÍDA FF/AC/TC. Os demais tipos aparecem aqui para
-            contexto e não entram nesse total.
+            A diferença com o Corte usa só baixas com nº de pedido. Esta tabela
+            lista todos os tipos; Produção + SAÍDA FF/AC/TC formam a baixa
+            oficial (c/ e s/ pedido).
           </p>
           <SimpleTable
             columns={[

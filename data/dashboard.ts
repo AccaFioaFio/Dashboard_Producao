@@ -808,6 +808,22 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
         params,
       ).v
     : 0
+  const metrosSignusComPedido = hasSignus
+    ? runGet<{ v: number }>(
+        `SELECT COALESCE(SUM(s.metros), 0) as v FROM fato_tecido_signus s
+         WHERE ${signusWhere} AND s.is_baixa = 1
+           AND s.pedido_norm IS NOT NULL AND trim(s.pedido_norm) != ''`,
+        params,
+      ).v
+    : 0
+  const movimentosBaixaComPedido = hasSignus
+    ? runGet<{ v: number }>(
+        `SELECT COUNT(*) as v FROM fato_tecido_signus s
+         WHERE ${signusWhere} AND s.is_baixa = 1
+           AND s.pedido_norm IS NOT NULL AND trim(s.pedido_norm) != ''`,
+        params,
+      ).v
+    : 0
   const pedidosComBaixa = hasSignus
     ? runGet<{ v: number }>(
         `SELECT COUNT(DISTINCT s.pedido_norm) as v FROM fato_tecido_signus s
@@ -823,6 +839,24 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
         params,
       ).v
     : 0
+  const baixaPorTipoOficial = hasSignus
+    ? runAll<{
+        tipoNorm: string
+        metros: number
+        movimentos: number
+        pedidos: number
+      }>(
+        `SELECT s.tipo_norm as tipoNorm,
+              COALESCE(SUM(s.metros), 0) as metros,
+              COUNT(*) as movimentos,
+              COUNT(DISTINCT s.pedido_norm) as pedidos
+         FROM fato_tecido_signus s
+         WHERE ${signusWhere} AND s.is_baixa = 1
+         GROUP BY s.tipo_norm
+         ORDER BY metros DESC`,
+        params,
+      )
+    : []
   const retornoCorte = hasSignus
     ? runGet<{ v: number }>(
         `SELECT COALESCE(SUM(s.metros), 0) as v FROM fato_tecido_signus s
@@ -1082,9 +1116,12 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
     metrosCorte,
     metrosEconomia,
     metrosSignus,
+    metrosSignusComPedido,
     movimentosBaixa,
+    movimentosBaixaComPedido,
     pedidosComBaixa,
     baixasSemPedido,
+    baixaPorTipoOficial,
     retornoCorte,
     saldoAtualMetros,
     saldoReservadoMetros,
