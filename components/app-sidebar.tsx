@@ -18,8 +18,6 @@ import {
 import { findNavItem, navigation } from '@/lib/navigation'
 import { cn } from '@/lib/utils'
 
-const WATCHER_POLL_MS = 15_000
-
 function WatcherStatusFooter() {
   const [online, setOnline] = useState(false)
 
@@ -28,7 +26,7 @@ function WatcherStatusFooter() {
 
     async function refresh() {
       try {
-        const res = await fetch('/api/watcher-status', { cache: 'no-store' })
+        const res = await fetch('/api/watcher-status')
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const data = (await res.json()) as { online?: boolean }
         if (!cancelled) setOnline(Boolean(data.online))
@@ -38,13 +36,15 @@ function WatcherStatusFooter() {
     }
 
     void refresh()
-    const id = setInterval(() => {
-      void refresh()
-    }, WATCHER_POLL_MS)
+
+    function onVisible() {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+    document.addEventListener('visibilitychange', onVisible)
 
     return () => {
       cancelled = true
-      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [])
 
@@ -62,7 +62,7 @@ function WatcherStatusFooter() {
         />
       </span>
       <p className="truncate text-xs text-sidebar-foreground/55">
-        {online ? 'Ao vivo' : 'Observador offline'}
+        {online ? 'Carga recente' : 'Sem publicação recente'}
       </p>
     </div>
   )

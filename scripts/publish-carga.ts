@@ -1,9 +1,5 @@
 import { watch } from 'node:fs'
 import path from 'node:path'
-import {
-  WATCHER_HEARTBEAT_INTERVAL_MS,
-  writeWatcherHeartbeat,
-} from '../lib/cloud/watcher-heartbeat'
 import { loadLocalEnv } from '../lib/load-env'
 import {
   formatPublishLog,
@@ -203,21 +199,7 @@ async function runWatch() {
     }
   }, POLL_MS)
 
-  async function pulseHeartbeat() {
-    try {
-      const ok = await writeWatcherHeartbeat()
-      if (!ok) log('heartbeat: Blob Store indisponível (sem token)')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      log(`heartbeat falhou: ${message}`)
-    }
-  }
-
-  void pulseHeartbeat()
-  setInterval(() => {
-    void pulseHeartbeat()
-  }, WATCHER_HEARTBEAT_INTERVAL_MS)
-
+  // Sem heartbeat no Blob: só put do SQLite quando a planilha muda (economia Hobby).
   requestPublish('início')
 }
 
