@@ -18,14 +18,23 @@ export function AtualizarDadosButton() {
     if (pending) return
     setError(null)
     startTransition(async () => {
-      const result = await atualizarDados()
-      if (result.ok) {
-        setOkAt(result.lidaEm)
-        setError(null)
-        return
+      try {
+        const result = await atualizarDados()
+        if (result.ok) {
+          setOkAt(result.lidaEm)
+          setError(null)
+          return
+        }
+        setOkAt(null)
+        setError(result.error)
+      } catch (error) {
+        setOkAt(null)
+        setError(
+          error instanceof Error
+            ? error.message
+            : 'Falha ao atualizar. Recarregue a página e tente de novo.',
+        )
       }
-      setOkAt(null)
-      setError(result.error)
     })
   }
 

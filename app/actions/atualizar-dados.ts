@@ -20,10 +20,19 @@ export async function atualizarDados(): Promise<AtualizarDadosResult> {
 }
 
 async function runAtualizarDados(): Promise<AtualizarDadosResult> {
-  const result = await refreshFromExcel(projectFilePaths())
-  if (!result.ok) return result
+  try {
+    // Sempre a pasta Arquivos do Excel na raiz do projeto (destino da sinc).
+    const result = await refreshFromExcel(projectFilePaths())
+    if (!result.ok) return result
 
-  revalidatePath('/', 'layout')
-  refresh()
-  return { ok: true, lidaEm: result.lidaEm }
+    revalidatePath('/', 'layout')
+    refresh()
+    return { ok: true, lidaEm: result.lidaEm }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      ok: false,
+      error: `Atualização falhou; a carga anterior foi mantida. ${message}`,
+    }
+  }
 }

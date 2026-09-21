@@ -32,6 +32,7 @@ export async function ensureCloudDatabase() {
   await inFlight
 }
 
+/** Copia o SQLite do deploy para /tmp (sem Blob). */
 async function restoreCloudDatabase() {
   ensureDataDirs()
   if (existsSync(BUNDLED_DB_PATH) && BUNDLED_DB_PATH !== DB_PATH) {
@@ -45,6 +46,7 @@ async function restoreCloudDatabase() {
   getSqlite()
 }
 
+/** Mantido para scripts locais antigos; o site na Vercel não usa Blob. */
 export async function persistCloudDb() {
   if (!blobEnabled()) return false
   ensureDataDirs()

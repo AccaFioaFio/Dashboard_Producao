@@ -20,14 +20,14 @@ export default async function ConfiguracoesPage() {
   return (
     <PageShell
       title="Configurações"
-      description="A sinc copia os Excel sozinha para Arquivos do Excel. O botão Atualização de dados só relê essa pasta."
+      description="A sinc copia os Excel para Arquivos do Excel na raiz. O botão Atualização de dados relê essa pasta e grava data/producao.sqlite."
     >
       <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
         Deixe a sinc ligada neste PC:{' '}
         <span className="font-mono text-xs">pnpm carga:sync:watch</span>. Ela não
         depende do botão. Quem clica em Atualização de dados lê o que já está em{' '}
         <span className="font-mono text-xs">Arquivos do Excel</span> e atualiza o
-        dashboard.
+        dashboard (e o SQLite do projeto).
       </p>
       <dl className="card-surface grid gap-3 p-3 text-sm sm:grid-cols-2">
         <div className="flex flex-col gap-1 sm:col-span-2">
