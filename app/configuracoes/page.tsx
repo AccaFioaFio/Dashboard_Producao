@@ -20,22 +20,14 @@ export default async function ConfiguracoesPage() {
   return (
     <PageShell
       title="Configurações"
-      description="Quem consulta o dashboard não envia planilha. Neste PC, pnpm carga:watch lê a origem e publica a carga na nuvem."
+      description="A sinc copia os Excel sozinha para Arquivos do Excel. O botão Atualização de dados só relê essa pasta."
     >
       <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-        Deixe o publicador ligado neste computador (terminal ou tarefa do
-        Windows): <span className="font-mono text-xs">pnpm carga:watch</span>.
-        Sem o processo no ar, o site fica na última carga boa. Coloque{' '}
-        <span className="font-mono text-xs">BLOB_READ_WRITE_TOKEN</span> no{' '}
-        <span className="font-mono text-xs">.env</span> local (o mesmo Blob da
-        Vercel) e, se a fábrica grava no OneDrive, os caminhos absolutos{' '}
-        <span className="font-mono text-xs">CORTE_XLSX</span>,{' '}
-        <span className="font-mono text-xs">OFICINAS_XLSX</span>,{' '}
-        <span className="font-mono text-xs">SIGNUS_XLS</span> (ou{' '}
-        <span className="font-mono text-xs">SIGNUS_XLSX</span>),{' '}
-        <span className="font-mono text-xs">ESTOQUE_XLSX</span>,{' '}
-        <span className="font-mono text-xs">PEDIDOS_XLSX</span> e{' '}
-        <span className="font-mono text-xs">ITENS_XLSX</span>.
+        Deixe a sinc ligada neste PC:{' '}
+        <span className="font-mono text-xs">pnpm carga:sync:watch</span>. Ela não
+        depende do botão. Quem clica em Atualização de dados lê o que já está em{' '}
+        <span className="font-mono text-xs">Arquivos do Excel</span> e atualiza o
+        dashboard.
       </p>
       <dl className="card-surface grid gap-3 p-3 text-sm sm:grid-cols-2">
         <div className="flex flex-col gap-1 sm:col-span-2">

@@ -16,6 +16,6 @@ node_modules
 .DS_Store
 
 # SQLite snapshot and Excel cache
-data/*.sqlite
+# data/producao.sqlite entra no Git: o clique atualiza o arquivo; o site lê dele, sem Blob.
 data/*.sqlite-*
 data/cache/

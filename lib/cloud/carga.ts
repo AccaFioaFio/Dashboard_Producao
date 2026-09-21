@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, readFileSync } from 'node:fs'
 import { checkpointSqlite, getSqlite, resetSqlite } from '@/db'
 import {
+  BUNDLED_DB_PATH,
   CLOUD_DB_BLOB,
   DB_PATH,
   IS_CLOUD,
@@ -33,34 +34,15 @@ export async function ensureCloudDatabase() {
 
 async function restoreCloudDatabase() {
   ensureDataDirs()
-  if (!blobEnabled()) {
-    getSqlite()
-    return
-  }
-
-  try {
-    const { get, head } = await import('@vercel/blob')
-    const meta = await head(CLOUD_DB_BLOB)
-    if (meta.etag && meta.etag === localEtag && existsSync(DB_PATH)) {
-      getSqlite()
-      return
+  if (existsSync(BUNDLED_DB_PATH) && BUNDLED_DB_PATH !== DB_PATH) {
+    try {
+      resetSqlite()
+      copyFileSync(BUNDLED_DB_PATH, DB_PATH)
+    } catch {
+      // Mantém o SQLite já em /tmp, se houver.
     }
-    const result = await get(CLOUD_DB_BLOB, {
-      access: 'private',
-      useCache: false,
-    })
-    if (!result || result.statusCode !== 200 || !result.stream) {
-      getSqlite()
-      return
-    }
-    const bytes = Buffer.from(await new Response(result.stream).arrayBuffer())
-    resetSqlite()
-    writeFileSync(DB_PATH, bytes)
-    getSqlite()
-    localEtag = meta.etag
-  } catch {
-    getSqlite()
   }
+  getSqlite()
 }
 
 export async function persistCloudDb() {

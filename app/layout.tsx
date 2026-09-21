@@ -5,6 +5,7 @@ import { AppearanceProvider } from '@/components/appearance-provider'
 import { AppHeader } from '@/components/app-header'
 import { CargaStamp } from '@/components/carga-stamp'
 import { AppSidebar } from '@/components/app-sidebar'
+import { UltimaAtualizacaoSlot } from '@/components/ultima-atualizacao-slot'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { APPEARANCE_BOOTSTRAP } from '@/lib/appearance'
@@ -73,7 +74,7 @@ export default function RootLayout({
         <AppearanceProvider>
           <TooltipProvider>
             <SidebarProvider>
-              <AppSidebar />
+              <AppSidebar lastUpdate={<UltimaAtualizacaoSlot />} />
               <SidebarInset className="relative overflow-hidden">
                 <AppHeader stamp={<CargaStamp />} />
                 <div className="relative z-0 flex flex-1 flex-col">{children}</div>

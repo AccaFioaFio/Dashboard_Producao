@@ -13,6 +13,8 @@ export const DATA_DIR = IS_CLOUD
   : path.join(PROJECT_ROOT, 'data')
 export const CACHE_DIR = path.join(DATA_DIR, 'cache')
 export const DB_PATH = path.join(DATA_DIR, 'producao.sqlite')
+/** SQLite da carga no repositório — o site na Vercel lê este arquivo, sem Blob. */
+export const BUNDLED_DB_PATH = path.join(PROJECT_ROOT, 'data', 'producao.sqlite')
 export const MIGRATIONS_DIR = path.join(PROJECT_ROOT, 'drizzle')
 
 export const EXCEL_DIR = path.join(PROJECT_ROOT, 'Arquivos do Excel')
@@ -49,6 +51,18 @@ export function sourceFilePaths(): SourceFilePaths {
     estoque: resolveSourcePath(process.env.ESTOQUE_XLSX, DEFAULT_ESTOQUE),
     pedidos: resolveSourcePath(process.env.PEDIDOS_XLSX, DEFAULT_PEDIDOS),
     itens: resolveSourcePath(process.env.ITENS_XLSX, DEFAULT_ITENS),
+  }
+}
+
+/** Destino da sinc: sempre a pasta Arquivos do Excel na raiz. */
+export function projectFilePaths(): SourceFilePaths {
+  return {
+    corte: DEFAULT_CORTE,
+    oficinas: DEFAULT_OFICINAS,
+    signus: DEFAULT_SIGNUS,
+    estoque: DEFAULT_ESTOQUE,
+    pedidos: DEFAULT_PEDIDOS,
+    itens: DEFAULT_ITENS,
   }
 }
 

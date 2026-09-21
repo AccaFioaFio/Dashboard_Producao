@@ -13,7 +13,8 @@ import {
 } from '../lib/etl/publish'
 import { sourceFilePaths } from '../lib/paths'
 
-const DEBOUNCE_MS = 8_000
+/** Vários saves do Excel viram um put. 30 min = folga no Hobby (2k advanced ops/mês). */
+const DEBOUNCE_MS = 30 * 60_000
 const POLL_MS = 30_000
 const BACKOFF_MS = [5_000, 15_000, 30_000, 60_000]
 
@@ -47,6 +48,7 @@ async function main() {
 async function runWatch() {
   const paths = sourceFilePaths()
   log('watcher no ar. Ctrl+C para parar. Este PC precisa ficar ligado.')
+  log(`debounce ${DEBOUNCE_MS / 60_000} min entre save e put (Hobby).`)
   log(`corte    ${paths.corte}`)
   log(`oficinas ${paths.oficinas}`)
   log(`signus   ${paths.signus}`)

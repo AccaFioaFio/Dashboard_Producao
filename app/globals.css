@@ -652,3 +652,52 @@
 [data-layout='compacto'] .page-shell {
   animation: none;
 }
+
+.sidebar-update-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  color: var(--sidebar-primary-foreground) !important;
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--sidebar-primary) 78%, white 8%),
+    color-mix(in oklch, var(--sidebar-accent) 70%, var(--sidebar-primary))
+  ) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--sidebar-primary) 70%, white 18%),
+    0 0 14px color-mix(in oklch, var(--sidebar-primary) 55%, transparent),
+    0 0 28px color-mix(in oklch, var(--glow) 35%, transparent);
+  animation: action-pulse 2.4s ease-in-out infinite;
+}
+
+.sidebar-update-btn:hover {
+  color: var(--sidebar-primary-foreground) !important;
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--sidebar-primary) 88%, white 14%),
+    color-mix(in oklch, var(--sidebar-accent) 55%, var(--sidebar-primary))
+  ) !important;
+}
+
+.sidebar-update-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 -45%;
+  width: 42%;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    color-mix(in oklch, white 18%, transparent),
+    color-mix(in oklch, white 70%, transparent),
+    color-mix(in oklch, white 18%, transparent),
+    transparent
+  );
+  animation: shine-bar 2.4s ease-in-out infinite;
+}
+
+.sidebar-update-btn > * {
+  position: relative;
+  z-index: 1;
+}

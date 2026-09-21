@@ -1,4 +1,3 @@
-import { persistCloudDb } from '@/lib/cloud/carga'
 import { checkInvariants, computeFunil, computeHeaderKpis, computeSerieMensal } from '@/lib/etl/kpis'
 import { replaceSnapshot } from '@/lib/etl/load'
 import { copySources, parseWorkbookFiles } from '@/lib/etl/snapshot'
@@ -8,15 +7,7 @@ import type {
   SerieMensal,
   SnapshotPayload,
 } from '@/lib/etl/types'
-import {
-  IS_CLOUD,
-  corteXlsxPath,
-  estoqueXlsxPath,
-  itensXlsxPath,
-  oficinasXlsxPath,
-  pedidosXlsxPath,
-  signusXlsPath,
-} from '@/lib/paths'
+import { sourceFilePaths, type SourceFilePaths } from '@/lib/paths'
 
 export type RefreshResult =
   | {
@@ -68,26 +59,6 @@ export async function applySnapshotPayload(
     header,
   })
 
-  try {
-    const persisted = await persistCloudDb()
-    if (IS_CLOUD && !persisted) {
-      return {
-        ok: false,
-        error:
-          'Crie um Blob Store na Vercel (Storage) e conecte ao projeto para gravar a carga.',
-      }
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (IS_CLOUD) {
-      return {
-        ok: false,
-        error: `A carga foi lida, mas não gravou no site. ${message}`,
-      }
-    }
-    console.error('Falha ao publicar carga na Vercel Blob', error)
-  }
-
   return {
     ok: true,
     header,
@@ -103,13 +74,15 @@ export async function applySnapshotPayload(
   }
 }
 
-export async function refreshFromExcel(): Promise<RefreshResult> {
-  const cortePath = corteXlsxPath()
-  const oficinasPath = oficinasXlsxPath()
-  const signusPath = signusXlsPath()
-  const estoquePath = estoqueXlsxPath()
-  const pedidosPath = pedidosXlsxPath()
-  const itensPath = itensXlsxPath()
+export async function refreshFromExcel(
+  paths: SourceFilePaths = sourceFilePaths(),
+): Promise<RefreshResult> {
+  const cortePath = paths.corte
+  const oficinasPath = paths.oficinas
+  const signusPath = paths.signus
+  const estoquePath = paths.estoque
+  const pedidosPath = paths.pedidos
+  const itensPath = paths.itens
 
   let copied: ReturnType<typeof copySources>
   try {

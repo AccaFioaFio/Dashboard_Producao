@@ -10,6 +10,8 @@
     "etl": "tsx scripts/etl.ts",
     "carga:publish": "tsx scripts/publish-carga.ts",
     "carga:watch": "tsx scripts/publish-carga.ts --watch",
+    "carga:sync": "tsx scripts/sync-excel.ts",
+    "carga:sync:watch": "tsx scripts/sync-excel.ts --watch",
     "test:kpis": "tsx scripts/verify-kpis.ts"
   },
   "dependencies": {

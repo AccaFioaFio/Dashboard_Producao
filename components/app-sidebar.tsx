@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
+import type { ReactNode } from 'react'
 import {
   Sidebar,
   SidebarContent,
@@ -15,60 +15,10 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from '@/components/ui/sidebar'
+import { AtualizarDadosButton } from '@/components/atualizar-dados-button'
 import { findNavItem, navigation } from '@/lib/navigation'
-import { cn } from '@/lib/utils'
 
-function WatcherStatusFooter() {
-  const [online, setOnline] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function refresh() {
-      try {
-        const res = await fetch('/api/watcher-status')
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = (await res.json()) as { online?: boolean }
-        if (!cancelled) setOnline(Boolean(data.online))
-      } catch {
-        if (!cancelled) setOnline(false)
-      }
-    }
-
-    void refresh()
-
-    function onVisible() {
-      if (document.visibilityState === 'visible') void refresh()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-
-    return () => {
-      cancelled = true
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [])
-
-  return (
-    <div className="flex items-center gap-2 px-2 py-2 group-data-[collapsible=icon]:hidden">
-      <span className="relative flex size-2.5">
-        {online ? (
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-chart-2 opacity-40" />
-        ) : null}
-        <span
-          className={cn(
-            'relative inline-flex size-2.5 rounded-full',
-            online ? 'bg-chart-2' : 'bg-sidebar-foreground/35',
-          )}
-        />
-      </span>
-      <p className="truncate text-xs text-sidebar-foreground/55">
-        {online ? 'Carga recente' : 'Sem publicação recente'}
-      </p>
-    </div>
-  )
-}
-
-export function AppSidebar() {
+export function AppSidebar({ lastUpdate }: { lastUpdate?: ReactNode }) {
   const pathname = usePathname()
   const activeHref = findNavItem(pathname)?.href
 
@@ -110,13 +60,14 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              <AtualizarDadosButton />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border/80">
-        <WatcherStatusFooter />
+        {lastUpdate}
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
