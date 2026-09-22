@@ -1,7 +1,7 @@
 'use server'
 
 import { existsSync } from 'node:fs'
-import { refresh, revalidatePath } from 'next/cache'
+import { revalidatePath } from 'next/cache'
 import { refreshFromSupabaseCarga } from '@/lib/cloud/carga'
 import { publishSqliteToSupabase } from '@/lib/etl/publish-supabase'
 import { refreshFromExcel } from '@/lib/etl/refresh'
@@ -48,8 +48,9 @@ async function runAtualizarDados(): Promise<AtualizarDadosResult> {
       if (!result.ok) return result
       const published = await publishSqliteToSupabase()
       if (!published.ok) return published
+      // Só marca o cache; o botão faz reload duro. Evita refresh() do Next,
+      // que com useTransition deixava o spinner preso após o POST terminar.
       revalidatePath('/', 'layout')
-      refresh()
       return { ok: true, lidaEm: published.lidaEm }
     }
 
@@ -58,7 +59,6 @@ async function runAtualizarDados(): Promise<AtualizarDadosResult> {
       const pulled = await refreshFromSupabaseCarga()
       if (!pulled.ok) return pulled
       revalidatePath('/', 'layout')
-      refresh()
       return pulled
     }
 
