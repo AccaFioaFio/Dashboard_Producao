@@ -1,4 +1,11 @@
+import dns from 'node:dns'
 import { createClient } from '@supabase/supabase-js'
+
+try {
+  dns.setDefaultResultOrder('ipv4first')
+} catch {
+  // ignore
+}
 
 export function isSupabaseConfigured() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? ''

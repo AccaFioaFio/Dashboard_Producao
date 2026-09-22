@@ -1,4 +1,5 @@
 import { copyFileSync, existsSync, writeFileSync } from 'node:fs'
+import dns from 'node:dns'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSqlite, resetSqlite } from '@/db'
 import {
@@ -13,6 +14,13 @@ import {
   IS_CLOUD,
   ensureDataDirs,
 } from '@/lib/paths'
+
+// Undici na Vercel às vezes falha em IPv6 para *.supabase.co ("fetch failed").
+try {
+  dns.setDefaultResultOrder('ipv4first')
+} catch {
+  // Node antigo sem a API — ignora.
+}
 
 let localEtag = ''
 let inFlight: Promise<void> | null = null
@@ -105,60 +113,98 @@ function formatFetchCause(error: unknown) {
   return `${error.message}${cause}`
 }
 
-async function downloadCargaBytes(
-  client: SupabaseClient,
-): Promise<{ ok: true; bytes: Buffer } | { ok: false; error: string }> {
-  const { data: signed, error: signError } = await client.storage
-    .from(CARGA_BUCKET)
-    .createSignedUrl(CARGA_OBJECT, 180)
+function supabaseUrlHost() {
+  try {
+    return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').host || 'sem-host'
+  } catch {
+    return 'url-invalida'
+  }
+}
 
-  if (!signError && signed?.signedUrl) {
-    try {
-      const response = await fetch(signed.signedUrl, {
-        signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-        cache: 'no-store',
-      })
-      if (!response.ok) {
-        return {
-          ok: false,
-          error: `HTTP ${response.status} ao baixar URL assinada`,
-        }
-      }
-      const bytes = Buffer.from(await response.arrayBuffer())
-      if (bytes.length === 0) {
-        return { ok: false, error: 'arquivo vazio na URL assinada' }
-      }
-      return { ok: true, bytes }
-    } catch (error) {
-      // Cai no fallback .download() abaixo.
-      console.warn(
-        `[carga] signedUrl falhou: ${formatFetchCause(error)}; tentando .download()`,
-      )
+/**
+ * Assina e baixa sem depender do fetch custom do supabase-js (mais confiável na Vercel).
+ */
+async function downloadCargaBytes(
+  _client: SupabaseClient,
+): Promise<{ ok: true; bytes: Buffer } | { ok: false; error: string }> {
+  const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').replace(/\/$/, '')
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
+    ''
+
+  if (!base || !key) {
+    return {
+      ok: false,
+      error: `faltam URL/key (host=${supabaseUrlHost()})`,
     }
   }
 
-  const { data, error } = await client.storage
-    .from(CARGA_BUCKET)
-    .download(CARGA_OBJECT)
+  const headers = {
+    Authorization: `Bearer ${key}`,
+    apikey: key,
+  }
 
-  if (error || !data) {
+  let signedUrl = ''
+  try {
+    const signRes = await fetch(
+      `${base}/storage/v1/object/sign/${CARGA_BUCKET}/${CARGA_OBJECT}`,
+      {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ expiresIn: 180 }),
+        signal: AbortSignal.timeout(30_000),
+        cache: 'no-store',
+      },
+    )
+    if (!signRes.ok) {
+      const body = await signRes.text().catch(() => '')
+      return {
+        ok: false,
+        error: `assinatura HTTP ${signRes.status} host=${supabaseUrlHost()} ${body.slice(0, 120)}`,
+      }
+    }
+    const payload = (await signRes.json()) as {
+      signedURL?: string
+      signedUrl?: string
+    }
+    const path = payload.signedURL || payload.signedUrl
+    if (!path) {
+      return { ok: false, error: `assinatura sem URL (host=${supabaseUrlHost()})` }
+    }
+    signedUrl = path.startsWith('http') ? path : `${base}/storage/v1${path}`
+  } catch (error) {
     return {
       ok: false,
-      error:
-        error?.message ??
-        signError?.message ??
-        'arquivo ausente no Storage',
+      error: `assinatura: ${formatFetchCause(error)} host=${supabaseUrlHost()}`,
     }
   }
 
   try {
-    const bytes = Buffer.from(await data.arrayBuffer())
+    const response = await fetch(signedUrl, {
+      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+      cache: 'no-store',
+      headers: { apikey: key },
+    })
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: `download HTTP ${response.status} host=${supabaseUrlHost()}`,
+      }
+    }
+    const bytes = Buffer.from(await response.arrayBuffer())
     if (bytes.length === 0) {
-      return { ok: false, error: 'arquivo vazio no Storage' }
+      return { ok: false, error: 'arquivo vazio na URL assinada' }
     }
     return { ok: true, bytes }
   } catch (error) {
-    return { ok: false, error: formatFetchCause(error) }
+    return {
+      ok: false,
+      error: `download: ${formatFetchCause(error)} host=${supabaseUrlHost()}`,
+    }
   }
 }
 
