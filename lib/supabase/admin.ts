@@ -13,6 +13,24 @@ export function isSupabaseWriteConfigured() {
   )
 }
 
+const FETCH_TIMEOUT_MS = 40_000
+
+function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  const parent = init?.signal
+  if (parent) {
+    if (parent.aborted) controller.abort()
+    else parent.addEventListener('abort', () => controller.abort(), { once: true })
+  }
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => {
+    clearTimeout(timer)
+  })
+}
+
 /** Client com service role — só no servidor / PC publicador. */
 export function createAdminClient() {
   if (!isSupabaseWriteConfigured()) return null
@@ -21,6 +39,7 @@ export function createAdminClient() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       auth: { autoRefreshToken: false, persistSession: false },
+      global: { fetch: fetchWithTimeout },
     },
   )
 }
@@ -33,6 +52,7 @@ export function createAnonClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       auth: { autoRefreshToken: false, persistSession: false },
+      global: { fetch: fetchWithTimeout },
     },
   )
 }

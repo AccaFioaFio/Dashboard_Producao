@@ -2,12 +2,15 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, RefreshCw } from 'lucide-react'
-import { atualizarDados } from '@/app/actions/atualizar-dados'
+import type { AtualizarDadosResult } from '@/lib/etl/atualizar-dados'
 import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
 import { cn } from '@/lib/utils'
+
+/** Acima do ETL típico (~45s) + publish; abaixo de hang infinito. */
+const CLIENT_TIMEOUT_MS = 100_000
 
 export function AtualizarDadosButton() {
   const [pending, setPending] = useState(false)
@@ -34,8 +37,22 @@ export function AtualizarDadosButton() {
     if (pending) return
     setError(null)
     setPending(true)
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS)
     try {
-      const result = await atualizarDados()
+      const response = await fetch('/api/atualizar-dados', {
+        method: 'POST',
+        cache: 'no-store',
+        signal: controller.signal,
+      })
+      let result: AtualizarDadosResult
+      try {
+        result = (await response.json()) as AtualizarDadosResult
+      } catch {
+        throw new Error(
+          `Resposta inválida do servidor (HTTP ${response.status}).`,
+        )
+      }
       if (result.ok) {
         setOkAt(result.lidaEm)
         setError(null)
@@ -43,17 +60,22 @@ export function AtualizarDadosButton() {
         return
       }
       setOkAt(null)
-      setError(result.error)
+      setError(result.error || `Falha ao atualizar (HTTP ${response.status}).`)
     } catch (error) {
       setOkAt(null)
-      const message =
-        error instanceof Error ? error.message : String(error)
-      setError(
-        /unexpected response/i.test(message)
-          ? 'O servidor demorou ou falhou. Neste PC: confira a sinc e o Supabase no .env.local; no site online o botão só puxa a carga já publicada.'
-          : message || 'Falha ao atualizar. Recarregue a página e tente de novo.',
-      )
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setError(
+          'Demorou mais de 100s e foi interrompido. Recarregue a página e tente de novo; se repetir, reinicie o npm run dev.',
+        )
+      } else {
+        const message =
+          error instanceof Error ? error.message : String(error)
+        setError(
+          message || 'Falha ao atualizar. Recarregue a página e tente de novo.',
+        )
+      }
     } finally {
+      window.clearTimeout(timer)
       setPending(false)
     }
   }
@@ -72,7 +94,7 @@ export function AtualizarDadosButton() {
         tooltip={
           error ??
           (pending
-            ? 'Lê as planilhas e publica (~40–60s). Aguarde o fim.'
+            ? 'Lê as planilhas e publica. Se nada mudou, responde na hora.'
             : 'Atualização de dados')
         }
         disabled={pending}
