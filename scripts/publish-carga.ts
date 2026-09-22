@@ -5,7 +5,6 @@ import {
   formatPublishLog,
   isRetryablePublishError,
   lastOkCargaMtimes,
-  persistPublishedDb,
   publishCargaFromExcel,
   readSourceMtimes,
   sameMtimes,
@@ -13,8 +12,8 @@ import {
 } from '../lib/etl/publish'
 import { sourceFilePaths } from '../lib/paths'
 
-/** Vários saves do Excel viram um put. 30 min = folga no Hobby (2k advanced ops/mês). */
-const DEBOUNCE_MS = 30 * 60_000
+/** Vários saves do Excel viram uma leitura. */
+const DEBOUNCE_MS = 2 * 60_000
 const POLL_MS = 30_000
 const BACKOFF_MS = [5_000, 15_000, 30_000, 60_000]
 
@@ -47,8 +46,8 @@ async function main() {
 
 async function runWatch() {
   const paths = sourceFilePaths()
-  log('watcher no ar. Ctrl+C para parar. Este PC precisa ficar ligado.')
-  log(`debounce ${DEBOUNCE_MS / 60_000} min entre save e put (Hobby).`)
+  log('vigia no ar (Excel → SQLite → Supabase). Ctrl+C para parar.')
+  log(`debounce ${DEBOUNCE_MS / 60_000} min entre save e leitura.`)
   log(`corte    ${paths.corte}`)
   log(`oficinas ${paths.oficinas}`)
   log(`signus   ${paths.signus}`)
@@ -116,28 +115,29 @@ async function runWatch() {
 
       const local = lastOkCargaMtimes()
       if (local && sameMtimes(mtimes, local)) {
-        log('carga local já está nestes mtimes; enviando SQLite…')
-        const persisted = await persistPublishedDb()
-        if (persisted.ok) {
+        log('SQLite local já está nestes mtimes; publicando no Supabase…')
+        const { publishSqliteToSupabase } = await import('../lib/etl/publish-supabase')
+        const published = await publishSqliteToSupabase()
+        if (published.ok) {
           lastSuccess = mtimes
           lastPermanentFail = null
           backoffIndex = 0
-          log(`[carga] ok sqlite publicado\n  corte    ${mtimes.corte}  ${paths.corte}\n  oficinas ${mtimes.oficinas}  ${paths.oficinas}\n  signus   ${mtimes.signus}  ${paths.signus}\n  estoque  ${mtimes.estoque}  ${paths.estoque}\n  pedidos  ${mtimes.pedidos ?? '—'}  ${paths.pedidos}\n  itens    ${mtimes.itens ?? '—'}  ${paths.itens}`)
+          log(`[carga] ok sqlite já local; publicado lidaEm=${published.lidaEm}`)
           return
         }
-        if (!isRetryablePublishError(persisted.error)) {
+        if (!isRetryablePublishError(published.error)) {
           lastPermanentFail = mtimes
           backoffIndex = 0
-          log(`[carga] erro ${persisted.error}`)
+          log(`[carga] erro ${published.error}`)
           return
         }
         const wait = nextBackoff()
-        log(`${persisted.error}; nova tentativa em ${wait / 1000}s`)
+        log(`${published.error}; nova tentativa em ${wait / 1000}s`)
         await sleep(wait)
         continue
       }
 
-      log('lendo planilhas e publicando…')
+      log('lendo planilhas e gravando data/producao.sqlite…')
       const result = await publishCargaFromExcel()
       if (result.ok) {
         lastSuccess = {
@@ -161,7 +161,7 @@ async function runWatch() {
         return
       }
       const wait = nextBackoff()
-      log(`origem ocupada ou envio instável; nova tentativa em ${wait / 1000}s`)
+      log(`origem ocupada; nova tentativa em ${wait / 1000}s`)
       await sleep(wait)
     }
   }
@@ -201,7 +201,6 @@ async function runWatch() {
     }
   }, POLL_MS)
 
-  // Sem heartbeat no Blob: só put do SQLite quando a planilha muda (economia Hobby).
   requestPublish('início')
 }
 

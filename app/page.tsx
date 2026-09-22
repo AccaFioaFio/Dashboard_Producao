@@ -40,7 +40,7 @@ export default async function Page() {
         <SectionPlaceholder
           icon={LayoutDashboard}
           title="Nenhuma carga 2026"
-          description="O publicador (pnpm carga:watch) lê as planilhas neste PC e grava a carga. Recarregue a página depois da publicação."
+          description="Neste PC: sinc + botão Atualização de dados (publica no Supabase). No site online a carga vem da última publicação."
         />
       </PageShell>
     )

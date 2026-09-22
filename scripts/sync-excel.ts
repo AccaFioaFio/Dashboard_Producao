@@ -88,10 +88,14 @@ async function runWatch() {
 
   for (const dir of dirs) {
     try {
-      watch(dir, (_event, filename) => {
+      const watcher = watch(dir, (_event, filename) => {
         const name = filename ? String(filename) : ''
         if (name.startsWith('~$')) return
         requestSync(name || dir)
+      })
+      watcher.on('error', (error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        log(`watch caiu em ${dir} (${message}); continuo no poll`)
       })
       log(`observando ${dir}`)
     } catch (error) {

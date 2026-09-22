@@ -4,6 +4,7 @@ import { cache } from 'react'
 import { getSqlite } from '@/db'
 import type { DashFilters, FilterOptions } from '@/lib/filters'
 import { isProducaoOrigem, splitCodigoDescricao } from '@/lib/keys'
+/** Baixa a carga do Supabase Storage (quando configurado) antes das queries. */
 import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { YEAR } from '@/lib/year'
 import type { FunilKpis, HeaderKpis, SerieMensal } from '@/lib/etl/types'

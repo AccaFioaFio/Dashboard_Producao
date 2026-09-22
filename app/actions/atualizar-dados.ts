@@ -1,8 +1,12 @@
 'use server'
 
+import { existsSync } from 'node:fs'
 import { refresh, revalidatePath } from 'next/cache'
+import { refreshFromSupabaseCarga } from '@/lib/cloud/carga'
+import { publishSqliteToSupabase } from '@/lib/etl/publish-supabase'
 import { refreshFromExcel } from '@/lib/etl/refresh'
-import { projectFilePaths } from '@/lib/paths'
+import { IS_CLOUD, projectFilePaths } from '@/lib/paths'
+import { isSupabaseConfigured, isSupabaseWriteConfigured } from '@/lib/supabase/admin'
 
 export type AtualizarDadosResult =
   | { ok: true; lidaEm: string }
@@ -19,15 +23,58 @@ export async function atualizarDados(): Promise<AtualizarDadosResult> {
   return inFlight
 }
 
+function excelFolderReady() {
+  const paths = projectFilePaths()
+  return (
+    existsSync(paths.corte) &&
+    existsSync(paths.oficinas) &&
+    existsSync(paths.signus) &&
+    existsSync(paths.estoque)
+  )
+}
+
 async function runAtualizarDados(): Promise<AtualizarDadosResult> {
   try {
-    // Sempre a pasta Arquivos do Excel na raiz do projeto (destino da sinc).
-    const result = await refreshFromExcel(projectFilePaths())
-    if (!result.ok) return result
+    // Igual Orçamentos: se a pasta de bases existe neste processo, lê Excel e publica.
+    if (excelFolderReady()) {
+      if (!isSupabaseWriteConfigured()) {
+        return {
+          ok: false,
+          error:
+            'Planilhas ok, mas falta SUPABASE_SERVICE_ROLE_KEY (e URL/anon) no .env.local para publicar na nuvem.',
+        }
+      }
+      const result = await refreshFromExcel(projectFilePaths())
+      if (!result.ok) return result
+      const published = await publishSqliteToSupabase()
+      if (!published.ok) return published
+      revalidatePath('/', 'layout')
+      refresh()
+      return { ok: true, lidaEm: published.lidaEm }
+    }
 
-    revalidatePath('/', 'layout')
-    refresh()
-    return { ok: true, lidaEm: result.lidaEm }
+    // Sem Excel no disco (ex.: vercel.app): só puxa a última carga já publicada.
+    if (isSupabaseConfigured()) {
+      const pulled = await refreshFromSupabaseCarga()
+      if (!pulled.ok) return pulled
+      revalidatePath('/', 'layout')
+      refresh()
+      return pulled
+    }
+
+    if (IS_CLOUD) {
+      return {
+        ok: false,
+        error:
+          'No site online: configure Supabase, ou atualize neste PC (sinc + botão) para publicar a carga.',
+      }
+    }
+
+    return {
+      ok: false,
+      error:
+        'Pasta Arquivos do Excel incompleta. Deixe a sinc ligada (pnpm carga:sync:watch) e tente de novo.',
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return {

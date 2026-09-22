@@ -23,16 +23,19 @@ export function AtualizarDadosButton() {
         if (result.ok) {
           setOkAt(result.lidaEm)
           setError(null)
+          window.setTimeout(() => window.location.reload(), 150)
           return
         }
         setOkAt(null)
         setError(result.error)
       } catch (error) {
         setOkAt(null)
+        const message =
+          error instanceof Error ? error.message : String(error)
         setError(
-          error instanceof Error
-            ? error.message
-            : 'Falha ao atualizar. Recarregue a página e tente de novo.',
+          /unexpected response/i.test(message)
+            ? 'O servidor demorou ou falhou. Neste PC: confira a sinc e o Supabase no .env.local; no site online o botão só puxa a carga já publicada.'
+            : message || 'Falha ao atualizar. Recarregue a página e tente de novo.',
         )
       }
     })

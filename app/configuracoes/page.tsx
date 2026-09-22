@@ -20,14 +20,15 @@ export default async function ConfiguracoesPage() {
   return (
     <PageShell
       title="Configurações"
-      description="A sinc copia os Excel para Arquivos do Excel na raiz. O botão Atualização de dados relê essa pasta e grava data/producao.sqlite."
+      description="A sinc mantém Arquivos do Excel. O botão lê essa pasta, grava o SQLite e publica no Supabase."
     >
       <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-        Deixe a sinc ligada neste PC:{' '}
-        <span className="font-mono text-xs">pnpm carga:sync:watch</span>. Ela não
-        depende do botão. Quem clica em Atualização de dados lê o que já está em{' '}
-        <span className="font-mono text-xs">Arquivos do Excel</span> e atualiza o
-        dashboard (e o SQLite do projeto).
+        Igual ao Orçamentos: neste PC deixe{' '}
+        <span className="font-mono text-xs">pnpm carga:sync:watch</span> e clique em{' '}
+        <span className="font-semibold">Atualização de dados</span> (com{' '}
+        <span className="font-mono text-xs">SUPABASE_SERVICE_ROLE_KEY</span> no{' '}
+        <span className="font-mono text-xs">.env.local</span>). O site online só lê a
+        carga publicada — sem Blob e sem push do SQLite.
       </p>
       <dl className="card-surface grid gap-3 p-3 text-sm sm:grid-cols-2">
         <div className="flex flex-col gap-1 sm:col-span-2">

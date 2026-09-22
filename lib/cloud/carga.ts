@@ -1,8 +1,13 @@
-import { copyFileSync, existsSync, readFileSync } from 'node:fs'
-import { checkpointSqlite, getSqlite, resetSqlite } from '@/db'
+import { copyFileSync, existsSync, writeFileSync } from 'node:fs'
+import { getSqlite, resetSqlite } from '@/db'
+import {
+  createAdminClient,
+  createAnonClient,
+  isSupabaseConfigured,
+} from '@/lib/supabase/admin'
+import { CARGA_BUCKET, CARGA_OBJECT } from '@/lib/supabase/constants'
 import {
   BUNDLED_DB_PATH,
-  CLOUD_DB_BLOB,
   DB_PATH,
   IS_CLOUD,
   ensureDataDirs,
@@ -11,56 +16,116 @@ import {
 let localEtag = ''
 let inFlight: Promise<void> | null = null
 
-export function blobEnabled() {
-  return Boolean(
-    process.env.BLOB_READ_WRITE_TOKEN?.trim() ||
-      (process.env.VERCEL_OIDC_TOKEN && process.env.BLOB_STORE_ID),
-  )
-}
-
-export function markCloudDbReady(etag?: string) {
-  if (etag) localEtag = etag
-}
-
-export async function ensureCloudDatabase() {
-  if (!IS_CLOUD) return
+/**
+ * Na Vercel (e quando Supabase está configurado): baixa o SQLite publicado
+ * no Storage. Sem Supabase: usa o SQLite do deploy.
+ */
+export async function ensureCloudDatabase(options?: { force?: boolean }) {
+  if (!IS_CLOUD && !options?.force) return
   if (!inFlight) {
-    inFlight = restoreCloudDatabase().finally(() => {
+    inFlight = restoreDatabase(Boolean(options?.force)).finally(() => {
       inFlight = null
     })
   }
   await inFlight
 }
 
-/** Copia o SQLite do deploy para /tmp (sem Blob). */
-async function restoreCloudDatabase() {
+async function restoreDatabase(force: boolean) {
   ensureDataDirs()
-  if (existsSync(BUNDLED_DB_PATH) && BUNDLED_DB_PATH !== DB_PATH) {
-    try {
-      resetSqlite()
-      copyFileSync(BUNDLED_DB_PATH, DB_PATH)
-    } catch {
-      // Mantém o SQLite já em /tmp, se houver.
-    }
+  seedBundledDb()
+
+  if (!isSupabaseConfigured()) {
+    getSqlite()
+    return
   }
-  getSqlite()
+
+  try {
+    const client = createAdminClient() ?? createAnonClient()
+    if (!client) {
+      getSqlite()
+      return
+    }
+
+    const { data: meta, error: listError } = await client.storage
+      .from(CARGA_BUCKET)
+      .list('', { search: CARGA_OBJECT, limit: 10 })
+
+    if (listError) {
+      getSqlite()
+      return
+    }
+
+    const object = meta?.find((item) => item.name === CARGA_OBJECT)
+    const etag =
+      (object as { metadata?: { eTag?: string; etag?: string } } | undefined)
+        ?.metadata?.eTag ||
+      (object as { metadata?: { etag?: string } } | undefined)?.metadata?.etag ||
+      object?.updated_at ||
+      object?.id ||
+      ''
+
+    if (!force && etag && etag === localEtag && existsSync(DB_PATH)) {
+      getSqlite()
+      return
+    }
+
+    const { data, error } = await client.storage
+      .from(CARGA_BUCKET)
+      .download(CARGA_OBJECT)
+
+    if (error || !data) {
+      getSqlite()
+      return
+    }
+
+    const bytes = Buffer.from(await data.arrayBuffer())
+    resetSqlite()
+    writeFileSync(DB_PATH, bytes)
+    getSqlite()
+    localEtag = etag || String(bytes.length)
+  } catch {
+    getSqlite()
+  }
 }
 
-/** Mantido para scripts locais antigos; o site na Vercel não usa Blob. */
-export async function persistCloudDb() {
-  if (!blobEnabled()) return false
-  ensureDataDirs()
-  checkpointSqlite()
-  if (!existsSync(DB_PATH)) return false
-  const { put } = await import('@vercel/blob')
-  const bytes = readFileSync(DB_PATH)
-  const stored = await put(CLOUD_DB_BLOB, bytes, {
-    access: 'private',
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: 'application/vnd.sqlite3',
-    multipart: bytes.length > 4_500_000,
-  })
-  markCloudDbReady(stored.etag)
-  return true
+function seedBundledDb() {
+  if (!existsSync(DB_PATH) && existsSync(BUNDLED_DB_PATH) && BUNDLED_DB_PATH !== DB_PATH) {
+    try {
+      copyFileSync(BUNDLED_DB_PATH, DB_PATH)
+    } catch {
+      // Mantém o que já existir.
+    }
+  }
+}
+
+export async function refreshFromSupabaseCarga(): Promise<
+  { ok: true; lidaEm: string } | { ok: false; error: string }
+> {
+  if (!isSupabaseConfigured()) {
+    return {
+      ok: false,
+      error:
+        'Supabase não configurado. Defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY.',
+    }
+  }
+  localEtag = ''
+  await restoreDatabase(true)
+  try {
+    const row = getSqlite()
+      .prepare(
+        `SELECT lida_em as lidaEm FROM carga WHERE ok = 1 ORDER BY id DESC LIMIT 1`,
+      )
+      .get() as { lidaEm: string } | undefined
+    if (!row?.lidaEm) {
+      return {
+        ok: false,
+        error:
+          'Baixou o Storage, mas não há carga ok. Publique neste PC com o botão (sinc + Excel).',
+      }
+    }
+    return { ok: true, lidaEm: row.lidaEm }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { ok: false, error: `Falha ao ler a carga baixada. ${message}` }
+  }
 }

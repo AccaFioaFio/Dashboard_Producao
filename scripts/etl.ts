@@ -50,8 +50,20 @@ async function main() {
   }
 
   const result = await refreshFromExcel()
-  console.log(JSON.stringify(result, null, 2))
-  if (!result.ok) process.exitCode = 1
+  if (!result.ok) {
+    console.log(JSON.stringify(result, null, 2))
+    process.exitCode = 1
+    return
+  }
+  const { publishSqliteToSupabase } = await import('../lib/etl/publish-supabase')
+  const { isSupabaseWriteConfigured } = await import('../lib/supabase/admin')
+  if (isSupabaseWriteConfigured()) {
+    const published = await publishSqliteToSupabase()
+    console.log(JSON.stringify({ ...result, supabase: published }, null, 2))
+    if (!published.ok) process.exitCode = 1
+    return
+  }
+  console.log(JSON.stringify({ ...result, supabase: { ok: false, skipped: true } }, null, 2))
 }
 
 main().catch((error) => {
