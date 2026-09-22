@@ -1,4 +1,5 @@
 import { copyFileSync, existsSync, writeFileSync } from 'node:fs'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSqlite, resetSqlite } from '@/db'
 import {
   createAdminClient,
@@ -15,6 +16,9 @@ import {
 
 let localEtag = ''
 let inFlight: Promise<void> | null = null
+
+/** Download grande (~17 MB): URL assinada + fetch nativo (mais estável na Vercel). */
+const DOWNLOAD_TIMEOUT_MS = 120_000
 
 /**
  * Na Vercel (e quando Supabase está configurado): baixa o SQLite publicado
@@ -69,20 +73,16 @@ async function restoreDatabase(force: boolean) {
       return
     }
 
-    const { data, error } = await client.storage
-      .from(CARGA_BUCKET)
-      .download(CARGA_OBJECT)
-
-    if (error || !data) {
+    const downloaded = await downloadCargaBytes(client)
+    if (!downloaded.ok) {
       getSqlite()
       return
     }
 
-    const bytes = Buffer.from(await data.arrayBuffer())
     resetSqlite()
-    writeFileSync(DB_PATH, bytes)
+    writeFileSync(DB_PATH, downloaded.bytes)
     getSqlite()
-    localEtag = etag || String(bytes.length)
+    localEtag = etag || String(downloaded.bytes.length)
   } catch {
     getSqlite()
   }
@@ -95,6 +95,70 @@ function seedBundledDb() {
     } catch {
       // Mantém o que já existir.
     }
+  }
+}
+
+function formatFetchCause(error: unknown) {
+  if (!(error instanceof Error)) return String(error)
+  const cause =
+    'cause' in error && error.cause != null ? ` (${String(error.cause)})` : ''
+  return `${error.message}${cause}`
+}
+
+async function downloadCargaBytes(
+  client: SupabaseClient,
+): Promise<{ ok: true; bytes: Buffer } | { ok: false; error: string }> {
+  const { data: signed, error: signError } = await client.storage
+    .from(CARGA_BUCKET)
+    .createSignedUrl(CARGA_OBJECT, 180)
+
+  if (!signError && signed?.signedUrl) {
+    try {
+      const response = await fetch(signed.signedUrl, {
+        signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+        cache: 'no-store',
+      })
+      if (!response.ok) {
+        return {
+          ok: false,
+          error: `HTTP ${response.status} ao baixar URL assinada`,
+        }
+      }
+      const bytes = Buffer.from(await response.arrayBuffer())
+      if (bytes.length === 0) {
+        return { ok: false, error: 'arquivo vazio na URL assinada' }
+      }
+      return { ok: true, bytes }
+    } catch (error) {
+      // Cai no fallback .download() abaixo.
+      console.warn(
+        `[carga] signedUrl falhou: ${formatFetchCause(error)}; tentando .download()`,
+      )
+    }
+  }
+
+  const { data, error } = await client.storage
+    .from(CARGA_BUCKET)
+    .download(CARGA_OBJECT)
+
+  if (error || !data) {
+    return {
+      ok: false,
+      error:
+        error?.message ??
+        signError?.message ??
+        'arquivo ausente no Storage',
+    }
+  }
+
+  try {
+    const bytes = Buffer.from(await data.arrayBuffer())
+    if (bytes.length === 0) {
+      return { ok: false, error: 'arquivo vazio no Storage' }
+    }
+    return { ok: true, bytes }
+  } catch (error) {
+    return { ok: false, error: formatFetchCause(error) }
   }
 }
 
@@ -118,22 +182,18 @@ export async function refreshFromSupabaseCarga(): Promise<
     }
   }
 
-  const { data, error } = await client.storage
-    .from(CARGA_BUCKET)
-    .download(CARGA_OBJECT)
-
-  if (error || !data) {
+  const downloaded = await downloadCargaBytes(client)
+  if (!downloaded.ok) {
     return {
       ok: false,
-      error: `Falha ao baixar a carga do Storage (${CARGA_BUCKET}/${CARGA_OBJECT}): ${error?.message ?? 'arquivo ausente'}. Publique neste PC com o botão.`,
+      error: `Falha ao baixar a carga do Storage (${CARGA_BUCKET}/${CARGA_OBJECT}): ${downloaded.error}. Confirme publicação neste PC (vigia) e as vars NEXT_PUBLIC_SUPABASE_* na Vercel.`,
     }
   }
 
   try {
-    const bytes = Buffer.from(await data.arrayBuffer())
     resetSqlite()
-    writeFileSync(DB_PATH, bytes)
-    localEtag = String(bytes.length)
+    writeFileSync(DB_PATH, downloaded.bytes)
+    localEtag = String(downloaded.bytes.length)
     getSqlite()
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -150,7 +210,7 @@ export async function refreshFromSupabaseCarga(): Promise<
       return {
         ok: false,
         error:
-          'Baixou o Storage, mas não há carga ok. Publique neste PC com o botão (sinc + Excel).',
+          'Baixou o Storage, mas não há carga ok. Publique neste PC com o vigia.',
       }
     }
     return { ok: true, lidaEm: row.lidaEm }

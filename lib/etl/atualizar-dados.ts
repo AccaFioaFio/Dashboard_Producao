@@ -14,7 +14,8 @@ export type AtualizarDadosResult =
   | { ok: false; error: string }
 
 const PUBLISH_TIMEOUT_MS = 45_000
-const PULL_TIMEOUT_MS = 30_000
+/** SQLite da carga ~17 MB; na Vercel o pull precisa de folga. */
+const PULL_TIMEOUT_MS = 120_000
 
 let inFlight: Promise<AtualizarDadosResult> | null = null
 

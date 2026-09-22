@@ -13,7 +13,8 @@ export function isSupabaseWriteConfigured() {
   )
 }
 
-const FETCH_TIMEOUT_MS = 40_000
+/** List/sign são leves; o download grande usa fetch nativo em lib/cloud/carga.ts. */
+const FETCH_TIMEOUT_MS = 60_000
 
 function fetchWithTimeout(
   input: RequestInfo | URL,

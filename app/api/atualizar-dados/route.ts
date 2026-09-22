@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
  * Precisa ser literal (Next rejeita ternário/import em segment config).
  * Na Vercel o botão só puxa a carga; localmente o limite não corta o ETL.
  */
-export const maxDuration = 60
+export const maxDuration = 120
 
 export async function POST() {
   const result = await atualizarDadosCore()
