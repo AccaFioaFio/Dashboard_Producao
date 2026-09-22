@@ -9,8 +9,12 @@ import {
 } from '@/components/ui/sidebar'
 import { cn } from '@/lib/utils'
 
-/** Acima do ETL típico (~45s) + publish; abaixo de hang infinito. */
-const CLIENT_TIMEOUT_MS = 100_000
+/** Local: ETL ~45s. Vercel: só download (~poucos s). Margem contra hang. */
+const CLIENT_TIMEOUT_MS =
+  typeof window !== 'undefined' &&
+  /vercel\.app$|\.vercel\.app$/i.test(window.location.hostname)
+    ? 45_000
+    : 100_000
 
 export function AtualizarDadosButton() {
   const [pending, setPending] = useState(false)
@@ -64,8 +68,11 @@ export function AtualizarDadosButton() {
     } catch (error) {
       setOkAt(null)
       if (error instanceof DOMException && error.name === 'AbortError') {
+        const onVercel = /\.vercel\.app$/i.test(window.location.hostname)
         setError(
-          'Demorou mais de 100s e foi interrompido. Recarregue a página e tente de novo; se repetir, reinicie o npm run dev.',
+          onVercel
+            ? 'O site online demorou demais ao puxar a carga. Confira Supabase na Vercel e se a carga foi publicada neste PC.'
+            : 'Demorou mais de 100s e foi interrompido. Recarregue a página e tente de novo; se repetir, reinicie o npm run dev.',
         )
       } else {
         const message =
@@ -94,7 +101,7 @@ export function AtualizarDadosButton() {
         tooltip={
           error ??
           (pending
-            ? 'Lê as planilhas e publica. Se nada mudou, responde na hora.'
+            ? 'Processa só o que mudou na pasta Arquivos do Excel e publica.'
             : 'Atualização de dados')
         }
         disabled={pending}

@@ -108,8 +108,38 @@ export async function refreshFromSupabaseCarga(): Promise<
         'Supabase não configurado. Defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY.',
     }
   }
-  localEtag = ''
-  await restoreDatabase(true)
+
+  ensureDataDirs()
+  const client = createAdminClient() ?? createAnonClient()
+  if (!client) {
+    return {
+      ok: false,
+      error: 'Não foi possível criar o client Supabase para baixar a carga.',
+    }
+  }
+
+  const { data, error } = await client.storage
+    .from(CARGA_BUCKET)
+    .download(CARGA_OBJECT)
+
+  if (error || !data) {
+    return {
+      ok: false,
+      error: `Falha ao baixar a carga do Storage (${CARGA_BUCKET}/${CARGA_OBJECT}): ${error?.message ?? 'arquivo ausente'}. Publique neste PC com o botão.`,
+    }
+  }
+
+  try {
+    const bytes = Buffer.from(await data.arrayBuffer())
+    resetSqlite()
+    writeFileSync(DB_PATH, bytes)
+    localEtag = String(bytes.length)
+    getSqlite()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { ok: false, error: `Baixou o Storage, mas falhou gravar o SQLite. ${message}` }
+  }
+
   try {
     const row = getSqlite()
       .prepare(

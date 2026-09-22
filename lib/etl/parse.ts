@@ -33,31 +33,57 @@ export function findSheet(workbook: XLSX.WorkBook, expected: string) {
   return workbook.Sheets[name]
 }
 
-export function sheetRows(workbook: XLSX.WorkBook, expected: string) {
-  const sheet = findSheet(workbook, expected)
-  const ref = sheet['!ref']
-  if (!ref) return []
-  const range = XLSX.utils.decode_range(ref)
-  const rows: unknown[][] = []
-  for (let r = 0; r <= range.e.r; r += 1) {
-    const row: unknown[] = []
-    for (let c = 0; c <= range.e.c; c += 1) {
-      const cell = sheet[XLSX.utils.encode_cell({ r, c })]
-      row[c] = cellValue(cell)
-    }
-    rows[r] = row
+/**
+ * Excel às vezes guarda célula fantasma no fim (ex.: Oficinas !ref até linha 1M).
+ * Compacta o range para o bloco contínuo de dados a partir do topo.
+ */
+function compactSheetRef(sheet: XLSX.WorkSheet): string | null {
+  const rowSet = new Set<number>()
+  let maxC = 0
+  let minR = Number.POSITIVE_INFINITY
+  for (const key of Object.keys(sheet)) {
+    if (key.charAt(0) === '!') continue
+    const { r, c } = XLSX.utils.decode_cell(key)
+    rowSet.add(r)
+    if (c > maxC) maxC = c
+    if (r < minR) minR = r
   }
-  return rows
+  if (!rowSet.size || !Number.isFinite(minR)) return sheet['!ref'] ?? null
+
+  const sorted = [...rowSet].sort((a, b) => a - b)
+  // Lacuna grande = lixo de formatação no fim da planilha.
+  const MAX_GAP = 100
+  let endR = sorted[0]!
+  for (let i = 1; i < sorted.length; i += 1) {
+    if (sorted[i]! - endR > MAX_GAP) break
+    endR = sorted[i]!
+  }
+
+  return XLSX.utils.encode_range({
+    s: { r: Math.min(minR, sorted[0]!), c: 0 },
+    e: { r: endR, c: maxC },
+  })
 }
 
-function cellValue(cell: XLSX.CellObject | undefined) {
-  if (!cell) return null
-  if (cell.t === 'd' && cell.v instanceof Date) return cell.v
-  if (cell.t === 'n' && typeof cell.v === 'number') return cell.v
-  if (cell.t === 's') return cell.v
-  if (cell.t === 'b') return cell.v
-  if (cell.t === 'e') return null
-  return cell.v ?? null
+export function sheetRows(workbook: XLSX.WorkBook, expected: string) {
+  const sheet = findSheet(workbook, expected)
+  const ref = compactSheetRef(sheet)
+  if (!ref) return []
+  const range = XLSX.utils.decode_range(ref)
+  const body = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: null,
+    raw: true,
+    blankrows: true,
+    range: ref,
+  }) as unknown[][]
+  // Mantém índice = linha Excel (0-based), como o loop antigo.
+  if (range.s.r === 0) return body
+  const rows: unknown[][] = new Array(range.s.r)
+  for (let i = 0; i < body.length; i += 1) {
+    rows[range.s.r + i] = body[i] ?? []
+  }
+  return rows
 }
 
 function buildHeaderMap(row: unknown[]) {
@@ -89,6 +115,7 @@ export function readWorkbook(filePath: string) {
     cellDates: true,
     cellNF: false,
     cellText: false,
+    cellStyles: false,
   })
 }
 

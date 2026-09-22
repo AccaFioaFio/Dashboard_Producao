@@ -12,44 +12,25 @@ import { parseSignusTecidos } from '@/lib/etl/parse-signus'
 import type { QualidadeEvento, Snapshot } from '@/lib/etl/types'
 import type * as XLSX from 'xlsx'
 
-export function buildSnapshotFromWorkbooks(
-  corteWb: XLSX.WorkBook,
-  oficinasWb: XLSX.WorkBook,
-  signusWb: XLSX.WorkBook,
-  estoqueWb: XLSX.WorkBook,
-  pedidosWb: XLSX.WorkBook | null,
-  itensWb: XLSX.WorkBook | null,
-): Snapshot {
-  const corte = parseCorte(corteWb)
-  const aproveitamento = parseAproveitamento(corteWb)
-  const costura = parseCostura(corteWb)
-  const revisao = parseRevisao(corteWb)
-  const oficinas = parseOficinas(oficinasWb)
-  const tecidosSignus = parseSignusTecidos(signusWb)
-  const tecidosEstoque = parseEstoqueTecidos(estoqueWb)
-  const pedidosComerciais = pedidosWb ? parsePedidosComerciais(pedidosWb) : []
-  const pedidosItens = itensWb ? parsePedidosItens(itensWb) : []
+/** Recalcula órfãos a partir dos conjuntos atuais (mantém o restante da qualidade). */
+export function attachOrfaosQualidade(snapshot: Snapshot): Snapshot {
+  const base = snapshot.qualidade.filter((row) => !row.tipo.startsWith('orfao_'))
+  const qualidade: QualidadeEvento[] = [...base]
 
-  const qualidade: QualidadeEvento[] = [
-    ...corte.qualidade,
-    ...revisao.qualidade,
-    ...oficinas.qualidade,
-  ]
-
-  const corteSet = new Set(corte.pedidos.map((row) => row.pedidoNorm))
+  const corteSet = new Set(snapshot.cortePedidos.map((row) => row.pedidoNorm))
   const costuraProd = new Set(
-    costura
+    snapshot.costura
       .filter((row) => row.origemNorm === 'Producao')
       .map((row) => row.pedidoNorm),
   )
-  const revisaoSet = new Set(revisao.limpos.map((row) => row.pedidoNorm))
+  const revisaoSet = new Set(snapshot.revisao.map((row) => row.pedidoNorm))
   const oficinasSet = new Set(
-    oficinas.lotes
+    snapshot.oficinas
       .map((row) => row.pedidoNorm)
       .filter((value): value is string => Boolean(value)),
   )
   const signusPedidos = new Set(
-    tecidosSignus
+    snapshot.tecidosSignus
       .filter((row) => row.isBaixa && row.pedidoNorm)
       .map((row) => row.pedidoNorm as string),
   )
@@ -89,7 +70,7 @@ export function buildSnapshotFromWorkbooks(
   }
   for (const pedido of signusPedidos) {
     if (!corteSet.has(pedido)) {
-      const metros = tecidosSignus
+      const metros = snapshot.tecidosSignus
         .filter((row) => row.isBaixa && row.pedidoNorm === pedido)
         .reduce((sum, row) => sum + row.metros, 0)
       qualidade.push({
@@ -102,7 +83,28 @@ export function buildSnapshotFromWorkbooks(
     }
   }
 
-  return {
+  return { ...snapshot, qualidade }
+}
+
+export function buildSnapshotFromWorkbooks(
+  corteWb: XLSX.WorkBook,
+  oficinasWb: XLSX.WorkBook,
+  signusWb: XLSX.WorkBook,
+  estoqueWb: XLSX.WorkBook,
+  pedidosWb: XLSX.WorkBook | null,
+  itensWb: XLSX.WorkBook | null,
+): Snapshot {
+  const corte = parseCorte(corteWb)
+  const aproveitamento = parseAproveitamento(corteWb)
+  const costura = parseCostura(corteWb)
+  const revisao = parseRevisao(corteWb)
+  const oficinas = parseOficinas(oficinasWb)
+  const tecidosSignus = parseSignusTecidos(signusWb)
+  const tecidosEstoque = parseEstoqueTecidos(estoqueWb)
+  const pedidosComerciais = pedidosWb ? parsePedidosComerciais(pedidosWb) : []
+  const pedidosItens = itensWb ? parsePedidosItens(itensWb) : []
+
+  return attachOrfaosQualidade({
     corteLinhas: corte.linhas,
     cortePedidos: corte.pedidos,
     costura,
@@ -112,7 +114,11 @@ export function buildSnapshotFromWorkbooks(
     tecidosEstoque,
     pedidosComerciais,
     pedidosItens,
-    qualidade,
+    qualidade: [
+      ...corte.qualidade,
+      ...revisao.qualidade,
+      ...oficinas.qualidade,
+    ],
     aproveitamento,
-  }
+  })
 }

@@ -1,8 +1,31 @@
-import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { buildSnapshotFromWorkbooks } from '@/lib/etl/build-snapshot'
-import { readWorkbook } from '@/lib/etl/parse'
+import { readWorkbooksParallel } from '@/lib/etl/read-workbooks-parallel'
 import type { Snapshot } from '@/lib/etl/types'
 import { cachePath, ensureDataDirs } from '@/lib/paths'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  statSync,
+  utimesSync,
+} from 'node:fs'
+
+/** Copia só se o destino não existe ou a origem mudou (mtime/tamanho). */
+function copyIfChanged(src: string, dest: string) {
+  if (existsSync(dest)) {
+    const srcStat = statSync(src)
+    const destStat = statSync(dest)
+    if (
+      srcStat.mtimeMs === destStat.mtimeMs &&
+      srcStat.size === destStat.size
+    ) {
+      return
+    }
+  }
+  copyFileSync(src, dest)
+  const srcStat = statSync(src)
+  utimesSync(dest, srcStat.atime, srcStat.mtime)
+}
 
 export type CopiedSources = {
   corteCache: string
@@ -35,21 +58,21 @@ export function copySources(
   const estoqueCache = cachePath('estoque-geral.xlsx')
   const pedidosCache = cachePath('pedidos.xlsx')
   const itensCache = cachePath('itens.xlsx')
-  copyFileSync(cortePath, corteCache)
-  copyFileSync(oficinasPath, oficinasCache)
-  copyFileSync(signusPath, signusCache)
-  copyFileSync(estoquePath, estoqueCache)
+  copyIfChanged(cortePath, corteCache)
+  copyIfChanged(oficinasPath, oficinasCache)
+  copyIfChanged(signusPath, signusCache)
+  copyIfChanged(estoquePath, estoqueCache)
   let pedidosLastWrite: string | null = null
   let pedidosCacheOut: string | null = null
   if (existsSync(pedidosPath)) {
-    copyFileSync(pedidosPath, pedidosCache)
+    copyIfChanged(pedidosPath, pedidosCache)
     pedidosLastWrite = statSync(pedidosPath).mtime.toISOString()
     pedidosCacheOut = pedidosCache
   }
   let itensLastWrite: string | null = null
   let itensCacheOut: string | null = null
   if (existsSync(itensPath)) {
-    copyFileSync(itensPath, itensCache)
+    copyIfChanged(itensPath, itensCache)
     itensLastWrite = statSync(itensPath).mtime.toISOString()
     itensCacheOut = itensCache
   }
@@ -77,12 +100,24 @@ export async function parseWorkbookFiles(
   pedidosFile: string | null,
   itensFile: string | null,
 ): Promise<Snapshot> {
+  const [corteWb, oficinasWb, signusWb, estoqueWb, pedidosWb, itensWb] =
+    await readWorkbooksParallel([
+      corteFile,
+      oficinasFile,
+      signusFile,
+      estoqueFile,
+      pedidosFile,
+      itensFile,
+    ])
+  if (!corteWb || !oficinasWb || !signusWb || !estoqueWb) {
+    throw new Error('Falha ao ler uma ou mais planilhas obrigatórias.')
+  }
   return buildSnapshotFromWorkbooks(
-    readWorkbook(corteFile),
-    readWorkbook(oficinasFile),
-    readWorkbook(signusFile),
-    readWorkbook(estoqueFile),
-    pedidosFile ? readWorkbook(pedidosFile) : null,
-    itensFile ? readWorkbook(itensFile) : null,
+    corteWb,
+    oficinasWb,
+    signusWb,
+    estoqueWb,
+    pedidosWb,
+    itensWb,
   )
 }

@@ -1,6 +1,12 @@
-import { checkInvariants, computeFunil, computeHeaderKpis, computeSerieMensal } from '@/lib/etl/kpis'
+import {
+  checkInvariants,
+  computeFunil,
+  computeHeaderKpis,
+  computeSerieMensal,
+} from '@/lib/etl/kpis'
+import { buildSnapshotIncremental } from '@/lib/etl/incremental'
 import { replaceSnapshot } from '@/lib/etl/load'
-import { copySources, parseWorkbookFiles } from '@/lib/etl/snapshot'
+import { copySources } from '@/lib/etl/snapshot'
 import type {
   FunilKpis,
   HeaderKpis,
@@ -22,6 +28,8 @@ export type RefreshResult =
       pedidosLastWrite: string | null
       itensLastWrite: string | null
       lidaEm: string
+      skipped?: boolean
+      changed?: string[] | 'all'
     }
   | {
       ok: false
@@ -30,6 +38,7 @@ export type RefreshResult =
 
 export async function applySnapshotPayload(
   payload: SnapshotPayload,
+  options?: { changed?: string[] | 'all'; skipped?: boolean },
 ): Promise<RefreshResult> {
   const invariantErrors = checkInvariants(payload.snapshot)
   if (invariantErrors.length) {
@@ -71,6 +80,8 @@ export async function applySnapshotPayload(
     pedidosLastWrite: payload.pedidosLastWrite,
     itensLastWrite: payload.itensLastWrite,
     lidaEm: new Date().toISOString(),
+    skipped: options?.skipped,
+    changed: options?.changed,
   }
 }
 
@@ -104,29 +115,54 @@ export async function refreshFromExcel(
   }
 
   try {
-    const snapshot = await parseWorkbookFiles(
-      copied.corteCache,
-      copied.oficinasCache,
-      copied.signusCache,
-      copied.estoqueCache,
-      copied.pedidosCache,
-      copied.itensCache,
+    const { snapshot, changed } = await buildSnapshotIncremental(copied)
+
+    // Nada mudou: não regrava SQLite nem republica.
+    if (Array.isArray(changed) && changed.length === 0) {
+      const header = computeHeaderKpis(snapshot)
+      const funil = computeFunil(snapshot)
+      const serie = computeSerieMensal(snapshot)
+      const { getSqlite } = await import('@/db')
+      const row = getSqlite()
+        .prepare(
+          `SELECT lida_em as lidaEm FROM carga WHERE ok = 1 ORDER BY id DESC LIMIT 1`,
+        )
+        .get() as { lidaEm: string } | undefined
+      return {
+        ok: true,
+        header,
+        funil,
+        serie,
+        corteLastWrite: copied.corteLastWrite,
+        oficinasLastWrite: copied.oficinasLastWrite,
+        signusLastWrite: copied.signusLastWrite,
+        estoqueLastWrite: copied.estoqueLastWrite,
+        pedidosLastWrite: copied.pedidosLastWrite,
+        itensLastWrite: copied.itensLastWrite,
+        lidaEm: row?.lidaEm ?? copied.corteLastWrite,
+        skipped: true,
+        changed: [],
+      }
+    }
+
+    return await applySnapshotPayload(
+      {
+        snapshot,
+        cortePath,
+        oficinasPath,
+        signusPath,
+        estoquePath,
+        pedidosPath,
+        itensPath,
+        corteLastWrite: copied.corteLastWrite,
+        oficinasLastWrite: copied.oficinasLastWrite,
+        signusLastWrite: copied.signusLastWrite,
+        estoqueLastWrite: copied.estoqueLastWrite,
+        pedidosLastWrite: copied.pedidosLastWrite,
+        itensLastWrite: copied.itensLastWrite,
+      },
+      { changed },
     )
-    return await applySnapshotPayload({
-      snapshot,
-      cortePath,
-      oficinasPath,
-      signusPath,
-      estoquePath,
-      pedidosPath,
-      itensPath,
-      corteLastWrite: copied.corteLastWrite,
-      oficinasLastWrite: copied.oficinasLastWrite,
-      signusLastWrite: copied.signusLastWrite,
-      estoqueLastWrite: copied.estoqueLastWrite,
-      pedidosLastWrite: copied.pedidosLastWrite,
-      itensLastWrite: copied.itensLastWrite,
-    })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return {
