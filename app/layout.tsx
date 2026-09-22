@@ -52,7 +52,8 @@ export const viewport: Viewport = {
   themeColor: '#3d2e8a',
 }
 
-export const maxDuration = 300
+/** Literal obrigatório; Hobby da Vercel aceita até 60s. */
+export const maxDuration = 60
 
 export default function RootLayout({
   children,

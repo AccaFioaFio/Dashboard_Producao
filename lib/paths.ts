@@ -36,7 +36,9 @@ export type SourceFilePaths = {
 
 function resolveSourcePath(configured: string | undefined, fallback: string) {
   const raw = configured?.trim() || fallback
-  return path.isAbsolute(raw) ? raw : path.resolve(PROJECT_ROOT, raw)
+  return path.isAbsolute(raw)
+    ? raw
+    : path.resolve(/*turbopackIgnore: true*/ PROJECT_ROOT, raw)
 }
 
 export function sourceFilePaths(): SourceFilePaths {

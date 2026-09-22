@@ -1,10 +1,12 @@
 import { atualizarDadosCore } from '@/lib/etl/atualizar-dados'
-import { IS_CLOUD } from '@/lib/paths'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-/** Local: ETL longo. Vercel: só download da carga (plano Hobby limita ~10s). */
-export const maxDuration = IS_CLOUD ? 60 : 300
+/**
+ * Precisa ser literal (Next rejeita ternário/import em segment config).
+ * Na Vercel o botão só puxa a carga; localmente o limite não corta o ETL.
+ */
+export const maxDuration = 60
 
 export async function POST() {
   const result = await atualizarDadosCore()

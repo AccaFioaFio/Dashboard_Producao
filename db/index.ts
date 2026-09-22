@@ -39,7 +39,10 @@ function applyMigrations(connection: Database.Database) {
   ]
   for (const file of files) {
     if (applied.has(file)) continue
-    const sql = readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8')
+    const sql = readFileSync(
+      path.join(/*turbopackIgnore: true*/ MIGRATIONS_DIR, file),
+      'utf8',
+    )
     connection.exec('BEGIN')
     try {
       connection.exec(sql)
