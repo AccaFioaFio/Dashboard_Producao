@@ -12,8 +12,9 @@ import {
 } from '../lib/etl/publish'
 import { sourceFilePaths } from '../lib/paths'
 
-/** Vários saves do Excel viram uma leitura. */
-const DEBOUNCE_MS = 2 * 60_000
+/** Espera após o último save; tecto máximo desde o 1º evento (OneDrive/Excel spamma events). */
+const DEBOUNCE_MS = 45_000
+const MAX_WAIT_MS = 90_000
 const POLL_MS = 30_000
 const BACKOFF_MS = [5_000, 15_000, 30_000, 60_000]
 
@@ -47,7 +48,9 @@ async function main() {
 async function runWatch() {
   const paths = sourceFilePaths()
   log('vigia no ar (Excel → SQLite → Supabase). Ctrl+C para parar.')
-  log(`debounce ${DEBOUNCE_MS / 60_000} min entre save e leitura.`)
+  log(
+    `debounce ${DEBOUNCE_MS / 1000}s após o último save; no máximo ${MAX_WAIT_MS / 1000}s desde a 1ª mudança.`,
+  )
   log(`corte    ${paths.corte}`)
   log(`oficinas ${paths.oficinas}`)
   log(`signus   ${paths.signus}`)
@@ -58,23 +61,47 @@ async function runWatch() {
   let lastSuccess: SourceMtimes | null = null
   let lastPermanentFail: SourceMtimes | null = null
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  let maxWaitTimer: ReturnType<typeof setTimeout> | null = null
+  let firstQueuedAt = 0
+  let lastLogAt = 0
   let running = false
   let queued = false
   let backoffIndex = 0
 
-  function requestPublish(reason: string) {
-    // Poll a cada 30s não pode reiniciar o debounce de 2 min — senão a leitura
-    // nunca dispara enquanto lastSuccess ainda é null.
-    if (reason === 'poll' || reason === 'poll origem ausente') {
-      if (queued || running || debounceTimer) return
-    }
-    log(`agendado (${reason})`)
-    queued = true
+  function clearScheduleTimers() {
     if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => {
-      debounceTimer = null
-      void drain()
-    }, DEBOUNCE_MS)
+    if (maxWaitTimer) clearTimeout(maxWaitTimer)
+    debounceTimer = null
+    maxWaitTimer = null
+    firstQueuedAt = 0
+  }
+
+  function fireScheduled() {
+    clearScheduleTimers()
+    void drain()
+  }
+
+  function requestPublish(reason: string) {
+    // Poll a cada 30s não pode reiniciar o debounce — senão a leitura nunca dispara.
+    if (reason === 'poll' || reason === 'poll origem ausente') {
+      if (queued || running || debounceTimer || maxWaitTimer) return
+    }
+
+    const now = Date.now()
+    queued = true
+    if (!firstQueuedAt) {
+      firstQueuedAt = now
+      log(`agendado (${reason}); leitura em até ${MAX_WAIT_MS / 1000}s`)
+      lastLogAt = now
+      maxWaitTimer = setTimeout(fireScheduled, MAX_WAIT_MS)
+    } else if (now - lastLogAt > 15_000) {
+      const left = Math.max(0, Math.round((MAX_WAIT_MS - (now - firstQueuedAt)) / 1000))
+      log(`ainda agendado (${reason}); falta ~${left}s no máximo`)
+      lastLogAt = now
+    }
+
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(fireScheduled, DEBOUNCE_MS)
   }
 
   async function drain() {
