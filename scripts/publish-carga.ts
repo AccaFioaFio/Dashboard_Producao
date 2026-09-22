@@ -63,6 +63,11 @@ async function runWatch() {
   let backoffIndex = 0
 
   function requestPublish(reason: string) {
+    // Poll a cada 30s não pode reiniciar o debounce de 2 min — senão a leitura
+    // nunca dispara enquanto lastSuccess ainda é null.
+    if (reason === 'poll' || reason === 'poll origem ausente') {
+      if (queued || running || debounceTimer) return
+    }
     log(`agendado (${reason})`)
     queued = true
     if (debounceTimer) clearTimeout(debounceTimer)
