@@ -88,7 +88,8 @@ export async function publishSqliteToSupabase(): Promise<PublishSupabaseResult> 
     }
   }
 
-  const bytes = readFileSync(DB_PATH)
+  // Uint8Array evita "fetch failed" (undici) com Buffer grande no Storage.
+  const bytes = new Uint8Array(readFileSync(DB_PATH))
   const { error: uploadError } = await admin.storage
     .from(CARGA_BUCKET)
     .upload(CARGA_OBJECT, bytes, {
@@ -98,9 +99,13 @@ export async function publishSqliteToSupabase(): Promise<PublishSupabaseResult> 
     })
 
   if (uploadError) {
+    const cause =
+      uploadError instanceof Error && 'cause' in uploadError && uploadError.cause
+        ? ` (${String(uploadError.cause)})`
+        : ''
     return {
       ok: false,
-      error: `Falha ao enviar SQLite ao Supabase Storage: ${uploadError.message}`,
+      error: `Falha ao enviar SQLite ao Supabase Storage: ${uploadError.message}${cause}`,
     }
   }
 

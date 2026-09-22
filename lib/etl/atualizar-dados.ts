@@ -89,12 +89,14 @@ async function runAtualizarDados(): Promise<AtualizarDadosResult> {
   }
 
   try {
-    if (excelFolderReady()) {
+    // Na Vercel as planilhas podem existir no deploy, mas o site só lê a carga
+    // publicada. ETL + upload (~16 MB) no serverless quebra com "fetch failed".
+    if (!IS_CLOUD && excelFolderReady()) {
       if (!isSupabaseWriteConfigured()) {
         return {
           ok: false,
           error:
-            'Planilhas ok, mas falta SUPABASE_SERVICE_ROLE_KEY (e URL/anon) no .env.local / Vercel para publicar.',
+            'Planilhas ok, mas falta SUPABASE_SERVICE_ROLE_KEY (e URL/anon) no .env.local para publicar.',
         }
       }
 
@@ -137,7 +139,7 @@ async function runAtualizarDados(): Promise<AtualizarDadosResult> {
     return {
       ok: false,
       error: IS_CLOUD
-        ? 'No site online sem planilhas no deploy: a carga vem do Supabase. Publique a partir deste PC (pasta Arquivos do Excel + botão).'
+        ? 'No site online a carga vem do Supabase. Publique neste PC (pasta Arquivos do Excel + botão Atualização) e depois atualize no site.'
         : 'Pasta Arquivos do Excel incompleta. Coloque as planilhas na pasta do projeto e tente de novo.',
     }
   } catch (error) {
