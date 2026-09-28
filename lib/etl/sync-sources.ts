@@ -25,6 +25,7 @@ const DEFAULT_ORIGINS: SourceFilePaths = {
   estoque: path.join(SIGNUS_DIR, 'Saldo do Estoque Geral.xlsx'),
   pedidos: path.join(SIGNUS_DIR, 'Pedidos.xlsx'),
   itens: path.join(SIGNUS_DIR, 'Itens.xlsx'),
+  parceiros: path.join(SIGNUS_DIR, 'Parceiro Comercial.xlsx'),
 }
 
 const COPY_RETRIES = 5
@@ -122,6 +123,7 @@ export function originSyncPaths(): SourceFilePaths {
     estoque: envPath('ESTOQUE_XLSX') || DEFAULT_ORIGINS.estoque,
     pedidos: envPath('PEDIDOS_XLSX') || DEFAULT_ORIGINS.pedidos,
     itens: envPath('ITENS_XLSX') || DEFAULT_ORIGINS.itens,
+    parceiros: envPath('PARCEIROS_XLSX') || DEFAULT_ORIGINS.parceiros,
   }
 }
 
@@ -171,7 +173,7 @@ export async function syncExcelToProject(): Promise<SyncResult> {
 
   try {
     for (const name of Object.keys(dest) as Array<keyof SourceFilePaths>) {
-      const optional = name === 'itens'
+        const optional = name === 'itens' || name === 'parceiros'
       try {
         const from = resolveOrigin(origin[name], dest[name])
         const to = dest[name]

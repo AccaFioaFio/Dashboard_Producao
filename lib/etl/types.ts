@@ -150,6 +150,14 @@ export type EstoqueTecidoSaldo = {
   emMetros: boolean
 }
 
+export type ParceiroGeo = {
+  codigo: string
+  uf: string
+  estado: string | null
+  municipio: string | null
+  regiao: string | null
+}
+
 export type PedidoComercial = {
   excelRow: number
   pedidoNorm: string
@@ -226,6 +234,7 @@ export type Snapshot = {
   tecidosEstoque: EstoqueTecidoSaldo[]
   pedidosComerciais: PedidoComercial[]
   pedidosItens: PedidoItem[]
+  parceiros: ParceiroGeo[]
   qualidade: QualidadeEvento[]
   aproveitamento: AproveitamentoMovimento[]
 }
@@ -281,4 +290,6 @@ export type SnapshotPayload = {
   estoqueLastWrite: string
   pedidosLastWrite: string | null
   itensLastWrite: string | null
+  parceirosPath: string
+  parceirosLastWrite: string | null
 }

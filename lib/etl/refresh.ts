@@ -27,6 +27,7 @@ export type RefreshResult =
       estoqueLastWrite: string
       pedidosLastWrite: string | null
       itensLastWrite: string | null
+      parceirosLastWrite: string | null
       lidaEm: string
       skipped?: boolean
       changed?: string[] | 'all'
@@ -59,12 +60,14 @@ export async function applySnapshotPayload(
     estoquePath: payload.estoquePath,
     pedidosPath: payload.pedidosPath,
     itensPath: payload.itensPath,
+    parceirosPath: payload.parceirosPath,
     corteLastWrite: payload.corteLastWrite,
     oficinasLastWrite: payload.oficinasLastWrite,
     signusLastWrite: payload.signusLastWrite,
     estoqueLastWrite: payload.estoqueLastWrite,
     pedidosLastWrite: payload.pedidosLastWrite,
     itensLastWrite: payload.itensLastWrite,
+    parceirosLastWrite: payload.parceirosLastWrite,
     header,
   })
 
@@ -79,6 +82,7 @@ export async function applySnapshotPayload(
     estoqueLastWrite: payload.estoqueLastWrite,
     pedidosLastWrite: payload.pedidosLastWrite,
     itensLastWrite: payload.itensLastWrite,
+    parceirosLastWrite: payload.parceirosLastWrite,
     lidaEm: new Date().toISOString(),
     skipped: options?.skipped,
     changed: options?.changed,
@@ -94,6 +98,7 @@ export async function refreshFromExcel(
   const estoquePath = paths.estoque
   const pedidosPath = paths.pedidos
   const itensPath = paths.itens
+  const parceirosPath = paths.parceiros
 
   let copied: ReturnType<typeof copySources>
   try {
@@ -104,6 +109,7 @@ export async function refreshFromExcel(
       estoquePath,
       pedidosPath,
       itensPath,
+      parceirosPath,
     )
   } catch (error) {
     const message =
@@ -139,6 +145,7 @@ export async function refreshFromExcel(
         estoqueLastWrite: copied.estoqueLastWrite,
         pedidosLastWrite: copied.pedidosLastWrite,
         itensLastWrite: copied.itensLastWrite,
+        parceirosLastWrite: copied.parceirosLastWrite,
         lidaEm: row?.lidaEm ?? copied.corteLastWrite,
         skipped: true,
         changed: [],
@@ -154,12 +161,15 @@ export async function refreshFromExcel(
         estoquePath,
         pedidosPath,
         itensPath,
+        parceirosPath,
         corteLastWrite: copied.corteLastWrite,
         oficinasLastWrite: copied.oficinasLastWrite,
         signusLastWrite: copied.signusLastWrite,
         estoqueLastWrite: copied.estoqueLastWrite,
         pedidosLastWrite: copied.pedidosLastWrite,
         itensLastWrite: copied.itensLastWrite,
+        parceirosPath,
+        parceirosLastWrite: copied.parceirosLastWrite,
       },
       { changed },
     )

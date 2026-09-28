@@ -34,12 +34,14 @@ export type CopiedSources = {
   estoqueCache: string
   pedidosCache: string | null
   itensCache: string | null
+  parceirosCache: string | null
   corteLastWrite: string
   oficinasLastWrite: string
   signusLastWrite: string
   estoqueLastWrite: string
   pedidosLastWrite: string | null
   itensLastWrite: string | null
+  parceirosLastWrite: string | null
 }
 
 export function copySources(
@@ -49,6 +51,7 @@ export function copySources(
   estoquePath: string,
   pedidosPath: string,
   itensPath: string,
+  parceirosPath: string,
 ): CopiedSources {
   ensureDataDirs()
   mkdirSync(cachePath('.'), { recursive: true })
@@ -58,6 +61,7 @@ export function copySources(
   const estoqueCache = cachePath('estoque-geral.xlsx')
   const pedidosCache = cachePath('pedidos.xlsx')
   const itensCache = cachePath('itens.xlsx')
+  const parceirosCache = cachePath('parceiros.xlsx')
   copyIfChanged(cortePath, corteCache)
   copyIfChanged(oficinasPath, oficinasCache)
   copyIfChanged(signusPath, signusCache)
@@ -76,6 +80,13 @@ export function copySources(
     itensLastWrite = statSync(itensPath).mtime.toISOString()
     itensCacheOut = itensCache
   }
+  let parceirosLastWrite: string | null = null
+  let parceirosCacheOut: string | null = null
+  if (existsSync(parceirosPath)) {
+    copyIfChanged(parceirosPath, parceirosCache)
+    parceirosLastWrite = statSync(parceirosPath).mtime.toISOString()
+    parceirosCacheOut = parceirosCache
+  }
   return {
     corteCache,
     oficinasCache,
@@ -83,12 +94,14 @@ export function copySources(
     estoqueCache,
     pedidosCache: pedidosCacheOut,
     itensCache: itensCacheOut,
+    parceirosCache: parceirosCacheOut,
     corteLastWrite: statSync(cortePath).mtime.toISOString(),
     oficinasLastWrite: statSync(oficinasPath).mtime.toISOString(),
     signusLastWrite: statSync(signusPath).mtime.toISOString(),
     estoqueLastWrite: statSync(estoquePath).mtime.toISOString(),
     pedidosLastWrite,
     itensLastWrite,
+    parceirosLastWrite,
   }
 }
 
@@ -99,8 +112,9 @@ export async function parseWorkbookFiles(
   estoqueFile: string,
   pedidosFile: string | null,
   itensFile: string | null,
+  parceirosFile: string | null,
 ): Promise<Snapshot> {
-  const [corteWb, oficinasWb, signusWb, estoqueWb, pedidosWb, itensWb] =
+  const [corteWb, oficinasWb, signusWb, estoqueWb, pedidosWb, itensWb, parceirosWb] =
     await readWorkbooksParallel([
       corteFile,
       oficinasFile,
@@ -108,6 +122,7 @@ export async function parseWorkbookFiles(
       estoqueFile,
       pedidosFile,
       itensFile,
+      parceirosFile,
     ])
   if (!corteWb || !oficinasWb || !signusWb || !estoqueWb) {
     throw new Error('Falha ao ler uma ou mais planilhas obrigatórias.')
@@ -119,5 +134,6 @@ export async function parseWorkbookFiles(
     estoqueWb,
     pedidosWb,
     itensWb,
+    parceirosWb,
   )
 }

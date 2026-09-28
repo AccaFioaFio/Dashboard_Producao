@@ -15,6 +15,7 @@ import { parseAproveitamento } from '@/lib/etl/parse-aproveitamento'
 import { parseEstoqueTecidos } from '@/lib/etl/parse-estoque'
 import { parsePedidosComerciais } from '@/lib/etl/parse-pedidos'
 import { parsePedidosItens } from '@/lib/etl/parse-itens'
+import { parseParceiros } from '@/lib/etl/parse-parceiros'
 import { parseSignusTecidos } from '@/lib/etl/parse-signus'
 import { lastOkCargaMtimes, type SourceMtimes } from '@/lib/etl/publish'
 import { readWorkbooksParallel } from '@/lib/etl/read-workbooks-parallel'
@@ -28,6 +29,7 @@ export type SourceKey =
   | 'estoque'
   | 'pedidos'
   | 'itens'
+  | 'parceiros'
 
 const CORTE_QUALIDADE = new Set(['dias_corte_serial', 'status_duplo'])
 const REVISAO_QUALIDADE = new Set(['revisao_total', 'revisao_qtd_eq_pedido'])
@@ -41,6 +43,7 @@ export function currentSourceMtimes(copied: CopiedSources): SourceMtimes {
     estoque: copied.estoqueLastWrite,
     pedidos: copied.pedidosLastWrite,
     itens: copied.itensLastWrite,
+    parceiros: copied.parceirosLastWrite,
   }
 }
 
@@ -58,6 +61,9 @@ export function changedSourceKeys(
     keys.push('pedidos')
   }
   if ((current.itens ?? null) !== (previous.itens ?? null)) keys.push('itens')
+  if ((current.parceiros ?? null) !== (previous.parceiros ?? null)) {
+    keys.push('parceiros')
+  }
   return keys
 }
 
@@ -73,7 +79,7 @@ export async function buildSnapshotIncremental(
   const baseline = changed === 'all' ? null : loadSnapshotFromSqlite()
 
   if (changed === 'all' || !baseline) {
-    const [corteWb, oficinasWb, signusWb, estoqueWb, pedidosWb, itensWb] =
+    const [corteWb, oficinasWb, signusWb, estoqueWb, pedidosWb, itensWb, parceirosWb] =
       await readWorkbooksParallel([
         copied.corteCache,
         copied.oficinasCache,
@@ -81,6 +87,7 @@ export async function buildSnapshotIncremental(
         copied.estoqueCache,
         copied.pedidosCache,
         copied.itensCache,
+        copied.parceirosCache,
       ])
     if (!corteWb || !oficinasWb || !signusWb || !estoqueWb) {
       throw new Error('Falha ao ler planilhas obrigatórias.')
@@ -93,6 +100,7 @@ export async function buildSnapshotIncremental(
         estoqueWb,
         pedidosWb,
         itensWb,
+        parceirosWb,
       ),
       changed: 'all',
     }
@@ -103,7 +111,7 @@ export async function buildSnapshotIncremental(
   }
 
   const need = new Set(changed)
-  const [corteWb, oficinasWb, signusWb, estoqueWb, pedidosWb, itensWb] =
+  const [corteWb, oficinasWb, signusWb, estoqueWb, pedidosWb, itensWb, parceirosWb] =
     await readWorkbooksParallel([
       need.has('corte') ? copied.corteCache : null,
       need.has('oficinas') ? copied.oficinasCache : null,
@@ -111,6 +119,7 @@ export async function buildSnapshotIncremental(
       need.has('estoque') ? copied.estoqueCache : null,
       need.has('pedidos') ? copied.pedidosCache : null,
       need.has('itens') ? copied.itensCache : null,
+      need.has('parceiros') ? copied.parceirosCache : null,
     ])
 
   let snapshot: Snapshot = { ...baseline }
@@ -177,6 +186,15 @@ export async function buildSnapshotIncremental(
       snapshot = { ...snapshot, pedidosItens: parsePedidosItens(wb) }
     } else {
       snapshot = { ...snapshot, pedidosItens: [] }
+    }
+  }
+
+  if (need.has('parceiros')) {
+    if (copied.parceirosCache && existsSync(copied.parceirosCache)) {
+      const wb = parceirosWb ?? readWorkbook(copied.parceirosCache)
+      snapshot = { ...snapshot, parceiros: parseParceiros(wb) }
+    } else {
+      snapshot = { ...snapshot, parceiros: [] }
     }
   }
 

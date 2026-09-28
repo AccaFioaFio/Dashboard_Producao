@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Layers,
   ListOrdered,
+  Map,
   Scissors,
   Settings,
   ShieldAlert,
@@ -75,6 +76,12 @@ export const navigation: NavItem[] = [
     href: '/top-clientes',
     icon: Trophy,
     description: 'Ranking comercial, mix de tecidos e previsão de compra.',
+  },
+  {
+    title: 'Venda por estado',
+    href: '/vendas',
+    icon: Map,
+    description: 'Faturamento por UF, diferença no ranking e projeção.',
   },
   {
     title: 'Pedidos',

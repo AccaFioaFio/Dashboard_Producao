@@ -12,6 +12,7 @@ export type SourceMtimes = {
   estoque: string
   pedidos: string | null
   itens: string | null
+  parceiros: string | null
 }
 
 export function readSourceMtimes(): SourceMtimes {
@@ -33,6 +34,9 @@ export function readSourceMtimes(): SourceMtimes {
     itens: existsSync(paths.itens)
       ? statSync(paths.itens).mtime.toISOString()
       : null,
+    parceiros: existsSync(paths.parceiros)
+      ? statSync(paths.parceiros).mtime.toISOString()
+      : null,
   }
 }
 
@@ -43,7 +47,8 @@ export function sameMtimes(left: SourceMtimes, right: SourceMtimes) {
     left.signus === right.signus &&
     left.estoque === right.estoque &&
     left.pedidos === right.pedidos &&
-    left.itens === right.itens
+    left.itens === right.itens &&
+    left.parceiros === right.parceiros
   )
 }
 
@@ -53,7 +58,8 @@ export function lastOkCargaMtimes(): SourceMtimes | null {
       .prepare(
         `SELECT corte_last_write as corte, oficinas_last_write as oficinas,
                 signus_last_write as signus, estoque_last_write as estoque,
-                pedidos_last_write as pedidos, itens_last_write as itens
+                pedidos_last_write as pedidos, itens_last_write as itens,
+                parceiros_last_write as parceiros
          FROM carga WHERE ok = 1 ORDER BY id DESC LIMIT 1`,
       )
       .get() as SourceMtimes | undefined
@@ -62,6 +68,7 @@ export function lastOkCargaMtimes(): SourceMtimes | null {
       ...row,
       pedidos: row.pedidos ?? null,
       itens: row.itens ?? null,
+      parceiros: row.parceiros ?? null,
     }
   } catch {
     return null
@@ -100,5 +107,6 @@ export function formatPublishLog(result: RefreshResult, paths: SourceFilePaths) 
     `  estoque  ${result.estoqueLastWrite}  ${paths.estoque}`,
     `  pedidos  ${result.pedidosLastWrite ?? '—'}  ${paths.pedidos}`,
     `  itens    ${result.itensLastWrite ?? '—'}  ${paths.itens}`,
+    `  parceiros ${result.parceirosLastWrite ?? '—'}  ${paths.parceiros}`,
   ].join('\n')
 }

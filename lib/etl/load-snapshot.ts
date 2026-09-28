@@ -8,6 +8,7 @@ import type {
   OficinaLote,
   PedidoComercial,
   PedidoItem,
+  ParceiroGeo,
   QualidadeEvento,
   RevisaoLancamento,
   SignusTecidoMovimento,
@@ -148,6 +149,12 @@ export function loadSnapshotFromSqlite(): Snapshot | null {
       )
       .all() as PedidoItem[]
 
+    const parceiros = db
+      .prepare(
+        `SELECT codigo, uf, estado, municipio, regiao FROM fato_parceiro`,
+      )
+      .all() as ParceiroGeo[]
+
     const aproveitamento = db
       .prepare(
         `SELECT tipo, pedido, cliente, data, cod_produto as codProduto, tecido, modelo, qtd,
@@ -177,6 +184,7 @@ export function loadSnapshotFromSqlite(): Snapshot | null {
       tecidosEstoque,
       pedidosComerciais,
       pedidosItens,
+      parceiros,
       qualidade,
       aproveitamento,
     }

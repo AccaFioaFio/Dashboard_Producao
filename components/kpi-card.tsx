@@ -23,7 +23,7 @@ export function KpiGrid({
   className,
 }: {
   children: ReactNode
-  columns?: 3 | 4 | 5
+  columns?: 3 | 4 | 5 | 7
   className?: string
 }) {
   return (
@@ -33,6 +33,7 @@ export function KpiGrid({
         columns === 3 && 'xl:grid-cols-3',
         columns === 4 && 'xl:grid-cols-4',
         columns === 5 && 'lg:grid-cols-3 xl:grid-cols-5',
+        columns === 7 && 'md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7',
         className,
       )}
     >

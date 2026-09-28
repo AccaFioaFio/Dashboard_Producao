@@ -9,11 +9,13 @@ import {
   oficinasXlsxPath,
   pedidosXlsxPath,
   signusXlsPath,
+  parceirosXlsxPath,
 } from '../lib/paths'
 
 async function main() {
   const pedidos = pedidosXlsxPath()
   const itens = itensXlsxPath()
+  const parceiros = parceirosXlsxPath()
   const snapshot = await parseWorkbookFiles(
     corteXlsxPath(),
     oficinasXlsxPath(),
@@ -21,6 +23,7 @@ async function main() {
     estoqueXlsxPath(),
     existsSync(pedidos) ? pedidos : null,
     existsSync(itens) ? itens : null,
+    existsSync(parceiros) ? parceiros : null,
   )
   const header = computeHeaderKpis(snapshot)
   const funil = computeFunil(snapshot)

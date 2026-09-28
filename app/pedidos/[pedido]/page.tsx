@@ -175,13 +175,27 @@ export default async function PedidoFichaPage({
         ]}
       />
 
-      <KpiGrid columns={5}>
+      <KpiGrid columns={7}>
         <KpiCard
           label="Peças cortadas"
           value={formatInt(ficha.totais.pecasCorte)}
           hint={ficha.flags.corte ? 'Soma no Corte deste pedido' : 'Sem Corte 2026'}
-          detail="Planilha de Corte · SUM da quantidade deste pedido."
+          detail="Programação de Corte · QTD PCS CORTADAS deste pedido."
           tone="indigo"
+        />
+        <KpiCard
+          label="Peças de terceiros"
+          value={formatInt(ficha.corte?.terceiros ?? 0)}
+          hint={ficha.flags.corte ? 'QTD PCS TERCEIROS' : 'Sem Corte 2026'}
+          detail="Programação de Corte · QTD PCS TERCEIROS deste pedido."
+          tone="amber"
+        />
+        <KpiCard
+          label="Peças de estoque"
+          value={formatInt(ficha.corte?.estoque ?? 0)}
+          hint={ficha.flags.corte ? 'Retirada do estoque' : 'Sem Corte 2026'}
+          detail="Programação de Corte · QTD PCS ESTOQUE (retirada) deste pedido."
+          tone="teal"
         />
         <KpiCard
           label="Peças na Costura Produção"

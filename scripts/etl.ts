@@ -8,6 +8,7 @@ import {
   oficinasXlsxPath,
   pedidosXlsxPath,
   signusXlsPath,
+  parceirosXlsxPath,
 } from '../lib/paths'
 import { computeFunil, computeHeaderKpis, computeSerieMensal, checkInvariants } from '../lib/etl/kpis'
 import { diffGolden } from '../lib/etl/golden'
@@ -23,6 +24,7 @@ async function main() {
     const estoque = estoqueXlsxPath()
     const pedidos = pedidosXlsxPath()
     const itens = itensXlsxPath()
+    const parceiros = parceirosXlsxPath()
     if (
       !existsSync(corte) ||
       !existsSync(oficinas) ||
@@ -38,6 +40,7 @@ async function main() {
       estoque,
       existsSync(pedidos) ? pedidos : null,
       existsSync(itens) ? itens : null,
+      existsSync(parceiros) ? parceiros : null,
     )
     const header = computeHeaderKpis(snapshot)
     const funil = computeFunil(snapshot)

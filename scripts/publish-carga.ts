@@ -57,6 +57,7 @@ async function runWatch() {
   log(`estoque  ${paths.estoque}`)
   log(`pedidos  ${paths.pedidos}`)
   log(`itens    ${paths.itens}`)
+  log(`parceiros ${paths.parceiros}`)
 
   let lastSuccess: SourceMtimes | null = null
   let lastPermanentFail: SourceMtimes | null = null
@@ -179,6 +180,7 @@ async function runWatch() {
           estoque: result.estoqueLastWrite,
           pedidos: result.pedidosLastWrite,
           itens: result.itensLastWrite,
+          parceiros: result.parceirosLastWrite,
         }
         lastPermanentFail = null
         backoffIndex = 0

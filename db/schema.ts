@@ -301,6 +301,18 @@ export const fatoAproveitamento = sqliteTable(
   ],
 )
 
+export const fatoParceiro = sqliteTable(
+  'fato_parceiro',
+  {
+    codigo: text('codigo').primaryKey(),
+    uf: text('uf').notNull(),
+    estado: text('estado'),
+    municipio: text('municipio'),
+    regiao: text('regiao'),
+  },
+  (table) => [index('idx_parceiro_uf').on(table.uf)],
+)
+
 export const qualidadeEvento = sqliteTable('qualidade_evento', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   tipo: text('tipo').notNull(),
@@ -325,6 +337,8 @@ export const carga = sqliteTable('carga', {
   estoqueLastWrite: text('estoque_last_write'),
   pedidosLastWrite: text('pedidos_last_write'),
   itensLastWrite: text('itens_last_write'),
+  parceirosPath: text('parceiros_path'),
+  parceirosLastWrite: text('parceiros_last_write'),
   pecasCortadas: real('pecas_cortadas'),
   pedidosCorte: integer('pedidos_corte'),
   pecasCosturaProd: real('pecas_costura_prod'),
