@@ -2,7 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { LogOut } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { logout } from '@/app/actions/auth'
 import {
   Sidebar,
   SidebarContent,
@@ -16,11 +18,22 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar'
 import { AtualizarDadosButton } from '@/components/atualizar-dados-button'
+import { canAtualizar, canSeeNav, homePath } from '@/lib/auth/access'
 import { findNavItem, navigation } from '@/lib/navigation'
 
-export function AppSidebar({ lastUpdate }: { lastUpdate?: ReactNode }) {
+export function AppSidebar({
+  acessos,
+  login,
+  lastUpdate,
+}: {
+  acessos: string[]
+  login: string
+  lastUpdate?: ReactNode
+}) {
   const pathname = usePathname()
   const activeHref = findNavItem(pathname)?.href
+  const items = navigation.filter((item) => canSeeNav(item.href, acessos))
+  const home = homePath(acessos)
 
   return (
     <Sidebar collapsible="icon">
@@ -31,7 +44,7 @@ export function AppSidebar({ lastUpdate }: { lastUpdate?: ReactNode }) {
               size="lg"
               tooltip="Fio a Fio"
               className="h-auto min-h-10 justify-center overflow-visible py-1.5 hover:bg-transparent group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-1!"
-              render={<Link href="/" />}
+              render={<Link href={home} />}
             >
               <img
                 src="/logo-fio-a-fio.png?v=3"
@@ -47,7 +60,7 @@ export function AppSidebar({ lastUpdate }: { lastUpdate?: ReactNode }) {
         <SidebarGroup className="px-2 py-2">
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
-              {navigation.map((item) => (
+              {items.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     isActive={activeHref === item.href}
@@ -60,7 +73,7 @@ export function AppSidebar({ lastUpdate }: { lastUpdate?: ReactNode }) {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              <AtualizarDadosButton />
+              {canAtualizar(acessos) ? <AtualizarDadosButton /> : null}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -68,6 +81,20 @@ export function AppSidebar({ lastUpdate }: { lastUpdate?: ReactNode }) {
 
       <SidebarFooter className="border-t border-sidebar-border/80">
         {lastUpdate}
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <form action={logout}>
+              <SidebarMenuButton
+                type="submit"
+                tooltip={`Sair (${login})`}
+                className="h-9 rounded-lg px-2.5 text-[13px] font-medium"
+              >
+                <LogOut />
+                <span className="truncate">Sair · {login}</span>
+              </SidebarMenuButton>
+            </form>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

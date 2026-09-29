@@ -17,6 +17,8 @@ import {
 import { parseFilters } from '@/lib/filters'
 import { PedidoQueue } from '@/components/pedido-queue'
 import { CorteAcaoButton } from '@/components/corte-acao-nav'
+import { canAccessPath } from '@/lib/auth/access'
+import { readSession } from '@/lib/auth/cookie'
 import {
   explainAguardandoTecido,
   explainCorteWip,
@@ -35,6 +37,7 @@ export default async function CortePage({
 }) {
   const params = await searchParams
   const filters = parseFilters(params)
+  const session = await readSession()
   const [corte, options] = await Promise.all([
     getCorteBreakdown(filters),
     getFilterOptions(),
@@ -44,7 +47,11 @@ export default async function CortePage({
     <PageShell
       title="Corte"
       description="Volume em peça e pedido. Agosto explode linha de tecido: não use contagem de linha. Consumo e baixa de tecido ficam na aba Tecidos."
-      actions={<CorteAcaoButton filters={filters} />}
+      actions={
+        session && canAccessPath('/corte/acao-comercial', session.acessos) ? (
+          <CorteAcaoButton filters={filters} />
+        ) : null
+      }
     >
       <FilterBar
         pathname="/corte"

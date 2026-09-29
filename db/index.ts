@@ -37,6 +37,7 @@ function applyMigrations(connection: Database.Database) {
     '0009_pedido_comercial.sql',
     '0010_pedido_item.sql',
     '0011_parceiro.sql',
+    '0012_usuario.sql',
   ]
   for (const file of files) {
     if (applied.has(file)) continue

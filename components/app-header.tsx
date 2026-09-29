@@ -7,13 +7,21 @@ import { CalendarClock } from 'lucide-react'
 import { AppearancePanel } from '@/components/appearance-panel'
 import { PedidoSearch } from '@/components/pedido-search'
 import { SidebarTrigger } from '@/components/ui/sidebar'
+import { canAccessPath, canBuscarPedido } from '@/lib/auth/access'
 import { findNavItem } from '@/lib/navigation'
 import { parsePedidoParam } from '@/lib/pedido'
 
-export function AppHeader({ stamp }: { stamp?: ReactNode }) {
+export function AppHeader({
+  acessos,
+  stamp,
+}: {
+  acessos: string[]
+  stamp?: ReactNode
+}) {
   const pathname = usePathname()
   const current = findNavItem(pathname)
   const isRoot = pathname === '/'
+  const showOverview = canAccessPath('/', acessos)
   const pedidoMatch = pathname.match(/^\/pedidos\/([^/]+)$/)
   const pedidoLabel = pedidoMatch ? parsePedidoParam(pedidoMatch[1]) : null
 
@@ -26,10 +34,14 @@ export function AppHeader({ stamp }: { stamp?: ReactNode }) {
           <span className="font-medium tracking-wide">Visão Geral</span>
         ) : (
           <>
-            <Link href="/" className="text-header-foreground/70 hover:text-header-foreground">
-              Visão Geral
-            </Link>
-            <span className="text-header-foreground/40">/</span>
+            {showOverview ? (
+              <>
+                <Link href="/" className="text-header-foreground/70 hover:text-header-foreground">
+                  Visão Geral
+                </Link>
+                <span className="text-header-foreground/40">/</span>
+              </>
+            ) : null}
             {pedidoLabel ? (
               <>
                 <Link
@@ -51,7 +63,7 @@ export function AppHeader({ stamp }: { stamp?: ReactNode }) {
       </nav>
 
       <div className="ml-auto flex items-center gap-2">
-        <PedidoSearch />
+        {canBuscarPedido(acessos) ? <PedidoSearch /> : null}
         {stamp}
         <span className="hidden h-8 items-center gap-1.5 rounded-full bg-white/12 px-2.5 text-xs font-medium md:inline-flex">
           <CalendarClock className="size-3.5" />

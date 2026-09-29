@@ -2,12 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { IBM_Plex_Mono, Inter } from 'next/font/google'
 import { AppearanceProvider } from '@/components/appearance-provider'
-import { AppHeader } from '@/components/app-header'
-import { CargaStamp } from '@/components/carga-stamp'
-import { AppSidebar } from '@/components/app-sidebar'
-import { UltimaAtualizacaoSlot } from '@/components/ultima-atualizacao-slot'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { APPEARANCE_BOOTSTRAP } from '@/lib/appearance'
 import './globals.css'
 
@@ -73,15 +68,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <AppearanceProvider>
-          <TooltipProvider>
-            <SidebarProvider>
-              <AppSidebar lastUpdate={<UltimaAtualizacaoSlot />} />
-              <SidebarInset className="relative overflow-hidden">
-                <AppHeader stamp={<CargaStamp />} />
-                <div className="relative z-0 flex flex-1 flex-col">{children}</div>
-              </SidebarInset>
-            </SidebarProvider>
-          </TooltipProvider>
+          <TooltipProvider>{children}</TooltipProvider>
         </AppearanceProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

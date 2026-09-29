@@ -313,6 +313,14 @@ export const fatoParceiro = sqliteTable(
   (table) => [index('idx_parceiro_uf').on(table.uf)],
 )
 
+export const usuario = sqliteTable('usuario', {
+  id: integer('id').primaryKey(),
+  login: text('login').notNull().unique(),
+  loginNorm: text('login_norm').notNull().unique(),
+  senhaHash: text('senha_hash').notNull(),
+  acessos: text('acessos').notNull(),
+})
+
 export const qualidadeEvento = sqliteTable('qualidade_evento', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   tipo: text('tipo').notNull(),
