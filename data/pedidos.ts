@@ -170,6 +170,25 @@ export type SerieDiariaRow = {
   revisao: number
 }
 
+export type ItensPedidoConsulta = {
+  pedidoInformado: string
+  pedidoNorm: string | null
+  cliente: string | null
+  canal: string | null
+  status: string | null
+  loaded: boolean
+  itens: {
+    codProduto: string
+    excelRow: number
+    nomeProduto: string | null
+    qtdPedida: number
+    qtdReal: number | null
+    dataInicio: string | null
+    dataFinal: string | null
+    responsavel: string | null
+  }[]
+}
+
 function sqlite() {
   return getSqlite()
 }
@@ -657,4 +676,72 @@ export const getSerieDiaria = cache(async (dias = 30): Promise<SerieDiariaRow[]>
     if (item) item.revisao = row.pecas
   }
   return [...byDay.values()]
+})
+
+export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoConsulta> => {
+  await ensureCloudDatabase()
+  const pedidoInformado = parsePedidoParam(raw).trim()
+  const vazio: ItensPedidoConsulta = {
+    pedidoInformado,
+    pedidoNorm: null,
+    cliente: null,
+    canal: null,
+    status: null,
+    loaded: hasPedidoItemTable(),
+    itens: [],
+  }
+  if (!pedidoInformado || !vazio.loaded) return vazio
+
+  const pedidoNorm = pedidoDigits(pedidoInformado)
+  if (!pedidoNorm) return vazio
+
+  const rows = sqlite()
+    .prepare(
+      `SELECT i.pedido_norm as pedidoNorm, i.cliente, i.canal, i.status,
+              i.cod_produto as codProduto, i.nome_produto as nomeProduto,
+              i.qtd_pedida as qtdPedida, i.excel_row as excelRow,
+              l.qtd_real as qtdReal, l.data_inicio as dataInicio,
+              l.data_final as dataFinal, l.responsavel as responsavel
+       FROM fato_pedido_item i
+       LEFT JOIN corte_producao_lancamento l
+         ON l.pedido_norm = i.pedido_norm
+        AND l.cod_produto = i.cod_produto
+        AND l.excel_row = i.excel_row
+       WHERE i.pedido_norm = ?
+       ORDER BY i.excel_row`,
+    )
+    .all(pedidoNorm) as {
+    pedidoNorm: string
+    cliente: string | null
+    canal: string | null
+    status: string | null
+    codProduto: string
+    nomeProduto: string | null
+    qtdPedida: number
+    excelRow: number
+    qtdReal: number | null
+    dataInicio: string | null
+    dataFinal: string | null
+    responsavel: string | null
+  }[]
+
+  const cabeca = rows[0]
+  return {
+    pedidoInformado,
+    pedidoNorm: cabeca?.pedidoNorm ?? pedidoNorm,
+    cliente: cabeca?.cliente ?? null,
+    canal: cabeca?.canal ?? null,
+    status: cabeca?.status ?? null,
+    loaded: true,
+    itens: rows.map((row) => ({
+      codProduto: row.codProduto,
+      excelRow: row.excelRow,
+      nomeProduto: row.nomeProduto,
+      qtdPedida: row.qtdPedida,
+      qtdReal: row.qtdReal,
+      dataInicio: row.dataInicio,
+      dataFinal: row.dataFinal,
+      responsavel: row.responsavel,
+    })),
+  }
 })

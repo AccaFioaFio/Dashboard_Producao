@@ -24,6 +24,7 @@ export function AppHeader({
   const showOverview = canAccessPath('/', acessos)
   const pedidoMatch = pathname.match(/^\/pedidos\/([^/]+)$/)
   const pedidoLabel = pedidoMatch ? parsePedidoParam(pedidoMatch[1]) : null
+  const corteProducao = pathname === '/corte/producao'
 
   return (
     <header className="app-header relative sticky top-0 z-10 flex h-[var(--header-h)] shrink-0 items-center gap-3 px-3 text-header-foreground">
@@ -52,6 +53,17 @@ export function AppHeader({
                 </Link>
                 <span className="text-header-foreground/40">/</span>
                 <span className="truncate font-medium tracking-wide">{pedidoLabel}</span>
+              </>
+            ) : corteProducao ? (
+              <>
+                <Link
+                  href="/corte"
+                  className="text-header-foreground/70 hover:text-header-foreground"
+                >
+                  Corte
+                </Link>
+                <span className="text-header-foreground/40">/</span>
+                <span className="truncate font-medium tracking-wide">Corte Produção</span>
               </>
             ) : (
               <span className="truncate font-medium tracking-wide">

@@ -42,7 +42,8 @@ export function canAccessPath(pathname: string, acessos: string[]) {
   if (acessos.includes(ALL_ACCESS)) return true
   const area = areaForPath(pathname)
   if (!area) return false
-  return acessos.includes(area)
+  if (acessos.includes(area)) return true
+  return acessos.some((href) => href !== '/' && area.startsWith(`${href}/`))
 }
 
 export function canSeeNav(href: string, acessos: string[]) {

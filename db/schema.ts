@@ -1,4 +1,11 @@
-import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import {
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+} from 'drizzle-orm/sqlite-core'
 
 export const dimPedido = sqliteTable('dim_pedido', {
   pedidoNorm: text('pedido_norm').primaryKey(),
@@ -320,6 +327,27 @@ export const usuario = sqliteTable('usuario', {
   senhaHash: text('senha_hash').notNull(),
   acessos: text('acessos').notNull(),
 })
+
+export const corteProducaoLancamento = sqliteTable(
+  'corte_producao_lancamento',
+  {
+    pedidoNorm: text('pedido_norm').notNull(),
+    codProduto: text('cod_produto').notNull(),
+    excelRow: integer('excel_row').notNull(),
+    qtdReal: real('qtd_real'),
+    dataInicio: text('data_inicio'),
+    dataFinal: text('data_final'),
+    responsavel: text('responsavel'),
+    avisoDataFinal: text('aviso_data_final'),
+    atualizadoEm: text('atualizado_em').notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.pedidoNorm, table.codProduto, table.excelRow],
+    }),
+    index('idx_corte_producao_pedido').on(table.pedidoNorm),
+  ],
+)
 
 export const qualidadeEvento = sqliteTable('qualidade_evento', {
   id: integer('id').primaryKey({ autoIncrement: true }),
