@@ -49,7 +49,8 @@ function parseTable(
       const key = normalizeHeader(row[c])
       if (key && !block.has(key)) block.set(key, c)
     }
-    const foundPedido = headerIndex(block, ['PEDIDOS', 'PEDIDO'])
+    // A tabela de entrada passou a chamar a coluna de pedido de ORIGEM.
+    const foundPedido = headerIndex(block, ['PEDIDOS', 'PEDIDO', 'ORIGEM'])
     if (foundPedido == null) continue
     headerIndexRow = i
     qtyCol = foundQty

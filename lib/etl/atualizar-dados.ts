@@ -3,6 +3,7 @@ import { refreshFromSupabaseCarga } from '@/lib/cloud/carga'
 import { getSqlite } from '@/db'
 import { publishSqliteToSupabase } from '@/lib/etl/publish-supabase'
 import { refreshFromExcel } from '@/lib/etl/refresh'
+import { syncExcelToProject } from '@/lib/etl/sync-sources'
 import { IS_CLOUD, projectFilePaths } from '@/lib/paths'
 import {
   isSupabaseConfigured,
@@ -99,6 +100,14 @@ async function runAtualizarDados(): Promise<AtualizarDadosResult> {
           error:
             'Planilhas ok, mas falta SUPABASE_SERVICE_ROLE_KEY (e URL/anon) no .env.local para publicar.',
         }
+      }
+
+      mark('sync start')
+      const synced = await syncExcelToProject()
+      mark(`sync done ok=${synced.ok}`)
+      if (!synced.ok) {
+        if (!excelFolderReady()) return synced
+        mark(`sync ignorada, usando pasta local: ${synced.error}`)
       }
 
       mark('etl incremental start')
