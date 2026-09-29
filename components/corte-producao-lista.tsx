@@ -1,7 +1,10 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { salvarCorteProducao } from '@/app/actions/corte-producao'
+import { useRouter } from 'next/navigation'
+import { Mail } from 'lucide-react'
+import { enviarEmailCorteProducao, salvarCorteProducao } from '@/app/actions/corte-producao'
+import { Button } from '@/components/ui/button'
 import { RESPONSAVEIS_CORTE } from '@/lib/corte-producao'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -15,6 +18,7 @@ export type CorteProducaoItem = {
   dataInicio: string | null
   dataFinal: string | null
   responsavel: string | null
+  avisoDataFinal: string | null
 }
 
 type Lancamento = {
@@ -22,6 +26,20 @@ type Lancamento = {
   dataInicio: string
   dataFinal: string
   responsavel: string
+}
+
+function AvisoStatus({
+  dataFinal,
+  avisoDataFinal,
+}: {
+  dataFinal: string
+  avisoDataFinal: string | null
+}) {
+  if (!dataFinal) return <span className="text-muted-foreground">—</span>
+  if (avisoDataFinal === dataFinal) {
+    return <span className="font-medium text-emerald-700 dark:text-emerald-400">Enviado</span>
+  }
+  return <span className="font-medium text-amber-700 dark:text-amber-400">A enviar</span>
 }
 
 function textoQtd(value: number | null) {
@@ -32,9 +50,11 @@ function textoQtd(value: number | null) {
 function Linha({
   pedidoNorm,
   item,
+  onOcupada,
 }: {
   pedidoNorm: string
   item: CorteProducaoItem
+  onOcupada: (ocupada: boolean) => void
 }) {
   const inicial: Lancamento = {
     qtdReal: textoQtd(item.qtdReal),
@@ -49,7 +69,6 @@ function Linha({
   const valores = useRef(inicial)
   const espera = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [erro, setErro] = useState<string | null>(null)
-  const [aviso, setAviso] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const descricao = item.nomeProduto?.replace(/\s+/g, ' ').trim() || '—'
 
@@ -66,25 +85,30 @@ function Linha({
       next.dataFinal === salvo.dataFinal &&
       next.responsavel === salvo.responsavel
     ) {
+      onOcupada(false)
       return
     }
     startTransition(async () => {
-      const result = await salvarCorteProducao({
-        pedidoNorm,
-        codProduto: item.codProduto,
-        excelRow: item.excelRow,
-        qtdReal: next.qtdReal,
-        dataInicio: next.dataInicio,
-        dataFinal: next.dataFinal,
-        responsavel: next.responsavel,
-      })
-      setErro(result.ok ? null : result.error)
-      setAviso(result.ok ? (result.aviso ?? null) : null)
+      try {
+        const result = await salvarCorteProducao({
+          pedidoNorm,
+          codProduto: item.codProduto,
+          excelRow: item.excelRow,
+          qtdReal: next.qtdReal,
+          dataInicio: next.dataInicio,
+          dataFinal: next.dataFinal,
+          responsavel: next.responsavel,
+        })
+        setErro(result.ok ? null : result.error)
+      } finally {
+        onOcupada(false)
+      }
     })
   }
 
   function agendar(next: Lancamento) {
     valores.current = next
+    onOcupada(true)
     if (espera.current) clearTimeout(espera.current)
     espera.current = setTimeout(() => gravar(valores.current), 300)
   }
@@ -181,17 +205,14 @@ function Linha({
             ))}
           </select>
         </td>
+        <td className="w-16 px-1.5 py-1 whitespace-nowrap">
+          <AvisoStatus dataFinal={dataFinal} avisoDataFinal={item.avisoDataFinal} />
+        </td>
       </tr>
       {erro ? (
         <tr>
-          <td colSpan={7} className="px-1.5 pb-1 text-[11px] text-destructive">
+          <td colSpan={8} className="px-1.5 pb-1 text-[11px] text-destructive">
             {erro}
-          </td>
-        </tr>
-      ) : aviso ? (
-        <tr>
-          <td colSpan={7} className="px-1.5 pb-1 text-[11px] text-muted-foreground">
-            {aviso}
           </td>
         </tr>
       ) : null}
@@ -206,8 +227,63 @@ export function CorteProducaoLista({
   pedidoNorm: string
   itens: CorteProducaoItem[]
 }) {
+  const [ocupadas, setOcupadas] = useState<Record<string, boolean>>({})
+  const [email, setEmail] = useState<{ ok: boolean; texto: string } | null>(null)
+  const [enviando, startEnvio] = useTransition()
+  const router = useRouter()
+  const gravando = Object.values(ocupadas).some(Boolean)
+
+  function marcarOcupada(chave: string, ocupada: boolean) {
+    setOcupadas((atual) => {
+      if (Boolean(atual[chave]) === ocupada) return atual
+      const next = { ...atual }
+      if (ocupada) next[chave] = true
+      else delete next[chave]
+      return next
+    })
+  }
+
+  function enviar() {
+    setEmail(null)
+    startEnvio(async () => {
+      const result = await enviarEmailCorteProducao(pedidoNorm)
+      setEmail({
+        ok: result.ok,
+        texto: result.ok ? result.aviso : result.error,
+      })
+      if (result.ok && result.enviados > 0) router.refresh()
+    })
+  }
+
   return (
-    <div className="card-surface table-surface min-w-0 overflow-x-auto">
+    <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={gravando || enviando}
+          onClick={enviar}
+        >
+          <Mail />
+          {enviando ? 'Enviando…' : 'Enviar e-mail'}
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          {gravando
+            ? 'Aguardando a gravação da lista.'
+            : 'O que já foi enviado fica no pedido. O próximo e-mail leva só os itens novos com data final.'}
+        </p>
+      </div>
+      {email ? (
+        <p
+          className={cn(
+            'text-xs',
+            email.ok ? 'text-muted-foreground' : 'text-destructive',
+          )}
+        >
+          {email.texto}
+        </p>
+      ) : null}
+      <div className="card-surface table-surface min-w-0 overflow-x-auto">
       <table className={cn('w-full text-left text-[10px] leading-snug')}>
         <thead className="bg-muted/50 text-[9px] font-semibold tracking-wide text-muted-foreground uppercase">
           <tr>
@@ -218,18 +294,23 @@ export function CorteProducaoLista({
             <th className="px-1.5 py-1">Data Inicio Corte</th>
             <th className="px-1.5 py-1">Data Final Corte</th>
             <th className="px-1.5 py-1">Responsável</th>
+            <th className="px-1.5 py-1">E-mail</th>
           </tr>
         </thead>
         <tbody>
           {itens.map((item) => (
             <Linha
-              key={item.codProduto}
+              key={`${item.codProduto}:${item.excelRow}`}
               pedidoNorm={pedidoNorm}
               item={item}
+              onOcupada={(ocupada) =>
+                marcarOcupada(`${item.codProduto}:${item.excelRow}`, ocupada)
+              }
             />
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }

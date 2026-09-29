@@ -187,6 +187,7 @@ export type ItensPedidoConsulta = {
     dataInicio: string | null
     dataFinal: string | null
     responsavel: string | null
+    avisoDataFinal: string | null
   }[]
 }
 
@@ -703,7 +704,8 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
               i.cod_produto as codProduto, i.nome_produto as nomeProduto,
               i.qtd_pedida as qtdPedida, i.excel_row as excelRow,
               l.qtd_real as qtdReal, l.data_inicio as dataInicio,
-              l.data_final as dataFinal, l.responsavel as responsavel
+              l.data_final as dataFinal, l.responsavel as responsavel,
+              l.aviso_data_final as avisoDataFinal
        FROM fato_pedido_item i
        LEFT JOIN corte_producao_lancamento l
          ON l.pedido_norm = i.pedido_norm
@@ -727,6 +729,7 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
     dataInicio: string | null
     dataFinal: string | null
     responsavel: string | null
+    avisoDataFinal: string | null
   }[]
 
   const cabeca = rows[0]
@@ -747,6 +750,7 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
       dataInicio: row.dataInicio,
       dataFinal: row.dataFinal,
       responsavel: row.responsavel,
+      avisoDataFinal: row.avisoDataFinal,
     })),
   }
 })

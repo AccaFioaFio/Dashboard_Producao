@@ -15,6 +15,7 @@ export type ItemCortePedido = {
   dataInicio: string | null
   dataFinal: string | null
   responsavel: string | null
+  avisoDataFinal: string | null
   pedidoRaw: string
   tipo: string | null
 }
@@ -75,6 +76,7 @@ export function collapseItensCorte<T extends ItemCortePedido>(rows: T[]): T[] {
       dataInicio: lancamento?.dataInicio ?? escolhida.dataInicio,
       dataFinal: lancamento?.dataFinal ?? escolhida.dataFinal,
       responsavel: lancamento?.responsavel ?? escolhida.responsavel,
+      avisoDataFinal: lancamento?.avisoDataFinal ?? escolhida.avisoDataFinal,
     })
   }
 

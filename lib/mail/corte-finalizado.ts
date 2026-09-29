@@ -10,15 +10,19 @@ const DESTINOS = [
   'jaqueline@fioafio.com.br',
 ]
 
-export type AvisoCorteFinalizado = {
-  pedidoNorm: string
+export type AvisoCorteItem = {
   codProduto: string
   nomeProduto: string | null
-  cliente: string | null
   qtdReal: number | null
   dataInicio: string | null
   dataFinal: string
   responsavel: string | null
+}
+
+export type AvisoCorteFinalizado = {
+  pedidoNorm: string
+  cliente: string | null
+  itens: AvisoCorteItem[]
 }
 
 function destinatarios() {
@@ -53,27 +57,45 @@ function quantidade(value: number | null) {
   return formatNumber(value, value % 1 ? 2 : 0)
 }
 
-export async function enviarAvisoCorteFinalizado(aviso: AvisoCorteFinalizado) {
-  const smtp = transporte()
-
-  const produto = aviso.nomeProduto?.replace(/\s+/g, ' ').trim() || '—'
+function blocoItem(item: AvisoCorteItem, indice: number, total: number) {
+  const produto = item.nomeProduto?.replace(/\s+/g, ' ').trim() || '—'
   const linhas = [
-    'O corte deste item foi finalizado. A costura pode seguir.',
+    `Produto: ${produto}`,
+    `Código: ${item.codProduto}`,
+    `Quantidade real: ${quantidade(item.qtdReal)}`,
+    `Início: ${formatDate(item.dataInicio)}`,
+    `Data final: ${formatDate(item.dataFinal)}`,
+    `Responsável: ${item.responsavel?.trim() || '—'}`,
+  ]
+  if (total > 1) linhas.unshift(`Item ${indice + 1}`)
+  return linhas
+}
+
+export async function enviarAvisoCorteFinalizado(aviso: AvisoCorteFinalizado) {
+  if (!aviso.itens.length) {
+    throw new Error('Nenhum item com corte finalizado para avisar.')
+  }
+
+  const smtp = transporte()
+  const varios = aviso.itens.length > 1
+  const linhas = [
+    varios
+      ? `O corte de ${aviso.itens.length} itens foi finalizado. A costura pode seguir.`
+      : 'O corte deste item foi finalizado. A costura pode seguir.',
     '',
     `Pedido: ${aviso.pedidoNorm}`,
     `Cliente: ${aviso.cliente?.trim() || '—'}`,
-    `Produto: ${produto}`,
-    `Código: ${aviso.codProduto}`,
-    `Quantidade real: ${quantidade(aviso.qtdReal)}`,
-    `Início: ${formatDate(aviso.dataInicio)}`,
-    `Data final: ${formatDate(aviso.dataFinal)}`,
-    `Responsável: ${aviso.responsavel?.trim() || '—'}`,
+    '',
+    ...aviso.itens.flatMap((item, indice) => [
+      ...blocoItem(item, indice, aviso.itens.length),
+      '',
+    ]),
   ]
 
   await smtp.mail.sendMail({
     from: `"Corte Produção" <${smtp.user}>`,
     to: destinatarios(),
     subject: `Corte finalizado — pedido ${aviso.pedidoNorm}`,
-    text: linhas.join('\n'),
+    text: linhas.join('\n').trimEnd(),
   })
 }

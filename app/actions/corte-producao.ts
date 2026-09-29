@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { getSqlite } from '@/db'
+import { getItensPorPedido } from '@/data/pedidos'
 import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { canAccessPath } from '@/lib/auth/access'
 import { readSession } from '@/lib/auth/cookie'
@@ -20,7 +21,11 @@ export type SalvarCorteProducaoInput = {
 }
 
 export type SalvarCorteProducaoResult =
-  | { ok: true; aviso?: string }
+  | { ok: true }
+  | { ok: false; error: string }
+
+export type EnviarEmailCorteResult =
+  | { ok: true; enviados: number; aviso: string }
   | { ok: false; error: string }
 
 const DATA = /^\d{4}-\d{2}-\d{2}$/
@@ -135,7 +140,6 @@ export async function salvarCorteProducao(
     new Date().toISOString(),
   )
 
-  const deveAvisar = Boolean(dataFinal) && dataFinal !== (anterior?.avisoDataFinal ?? null)
   if (!dataFinal && anterior?.avisoDataFinal) {
     db.prepare(
       `UPDATE corte_producao_lancamento
@@ -145,53 +149,144 @@ export async function salvarCorteProducao(
   }
 
   revalidatePath('/corte/producao')
-  if (!deveAvisar) return { ok: true }
+  return { ok: true }
+}
 
-  db.prepare(
-    `UPDATE corte_producao_lancamento
-     SET aviso_data_final = ?
-     WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
-  ).run(dataFinal, pedidoNorm, codProduto, excelRow)
+type LancamentoAviso = {
+  excelRow: number
+  qtdReal: number | null
+  dataInicio: string | null
+  dataFinal: string | null
+  responsavel: string | null
+  avisoDataFinal: string | null
+}
 
-  const item = db
+function lancamentoAvisado(
+  pedidoNorm: string,
+  codProduto: string,
+  excelRow: number,
+  dataFinal: string,
+) {
+  const db = getSqlite()
+  const direta = db
     .prepare(
-      `SELECT nome_produto as nomeProduto, cliente
-       FROM fato_pedido_item
+      `SELECT excel_row as excelRow, qtd_real as qtdReal,
+              data_inicio as dataInicio, data_final as dataFinal,
+              responsavel, aviso_data_final as avisoDataFinal
+       FROM corte_producao_lancamento
        WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
     )
-    .get(pedidoNorm, codProduto, excelRow) as
-    | { nomeProduto: string | null; cliente: string | null }
-    | undefined
+    .get(pedidoNorm, codProduto, excelRow) as LancamentoAviso | undefined
+  if (direta?.dataFinal === dataFinal) return direta
+  return db
+    .prepare(
+      `SELECT excel_row as excelRow, qtd_real as qtdReal,
+              data_inicio as dataInicio, data_final as dataFinal,
+              responsavel, aviso_data_final as avisoDataFinal
+       FROM corte_producao_lancamento
+       WHERE pedido_norm = ? AND cod_produto = ? AND data_final = ?
+       ORDER BY excel_row
+       LIMIT 1`,
+    )
+    .get(pedidoNorm, codProduto, dataFinal) as LancamentoAviso | undefined
+}
+
+export async function enviarEmailCorteProducao(
+  pedidoInformado: string,
+): Promise<EnviarEmailCorteResult> {
+  const session = await readSession()
+  if (!session || !canAccessPath('/corte', session.acessos)) {
+    return { ok: false, error: 'Sem permissão para enviar o aviso de corte.' }
+  }
+
+  await ensureCloudDatabase()
+  const consulta = await getItensPorPedido(pedidoInformado)
+  const pedidoNorm = consulta.pedidoNorm
+  if (!consulta.loaded || !pedidoNorm || !consulta.itens.length) {
+    return { ok: false, error: 'Pedido sem itens para avisar.' }
+  }
+
+  const pendentes: {
+    excelRow: number
+    codProduto: string
+    nomeProduto: string | null
+    qtdReal: number | null
+    dataInicio: string | null
+    dataFinal: string
+    responsavel: string | null
+  }[] = []
+  const vistos = new Set<string>()
+
+  for (const item of consulta.itens) {
+    if (!item.dataFinal) continue
+    const lancamento = lancamentoAvisado(
+      pedidoNorm,
+      item.codProduto,
+      item.excelRow,
+      item.dataFinal,
+    )
+    if (!lancamento?.dataFinal || lancamento.avisoDataFinal === lancamento.dataFinal) {
+      continue
+    }
+    const chave = `${item.codProduto}|${lancamento.excelRow}`
+    if (vistos.has(chave)) continue
+    vistos.add(chave)
+    pendentes.push({
+      excelRow: lancamento.excelRow,
+      codProduto: item.codProduto,
+      nomeProduto: item.nomeProduto,
+      qtdReal: lancamento.qtdReal,
+      dataInicio: lancamento.dataInicio,
+      dataFinal: lancamento.dataFinal,
+      responsavel: lancamento.responsavel,
+    })
+  }
+
+  if (!pendentes.length) {
+    return {
+      ok: true,
+      enviados: 0,
+      aviso:
+        'Nenhum item novo para avisar. Preencha a data final do que já foi cortado e envie de novo.',
+    }
+  }
 
   try {
     await enviarAvisoCorteFinalizado({
       pedidoNorm,
-      codProduto,
-      nomeProduto: item?.nomeProduto ?? null,
-      cliente: item?.cliente ?? null,
-      qtdReal,
-      dataInicio: dataInicio || null,
-      dataFinal,
-      responsavel: responsavel || null,
+      cliente: consulta.cliente,
+      itens: pendentes,
     })
   } catch (error) {
     const detalhe = error instanceof Error ? error.message : String(error)
-    console.error(
-      'aviso de corte finalizado não enviado',
-      pedidoNorm,
-      codProduto,
-      detalhe,
-    )
-    db.prepare(
-      `UPDATE corte_producao_lancamento
-       SET aviso_data_final = ?
-       WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
-    ).run(anterior?.avisoDataFinal ?? null, pedidoNorm, codProduto, excelRow)
+    console.error('aviso de corte finalizado não enviado', pedidoNorm, detalhe)
     return {
-      ok: true,
-      aviso: `Data gravada. O e-mail não saiu (${detalhe.slice(0, 140)}). Será tentado de novo ao salvar este item.`,
+      ok: false,
+      error: `O e-mail não saiu (${detalhe.slice(0, 140)}). Os itens continuam pendentes.`,
     }
   }
 
-  return { ok: true, aviso: 'Aviso de corte finalizado enviado.' }
+  const db = getSqlite()
+  const marcar = db.prepare(
+    `UPDATE corte_producao_lancamento
+     SET aviso_data_final = ?
+     WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
+  )
+  const gravar = db.transaction(() => {
+    for (const item of pendentes) {
+      marcar.run(item.dataFinal, pedidoNorm, item.codProduto, item.excelRow)
+    }
+  })
+  gravar()
+  revalidatePath('/corte/producao')
+
+  const enviados = pendentes.length
+  return {
+    ok: true,
+    enviados,
+    aviso:
+      enviados === 1
+        ? 'E-mail enviado com 1 item.'
+        : `E-mail enviado com ${enviados} itens.`,
+  }
 }
