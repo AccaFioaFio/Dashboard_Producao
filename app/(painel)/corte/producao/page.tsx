@@ -33,7 +33,7 @@ export default async function CorteProducaoPage({
   return (
     <PageShell
       title="Corte Produção"
-      description="Pesquise o número do pedido. A quantidade pedida vem de Itens. Qtd real, datas e responsável gravam sozinhos. Quando há data de início e data final gravadas, a linha em produção da planilha recebe a primeira data de início e a última data final. O e-mail da costura só sai no botão, num envio só."
+      description="Pesquise o número do pedido. A quantidade pedida vem de Itens. Qtd real, datas e responsável gravam sozinhos e continuam neste pedido. Quando há data de início e data final gravadas, a linha em produção da planilha recebe a primeira data de início e a última data final. O botão grava a lista do cortador e o alerta na Visão Geral. O e-mail está pausado."
       actions={<CorteVoltarButton filters={parseFilters({})} />}
     >
       <form
@@ -101,7 +101,7 @@ export default async function CorteProducaoPage({
           <section className="flex min-w-0 flex-col gap-2">
             <h2 className="text-sm font-medium">Itens do pedido</h2>
             <p className="text-xs text-muted-foreground">
-              {`Itens.xlsx · ${formatInt(consulta.itens.length)} produto${consulta.itens.length === 1 ? '' : 's'}. A qtd pedida é fixa. O que já foi preenchido e o que já foi enviado continuam neste pedido.`}
+              {`Itens.xlsx · ${formatInt(consulta.itens.length)} produto${consulta.itens.length === 1 ? '' : 's'}. A qtd pedida é fixa. O que já foi preenchido e o que já entrou na lista continuam neste pedido.`}
             </p>
             <CorteProducaoLista
               key={consulta.pedidoNorm ?? pedido}

@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Mail } from 'lucide-react'
-import { enviarEmailCorteProducao, salvarCorteProducao } from '@/app/actions/corte-producao'
+import { ListChecks } from 'lucide-react'
+import { salvarCorteProducao, salvarListaCortador } from '@/app/actions/corte-producao'
 import { Button } from '@/components/ui/button'
 import { OPCOES_RESPONSAVEL_CORTE } from '@/lib/corte-producao'
 import { formatNumber } from '@/lib/format'
@@ -37,9 +37,9 @@ function AvisoStatus({
 }) {
   if (!dataFinal) return <span className="text-muted-foreground">—</span>
   if (avisoDataFinal === dataFinal) {
-    return <span className="font-medium text-emerald-700 dark:text-emerald-400">Enviado</span>
+    return <span className="font-medium text-emerald-700 dark:text-emerald-400">Na lista</span>
   }
-  return <span className="font-medium text-amber-700 dark:text-amber-400">A enviar</span>
+  return <span className="font-medium text-amber-700 dark:text-amber-400">A salvar</span>
 }
 
 function textoQtd(value: number | null) {
@@ -257,8 +257,8 @@ export function CorteProducaoLista({
   itens: CorteProducaoItem[]
 }) {
   const [ocupadas, setOcupadas] = useState<Record<string, boolean>>({})
-  const [email, setEmail] = useState<{ ok: boolean; texto: string } | null>(null)
-  const [enviando, startEnvio] = useTransition()
+  const [lista, setLista] = useState<{ ok: boolean; texto: string } | null>(null)
+  const [salvando, startSalvar] = useTransition()
   const router = useRouter()
   const gravando = Object.values(ocupadas).some(Boolean)
 
@@ -272,15 +272,15 @@ export function CorteProducaoLista({
     })
   }
 
-  function enviar() {
-    setEmail(null)
-    startEnvio(async () => {
-      const result = await enviarEmailCorteProducao(pedidoNorm)
-      setEmail({
+  function salvarLista() {
+    setLista(null)
+    startSalvar(async () => {
+      const result = await salvarListaCortador(pedidoNorm)
+      setLista({
         ok: result.ok,
         texto: result.ok ? result.aviso : result.error,
       })
-      if (result.ok && result.enviados > 0) router.refresh()
+      if (result.ok && result.salvos > 0) router.refresh()
     })
   }
 
@@ -290,26 +290,26 @@ export function CorteProducaoLista({
         <Button
           type="button"
           size="sm"
-          disabled={gravando || enviando}
-          onClick={enviar}
+          disabled={gravando || salvando}
+          onClick={salvarLista}
         >
-          <Mail />
-          {enviando ? 'Enviando…' : 'Enviar e-mail'}
+          <ListChecks />
+          {salvando ? 'Salvando…' : 'Salvar na lista'}
         </Button>
         <p className="text-xs text-muted-foreground">
           {gravando
             ? 'Aguardando a gravação da lista.'
-            : 'O que já foi enviado fica no pedido. O próximo e-mail leva só os itens novos com data final.'}
+            : 'O que já entrou na lista fica neste pedido. O próximo clique leva só os itens novos com data final. O e-mail está pausado.'}
         </p>
       </div>
-      {email ? (
+      {lista ? (
         <p
           className={cn(
             'text-xs',
-            email.ok ? 'text-muted-foreground' : 'text-destructive',
+            lista.ok ? 'text-muted-foreground' : 'text-destructive',
           )}
         >
-          {email.texto}
+          {lista.texto}
         </p>
       ) : null}
       <div className="card-surface table-surface min-w-0 overflow-x-auto">
@@ -323,7 +323,7 @@ export function CorteProducaoLista({
             <th className="px-1.5 py-1">Qtd Real Corte</th>
             <th className="px-1.5 py-1">Data Inicio Corte</th>
             <th className="px-1.5 py-1">Data Final Corte</th>
-            <th className="px-1.5 py-1">E-mail</th>
+            <th className="px-1.5 py-1">Lista</th>
           </tr>
         </thead>
         <tbody>

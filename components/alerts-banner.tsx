@@ -60,7 +60,7 @@ export function AlertsBanner({
   if (cortesAvisados) {
     items.push({
       key: 'corte-avisado',
-      text: `Cortes avisados: ${formatInt(cortesAvisados)} produto${cortesAvisados === 1 ? '' : 's'}`,
+      text: `Lista do cortador: ${formatInt(cortesAvisados)} produto${cortesAvisados === 1 ? '' : 's'}`,
       href: '/#cortes-avisados',
       tone: 'lag',
     })

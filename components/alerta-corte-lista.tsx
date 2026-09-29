@@ -51,7 +51,7 @@ export function AlertaCorteLista({ alertas }: { alertas: AlertaCorte[] }) {
     <section id="cortes-avisados" className="card-surface flex flex-col gap-3 p-3">
       <div className="flex items-center gap-2">
         <Scissors className="size-3.5 shrink-0 text-chart-3" />
-        <h2 className="text-sm font-medium">Cortes avisados</h2>
+        <h2 className="text-sm font-medium">Lista do cortador</h2>
       </div>
       <ul className="flex flex-col gap-3">
         {alertas.map((alerta) => (

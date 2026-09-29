@@ -32,9 +32,12 @@ export type SalvarCorteProducaoResult =
   | { ok: true; aviso?: string }
   | { ok: false; error: string }
 
-export type EnviarEmailCorteResult =
-  | { ok: true; enviados: number; aviso: string }
+export type SalvarListaCortadorResult =
+  | { ok: true; salvos: number; aviso: string }
   | { ok: false; error: string }
+
+/** Pausa o SMTP. A lista e o alerta continuam. Volte para `false` para reativar o e-mail. */
+const ENVIO_EMAIL_CORTE_PAUSADO = true
 
 const DATA = /^\d{4}-\d{2}-\d{2}$/
 
@@ -201,19 +204,19 @@ export async function salvarCorteProducao(
   }
 }
 
-export async function enviarEmailCorteProducao(
+export async function salvarListaCortador(
   pedidoInformado: string,
-): Promise<EnviarEmailCorteResult> {
+): Promise<SalvarListaCortadorResult> {
   const session = await readSession()
   if (!session || !canAccessPath('/corte', session.acessos)) {
-    return { ok: false, error: 'Sem permissão para enviar o aviso de corte.' }
+    return { ok: false, error: 'Sem permissão para gravar a lista do cortador.' }
   }
 
   await ensureCloudDatabase()
   const consulta = await getItensPorPedido(pedidoInformado)
   const pedidoNorm = consulta.pedidoNorm
   if (!consulta.loaded || !pedidoNorm || !consulta.itens.length) {
-    return { ok: false, error: 'Pedido sem itens para avisar.' }
+    return { ok: false, error: 'Pedido sem itens para a lista.' }
   }
 
   const pendentes: {
@@ -245,24 +248,26 @@ export async function enviarEmailCorteProducao(
   if (!pendentes.length) {
     return {
       ok: true,
-      enviados: 0,
+      salvos: 0,
       aviso:
-        'Nenhum item novo para avisar. Preencha a data final do que já foi cortado e envie de novo.',
+        'Nenhum item novo para a lista. Preencha a data final do que já foi cortado e salve de novo.',
     }
   }
 
-  try {
-    await enviarAvisoCorteFinalizado({
-      pedidoNorm,
-      cliente: consulta.cliente,
-      itens: pendentes,
-    })
-  } catch (error) {
-    const detalhe = error instanceof Error ? error.message : String(error)
-    console.error('aviso de corte finalizado não enviado', pedidoNorm, detalhe)
-    return {
-      ok: false,
-      error: `O e-mail não saiu (${detalhe.slice(0, 140)}). Os itens continuam pendentes.`,
+  if (!ENVIO_EMAIL_CORTE_PAUSADO) {
+    try {
+      await enviarAvisoCorteFinalizado({
+        pedidoNorm,
+        cliente: consulta.cliente,
+        itens: pendentes,
+      })
+    } catch (error) {
+      const detalhe = error instanceof Error ? error.message : String(error)
+      console.error('aviso de corte finalizado não enviado', pedidoNorm, detalhe)
+      return {
+        ok: false,
+        error: `O e-mail não saiu (${detalhe.slice(0, 140)}). Os itens continuam pendentes.`,
+      }
     }
   }
 
@@ -349,16 +354,16 @@ export async function enviarEmailCorteProducao(
   revalidatePath('/corte/producao')
   revalidatePath('/')
 
-  const enviados = pendentes.length
+  const salvos = pendentes.length
   const base =
-    enviados === 1
-      ? 'E-mail enviado com 1 item. O alerta entrou na Visão Geral.'
-      : `E-mail enviado com ${enviados} itens. O alerta entrou na Visão Geral.`
+    salvos === 1
+      ? '1 item entrou na lista do cortador. O alerta ficou na Visão Geral.'
+      : `${salvos} itens entraram na lista do cortador. O alerta ficou na Visão Geral.`
   return {
     ok: true,
-    enviados,
+    salvos,
     aviso: falhasNuvem.length
-      ? `${base} A nuvem não gravou o envio (${falhasNuvem[0]}). Ao reabrir, pode parecer que o e-mail não saiu.`
+      ? `${base} A nuvem não gravou a lista (${falhasNuvem[0]}). Ao reabrir, pode parecer que o item não entrou.`
       : base,
   }
 }
