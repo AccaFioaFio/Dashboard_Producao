@@ -21,13 +21,8 @@ export type AvisoCorteFinalizado = {
   responsavel: string | null
 }
 
-function envValue(name: string) {
-  const value = process.env[name]
-  return typeof value === 'string' ? value : ''
-}
-
 function destinatarios() {
-  const lista = envValue('SMTP_CORTE_TO')
+  const lista = (process.env.SMTP_CORTE_TO ?? '')
     .split(/[;,]/)
     .map((item) => item.trim())
     .filter(Boolean)
@@ -35,9 +30,13 @@ function destinatarios() {
 }
 
 function transporte() {
-  const user = envValue('SMTP_USER').trim()
-  const pass = envValue('SMTP_PASS').replace(/\s+/g, '')
-  if (!user || !pass) return null
+  const user = (process.env.SMTP_USER ?? '').trim()
+  const pass = (process.env.SMTP_PASS ?? '').replace(/\s+/g, '')
+  if (!user && !pass) {
+    throw new Error('SMTP_USER e SMTP_PASS ausentes neste deploy.')
+  }
+  if (!user) throw new Error('SMTP_USER ausente neste deploy.')
+  if (!pass) throw new Error('SMTP_PASS ausente neste deploy.')
   return {
     user,
     mail: nodemailer.createTransport({
@@ -56,9 +55,6 @@ function quantidade(value: number | null) {
 
 export async function enviarAvisoCorteFinalizado(aviso: AvisoCorteFinalizado) {
   const smtp = transporte()
-  if (!smtp) {
-    throw new Error('SMTP sem usuário ou senha de app.')
-  }
 
   const produto = aviso.nomeProduto?.replace(/\s+/g, ' ').trim() || '—'
   const linhas = [
