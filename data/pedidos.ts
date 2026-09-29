@@ -2,6 +2,7 @@ import 'server-only'
 
 import { cache } from 'react'
 import { getSqlite } from '@/db'
+import { collapseItensCorte } from '@/lib/corte-producao'
 import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { leadTimeDays } from '@/lib/dates'
 import type { DashFilters } from '@/lib/filters'
@@ -697,7 +698,8 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
 
   const rows = sqlite()
     .prepare(
-      `SELECT i.pedido_norm as pedidoNorm, i.cliente, i.canal, i.status,
+      `SELECT i.pedido_norm as pedidoNorm, i.pedido_raw as pedidoRaw,
+              i.tipo_comercializacao as tipo, i.cliente, i.canal, i.status,
               i.cod_produto as codProduto, i.nome_produto as nomeProduto,
               i.qtd_pedida as qtdPedida, i.excel_row as excelRow,
               l.qtd_real as qtdReal, l.data_inicio as dataInicio,
@@ -712,6 +714,8 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
     )
     .all(pedidoNorm) as {
     pedidoNorm: string
+    pedidoRaw: string
+    tipo: string | null
     cliente: string | null
     canal: string | null
     status: string | null
@@ -726,6 +730,7 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
   }[]
 
   const cabeca = rows[0]
+  const itens = collapseItensCorte(rows)
   return {
     pedidoInformado,
     pedidoNorm: cabeca?.pedidoNorm ?? pedidoNorm,
@@ -733,7 +738,7 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
     canal: cabeca?.canal ?? null,
     status: cabeca?.status ?? null,
     loaded: true,
-    itens: rows.map((row) => ({
+    itens: itens.map((row) => ({
       codProduto: row.codProduto,
       excelRow: row.excelRow,
       nomeProduto: row.nomeProduto,

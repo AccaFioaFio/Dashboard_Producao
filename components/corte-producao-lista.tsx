@@ -98,6 +98,9 @@ function Linha({
         <td className="w-px px-1.5 py-1 text-right font-medium whitespace-nowrap tabular-nums">
           {formatNumber(item.qtdPedida, item.qtdPedida % 1 ? 2 : 0)}
         </td>
+        <td className="px-1.5 py-1 font-medium whitespace-nowrap tabular-nums">
+          {item.codProduto}
+        </td>
         <td className="min-w-[12rem] px-1.5 py-1 leading-snug break-words">
           {descricao}
         </td>
@@ -181,13 +184,13 @@ function Linha({
       </tr>
       {erro ? (
         <tr>
-          <td colSpan={6} className="px-1.5 pb-1 text-[11px] text-destructive">
+          <td colSpan={7} className="px-1.5 pb-1 text-[11px] text-destructive">
             {erro}
           </td>
         </tr>
       ) : aviso ? (
         <tr>
-          <td colSpan={6} className="px-1.5 pb-1 text-[11px] text-muted-foreground">
+          <td colSpan={7} className="px-1.5 pb-1 text-[11px] text-muted-foreground">
             {aviso}
           </td>
         </tr>
@@ -209,6 +212,7 @@ export function CorteProducaoLista({
         <thead className="bg-muted/50 text-[9px] font-semibold tracking-wide text-muted-foreground uppercase">
           <tr>
             <th className="w-px px-1.5 py-1 text-right whitespace-nowrap">Qtd pedida</th>
+            <th className="px-1.5 py-1 whitespace-nowrap">Código</th>
             <th className="px-1.5 py-1">Descrição do produto</th>
             <th className="px-1.5 py-1">Qtd Real Corte</th>
             <th className="px-1.5 py-1">Data Inicio Corte</th>
@@ -219,7 +223,7 @@ export function CorteProducaoLista({
         <tbody>
           {itens.map((item) => (
             <Linha
-              key={`${item.codProduto}-${item.excelRow}`}
+              key={item.codProduto}
               pedidoNorm={pedidoNorm}
               item={item}
             />

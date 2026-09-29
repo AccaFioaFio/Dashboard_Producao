@@ -1,6 +1,7 @@
 import 'server-only'
 
 import nodemailer from 'nodemailer'
+import { connection } from 'next/server'
 import { formatDate, formatNumber } from '@/lib/format'
 
 const DESTINOS = [
@@ -21,16 +22,23 @@ export type AvisoCorteFinalizado = {
   responsavel: string | null
 }
 
-function destinatarios() {
-  const lista = process.env.SMTP_CORTE_TO?.split(/[;,]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-  return lista?.length ? lista : DESTINOS
+function envValue(name: string) {
+  const value = process.env[name]
+  return typeof value === 'string' ? value : ''
 }
 
-function transporte() {
-  const user = process.env.SMTP_USER?.trim() ?? ''
-  const pass = (process.env.SMTP_PASS ?? '').replace(/\s+/g, '')
+function destinatarios() {
+  const lista = envValue('SMTP_CORTE_TO')
+    .split(/[;,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  return lista.length ? lista : DESTINOS
+}
+
+async function transporte() {
+  await connection()
+  const user = envValue('SMTP_USER').trim()
+  const pass = envValue('SMTP_PASS').replace(/\s+/g, '')
   if (!user || !pass) return null
   return {
     user,
@@ -49,7 +57,7 @@ function quantidade(value: number | null) {
 }
 
 export async function enviarAvisoCorteFinalizado(aviso: AvisoCorteFinalizado) {
-  const smtp = transporte()
+  const smtp = await transporte()
   if (!smtp) {
     throw new Error('SMTP sem usuário ou senha de app.')
   }

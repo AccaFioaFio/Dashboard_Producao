@@ -79,7 +79,7 @@ export default async function CorteProducaoPage({
               label="Itens"
               value={formatInt(consulta.itens.length)}
               hint={consulta.status ?? '—'}
-              detail="Linhas de produto deste pedido na carga de Itens."
+              detail="Cada código deste pedido aparece uma vez."
               tone="teal"
             />
             <KpiCard
