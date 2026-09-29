@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Mail } from 'lucide-react'
 import { enviarEmailCorteProducao, salvarCorteProducao } from '@/app/actions/corte-producao'
 import { Button } from '@/components/ui/button'
-import { RESPONSAVEIS_CORTE } from '@/lib/corte-producao'
+import { OPCOES_RESPONSAVEL_CORTE } from '@/lib/corte-producao'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -128,6 +128,26 @@ function Linha({
         <td className="min-w-[12rem] px-1.5 py-1 leading-snug break-words">
           {descricao}
         </td>
+        <td className="w-56 px-1.5 py-1">
+          <select
+            aria-label={`Responsável de ${descricao}`}
+            value={responsavel}
+            disabled={pending}
+            className={campo}
+            onChange={(event) => {
+              const next = event.currentTarget.value
+              setResponsavel(next)
+              agendar({ ...valores.current, responsavel: next })
+            }}
+          >
+            <option value="">—</option>
+            {OPCOES_RESPONSAVEL_CORTE.map((nome) => (
+              <option key={nome} value={nome}>
+                {nome}
+              </option>
+            ))}
+          </select>
+        </td>
         <td className="w-28 px-1.5 py-1">
           <input
             aria-label={`Qtd real corte de ${descricao}`}
@@ -184,26 +204,6 @@ function Linha({
               agendar({ ...valores.current, dataFinal: next })
             }}
           />
-        </td>
-        <td className="w-32 px-1.5 py-1">
-          <select
-            aria-label={`Responsável de ${descricao}`}
-            value={responsavel}
-            disabled={pending}
-            className={campo}
-            onChange={(event) => {
-              const next = event.currentTarget.value
-              setResponsavel(next)
-              agendar({ ...valores.current, responsavel: next })
-            }}
-          >
-            <option value="">—</option>
-            {RESPONSAVEIS_CORTE.map((nome) => (
-              <option key={nome} value={nome}>
-                {nome}
-              </option>
-            ))}
-          </select>
         </td>
         <td className="w-16 px-1.5 py-1 whitespace-nowrap">
           <AvisoStatus dataFinal={dataFinal} avisoDataFinal={item.avisoDataFinal} />
@@ -290,10 +290,10 @@ export function CorteProducaoLista({
             <th className="w-px px-1.5 py-1 text-right whitespace-nowrap">Qtd pedida</th>
             <th className="px-1.5 py-1 whitespace-nowrap">Código</th>
             <th className="px-1.5 py-1">Descrição do produto</th>
+            <th className="px-1.5 py-1">Responsável</th>
             <th className="px-1.5 py-1">Qtd Real Corte</th>
             <th className="px-1.5 py-1">Data Inicio Corte</th>
             <th className="px-1.5 py-1">Data Final Corte</th>
-            <th className="px-1.5 py-1">Responsável</th>
             <th className="px-1.5 py-1">E-mail</th>
           </tr>
         </thead>

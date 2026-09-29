@@ -2,8 +2,28 @@ import { fold } from '@/lib/keys'
 
 export const RESPONSAVEIS_CORTE = ['Jair', 'Gustavo', 'Vitor', 'Leonardo'] as const
 
+function combinacoes(nomes: readonly string[]) {
+  const grupos: string[][] = []
+  const atual: string[] = []
+  function visitar(inicio: number) {
+    for (let i = inicio; i < nomes.length; i++) {
+      atual.push(nomes[i])
+      grupos.push([...atual])
+      visitar(i + 1)
+      atual.pop()
+    }
+  }
+  visitar(0)
+  return grupos
+    .filter((grupo) => grupo.length === 2)
+    .map((grupo) => grupo.join(' / '))
+}
+
+/** Só as duplas, na ordem da lista. */
+export const OPCOES_RESPONSAVEL_CORTE = combinacoes(RESPONSAVEIS_CORTE)
+
 export function responsavelCorteValido(value: string) {
-  return (RESPONSAVEIS_CORTE as readonly string[]).includes(value)
+  return OPCOES_RESPONSAVEL_CORTE.includes(value)
 }
 
 export type ItemCortePedido = {
