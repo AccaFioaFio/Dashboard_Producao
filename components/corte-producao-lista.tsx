@@ -69,6 +69,7 @@ function Linha({
   const valores = useRef(inicial)
   const espera = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [erro, setErro] = useState<string | null>(null)
+  const [aviso, setAviso] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const descricao = item.nomeProduto?.replace(/\s+/g, ' ').trim() || '—'
 
@@ -100,6 +101,7 @@ function Linha({
           responsavel: next.responsavel,
         })
         setErro(result.ok ? null : result.error)
+        setAviso(result.ok ? (result.aviso ?? null) : null)
       } finally {
         onOcupada(false)
       }
@@ -213,6 +215,12 @@ function Linha({
         <tr>
           <td colSpan={8} className="px-1.5 pb-1 text-[11px] text-destructive">
             {erro}
+          </td>
+        </tr>
+      ) : aviso ? (
+        <tr>
+          <td colSpan={8} className="px-1.5 pb-1 text-[11px] text-muted-foreground">
+            {aviso}
           </td>
         </tr>
       ) : null}

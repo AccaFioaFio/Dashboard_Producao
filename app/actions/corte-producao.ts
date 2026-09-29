@@ -9,6 +9,7 @@ import { readSession } from '@/lib/auth/cookie'
 import { pedidoDigits } from '@/lib/pedido'
 import { responsavelCorteValido } from '@/lib/corte-producao'
 import { enviarAvisoCorteFinalizado } from '@/lib/mail/corte-finalizado'
+import { gravarDatasCorteNaPlanilha } from '@/lib/corte-planilha-datas'
 
 export type SalvarCorteProducaoInput = {
   pedidoNorm: string
@@ -21,7 +22,7 @@ export type SalvarCorteProducaoInput = {
 }
 
 export type SalvarCorteProducaoResult =
-  | { ok: true }
+  | { ok: true; aviso?: string }
   | { ok: false; error: string }
 
 export type EnviarEmailCorteResult =
@@ -149,7 +150,22 @@ export async function salvarCorteProducao(
   }
 
   revalidatePath('/corte/producao')
-  return { ok: true }
+
+  const planilha = await gravarDatasCorteNaPlanilha(pedidoNorm)
+  if (!planilha.ok) {
+    return {
+      ok: false,
+      error: `As datas ficaram nesta tela. ${planilha.error}`,
+    }
+  }
+
+  return {
+    ok: true,
+    aviso:
+      planilha.linhas > 0
+        ? 'Planilha: data início e data final do corte gravadas na linha em produção. O status muda pela fórmula quando o Excel abrir o arquivo.'
+        : undefined,
+  }
 }
 
 type LancamentoAviso = {

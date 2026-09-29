@@ -33,7 +33,7 @@ export default async function CorteProducaoPage({
   return (
     <PageShell
       title="Corte Produção"
-      description="Pesquise o número do pedido. A quantidade pedida vem de Itens. Qtd real, datas e responsável gravam sozinhos. O e-mail da costura só sai no botão, num envio só."
+      description="Pesquise o número do pedido. A quantidade pedida vem de Itens. Qtd real, datas e responsável gravam sozinhos. Quando há data de início e data final gravadas, a linha em produção da planilha recebe a primeira data de início e a última data final. O e-mail da costura só sai no botão, num envio só."
       actions={<CorteVoltarButton filters={parseFilters({})} />}
     >
       <form
