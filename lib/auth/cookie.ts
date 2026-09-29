@@ -7,13 +7,20 @@ import {
   sessionCookieOptions,
 } from '@/lib/auth/token'
 import type { SessionUser } from '@/lib/auth/types'
+import { loadLocalEnv } from '@/lib/load-env'
+
+function ensureSessionSecret() {
+  loadLocalEnv()
+}
 
 export async function readSession() {
+  ensureSessionSecret()
   const jar = await cookies()
   return openSession(jar.get(SESSION_COOKIE)?.value)
 }
 
 export async function writeSession(user: SessionUser) {
+  ensureSessionSecret()
   const token = await sealSession(user)
   if (!token) {
     throw new Error('SESSION_SECRET ausente.')

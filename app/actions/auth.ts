@@ -16,8 +16,9 @@ export async function login(_state: LoginState, formData: FormData): Promise<Log
   }
   try {
     await writeSession(user)
-  } catch {
-    return { error: 'Não foi possível abrir a sessão. Confira o SESSION_SECRET.' }
+  } catch (error) {
+    console.error('Falha ao gravar a sessão de login.', error)
+    return { error: 'Não foi possível abrir a sessão. Recarregue a página e tente de novo.' }
   }
   redirect(homePathFor(user))
 }
