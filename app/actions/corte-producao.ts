@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { getSqlite } from '@/db'
+import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { canAccessPath } from '@/lib/auth/access'
 import { readSession } from '@/lib/auth/cookie'
 import { pedidoDigits } from '@/lib/pedido'
@@ -50,6 +51,8 @@ export async function salvarCorteProducao(
   if (!session || !canAccessPath('/corte', session.acessos)) {
     return { ok: false, error: 'Sem permissão para gravar o corte.' }
   }
+
+  await ensureCloudDatabase()
 
   const pedidoNorm = pedidoDigits(input.pedidoNorm)
   const codProduto = input.codProduto.trim()
