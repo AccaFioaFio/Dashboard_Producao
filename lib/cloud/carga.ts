@@ -2,6 +2,7 @@ import { copyFileSync, existsSync, writeFileSync } from 'node:fs'
 import dns from 'node:dns'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSqlite, resetSqlite } from '@/db'
+import { captureCorteOperacao, mergeCorteOperacao } from '@/lib/corte-operacao-local'
 import {
   createAdminClient,
   createAnonClient,
@@ -87,9 +88,11 @@ async function restoreDatabase(force: boolean) {
       return
     }
 
+    const backup = captureCorteOperacao()
     resetSqlite()
     writeFileSync(DB_PATH, downloaded.bytes)
     getSqlite()
+    mergeCorteOperacao(backup)
     localEtag = etag || String(downloaded.bytes.length)
   } catch {
     getSqlite()
@@ -237,10 +240,12 @@ export async function refreshFromSupabaseCarga(): Promise<
   }
 
   try {
+    const backup = captureCorteOperacao()
     resetSqlite()
     writeFileSync(DB_PATH, downloaded.bytes)
     localEtag = String(downloaded.bytes.length)
     getSqlite()
+    mergeCorteOperacao(backup)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return { ok: false, error: `Baixou o Storage, mas falhou gravar o SQLite. ${message}` }

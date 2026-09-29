@@ -13,7 +13,7 @@ function quantidade(value: number | null) {
   return formatNumber(value, value % 1 ? 2 : 0)
 }
 
-function VistoButton({ id }: { id: number }) {
+function VistoButton({ id }: { id: string }) {
   const router = useRouter()
   const [erro, setErro] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()

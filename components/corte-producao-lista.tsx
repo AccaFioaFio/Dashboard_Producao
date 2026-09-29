@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Mail } from 'lucide-react'
 import { enviarEmailCorteProducao, salvarCorteProducao } from '@/app/actions/corte-producao'
@@ -112,8 +112,29 @@ function Linha({
     valores.current = next
     onOcupada(true)
     if (espera.current) clearTimeout(espera.current)
-    espera.current = setTimeout(() => gravar(valores.current), 300)
+    espera.current = setTimeout(() => {
+      espera.current = null
+      gravar(valores.current)
+    }, 300)
   }
+
+  useEffect(() => {
+    return () => {
+      if (!espera.current) return
+      clearTimeout(espera.current)
+      espera.current = null
+      const next = valores.current
+      void salvarCorteProducao({
+        pedidoNorm,
+        codProduto: item.codProduto,
+        excelRow: item.excelRow,
+        qtdReal: next.qtdReal,
+        dataInicio: next.dataInicio,
+        dataFinal: next.dataFinal,
+        responsavel: next.responsavel,
+      })
+    }
+  }, [item.codProduto, item.excelRow, pedidoNorm])
 
   const campo =
     'h-7 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 py-1 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50'

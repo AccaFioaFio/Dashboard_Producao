@@ -3,6 +3,11 @@ import 'server-only'
 import { cache } from 'react'
 import { getSqlite } from '@/db'
 import { collapseItensCorte } from '@/lib/corte-producao'
+import {
+  escolherLancamento,
+  lerLancamentosNuvem,
+  type CorteNuvemLancamento,
+} from '@/lib/corte-nuvem'
 import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { leadTimeDays } from '@/lib/dates'
 import type { DashFilters } from '@/lib/filters'
@@ -702,15 +707,8 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
       `SELECT i.pedido_norm as pedidoNorm, i.pedido_raw as pedidoRaw,
               i.tipo_comercializacao as tipo, i.cliente, i.canal, i.status,
               i.cod_produto as codProduto, i.nome_produto as nomeProduto,
-              i.qtd_pedida as qtdPedida, i.excel_row as excelRow,
-              l.qtd_real as qtdReal, l.data_inicio as dataInicio,
-              l.data_final as dataFinal, l.responsavel as responsavel,
-              l.aviso_data_final as avisoDataFinal
+              i.qtd_pedida as qtdPedida, i.excel_row as excelRow
        FROM fato_pedido_item i
-       LEFT JOIN corte_producao_lancamento l
-         ON l.pedido_norm = i.pedido_norm
-        AND l.cod_produto = i.cod_produto
-        AND l.excel_row = i.excel_row
        WHERE i.pedido_norm = ?
        ORDER BY i.excel_row`,
     )
@@ -732,8 +730,39 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
     avisoDataFinal: string | null
   }[]
 
+  const locais = new Map<string, CorteNuvemLancamento>()
+  for (const lancamento of sqlite()
+    .prepare(
+      `SELECT cod_produto as codProduto, qtd_real as qtdReal,
+              data_inicio as dataInicio, data_final as dataFinal,
+              responsavel, aviso_data_final as avisoDataFinal,
+              atualizado_em as atualizadoEm
+       FROM corte_producao_lancamento
+       WHERE pedido_norm = ?
+       ORDER BY atualizado_em DESC`,
+    )
+    .all(pedidoNorm) as ({ codProduto: string } & CorteNuvemLancamento)[]) {
+    if (!locais.has(lancamento.codProduto)) locais.set(lancamento.codProduto, lancamento)
+  }
+
+  let nuvem = new Map<string, CorteNuvemLancamento>()
+  try {
+    nuvem = await lerLancamentosNuvem(pedidoNorm)
+  } catch (error) {
+    console.error('leitura do corte na nuvem falhou', pedidoNorm, error)
+  }
+
   const cabeca = rows[0]
-  const itens = collapseItensCorte(rows)
+  const itens = collapseItensCorte(
+    rows.map((row) => ({
+      ...row,
+      qtdReal: null,
+      dataInicio: null,
+      dataFinal: null,
+      responsavel: null,
+      avisoDataFinal: null,
+    })),
+  )
   return {
     pedidoInformado,
     pedidoNorm: cabeca?.pedidoNorm ?? pedidoNorm,
@@ -741,16 +770,22 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
     canal: cabeca?.canal ?? null,
     status: cabeca?.status ?? null,
     loaded: true,
-    itens: itens.map((row) => ({
-      codProduto: row.codProduto,
-      excelRow: row.excelRow,
-      nomeProduto: row.nomeProduto,
-      qtdPedida: row.qtdPedida,
-      qtdReal: row.qtdReal,
-      dataInicio: row.dataInicio,
-      dataFinal: row.dataFinal,
-      responsavel: row.responsavel,
-      avisoDataFinal: row.avisoDataFinal,
-    })),
+    itens: itens.map((row) => {
+      const lancamento = escolherLancamento(
+        locais.get(row.codProduto),
+        nuvem.get(row.codProduto),
+      )
+      return {
+        codProduto: row.codProduto,
+        excelRow: row.excelRow,
+        nomeProduto: row.nomeProduto,
+        qtdPedida: row.qtdPedida,
+        qtdReal: lancamento?.qtdReal ?? null,
+        dataInicio: lancamento?.dataInicio ?? null,
+        dataFinal: lancamento?.dataFinal ?? null,
+        responsavel: lancamento?.responsavel ?? null,
+        avisoDataFinal: lancamento?.avisoDataFinal ?? null,
+      }
+    }),
   }
 })

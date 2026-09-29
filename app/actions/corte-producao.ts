@@ -8,6 +8,13 @@ import { canAccessPath } from '@/lib/auth/access'
 import { readSession } from '@/lib/auth/cookie'
 import { pedidoDigits } from '@/lib/pedido'
 import { responsavelCorteValido } from '@/lib/corte-producao'
+import {
+  apagarLancamentoNuvem,
+  criarAlertaNuvem,
+  gravarLancamentoNuvem,
+  marcarAlertaNuvemVisto,
+  marcarAvisoNuvem,
+} from '@/lib/corte-nuvem'
 import { enviarAvisoCorteFinalizado } from '@/lib/mail/corte-finalizado'
 import { gravarDatasCorteNaPlanilha } from '@/lib/corte-planilha-datas'
 
@@ -113,9 +120,16 @@ export async function salvarCorteProducao(
   if (qtdReal == null && !dataInicio && !dataFinal && !responsavel) {
     db.prepare(
       `DELETE FROM corte_producao_lancamento
-       WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
-    ).run(pedidoNorm, codProduto, excelRow)
+       WHERE pedido_norm = ? AND cod_produto = ?`,
+    ).run(pedidoNorm, codProduto)
+    const apagado = await apagarLancamentoNuvem(pedidoNorm, codProduto)
     revalidatePath('/corte/producao')
+    if (!apagado.ok) {
+      return {
+        ok: false,
+        error: `Limpou neste computador. A nuvem não apagou (${apagado.error}).`,
+      }
+    }
     return { ok: true }
   }
 
@@ -145,8 +159,27 @@ export async function salvarCorteProducao(
     db.prepare(
       `UPDATE corte_producao_lancamento
        SET aviso_data_final = NULL
-       WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
-    ).run(pedidoNorm, codProduto, excelRow)
+       WHERE pedido_norm = ? AND cod_produto = ?`,
+    ).run(pedidoNorm, codProduto)
+  }
+
+  db.prepare(
+    `DELETE FROM corte_producao_lancamento
+     WHERE pedido_norm = ? AND cod_produto = ? AND excel_row != ?`,
+  ).run(pedidoNorm, codProduto, excelRow)
+
+  const nuvem = await gravarLancamentoNuvem(pedidoNorm, codProduto, {
+    qtdReal,
+    dataInicio: dataInicio || null,
+    dataFinal: dataFinal || null,
+    responsavel: responsavel || null,
+  })
+  if (!nuvem.ok) {
+    revalidatePath('/corte/producao')
+    return {
+      ok: false,
+      error: `Gravou nesta tela, mas a nuvem não atualizou (${nuvem.error}). Ao reabrir o corte, os campos podem voltar vazios.`,
+    }
   }
 
   revalidatePath('/corte/producao')
@@ -166,45 +199,6 @@ export async function salvarCorteProducao(
         ? 'Planilha: data início e data final do corte gravadas na linha em produção. O status muda pela fórmula quando o Excel abrir o arquivo.'
         : undefined,
   }
-}
-
-type LancamentoAviso = {
-  excelRow: number
-  qtdReal: number | null
-  dataInicio: string | null
-  dataFinal: string | null
-  responsavel: string | null
-  avisoDataFinal: string | null
-}
-
-function lancamentoAvisado(
-  pedidoNorm: string,
-  codProduto: string,
-  excelRow: number,
-  dataFinal: string,
-) {
-  const db = getSqlite()
-  const direta = db
-    .prepare(
-      `SELECT excel_row as excelRow, qtd_real as qtdReal,
-              data_inicio as dataInicio, data_final as dataFinal,
-              responsavel, aviso_data_final as avisoDataFinal
-       FROM corte_producao_lancamento
-       WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
-    )
-    .get(pedidoNorm, codProduto, excelRow) as LancamentoAviso | undefined
-  if (direta?.dataFinal === dataFinal) return direta
-  return db
-    .prepare(
-      `SELECT excel_row as excelRow, qtd_real as qtdReal,
-              data_inicio as dataInicio, data_final as dataFinal,
-              responsavel, aviso_data_final as avisoDataFinal
-       FROM corte_producao_lancamento
-       WHERE pedido_norm = ? AND cod_produto = ? AND data_final = ?
-       ORDER BY excel_row
-       LIMIT 1`,
-    )
-    .get(pedidoNorm, codProduto, dataFinal) as LancamentoAviso | undefined
 }
 
 export async function enviarEmailCorteProducao(
@@ -234,27 +228,17 @@ export async function enviarEmailCorteProducao(
   const vistos = new Set<string>()
 
   for (const item of consulta.itens) {
-    if (!item.dataFinal) continue
-    const lancamento = lancamentoAvisado(
-      pedidoNorm,
-      item.codProduto,
-      item.excelRow,
-      item.dataFinal,
-    )
-    if (!lancamento?.dataFinal || lancamento.avisoDataFinal === lancamento.dataFinal) {
-      continue
-    }
-    const chave = `${item.codProduto}|${lancamento.excelRow}`
-    if (vistos.has(chave)) continue
-    vistos.add(chave)
+    if (!item.dataFinal || item.avisoDataFinal === item.dataFinal) continue
+    if (vistos.has(item.codProduto)) continue
+    vistos.add(item.codProduto)
     pendentes.push({
-      excelRow: lancamento.excelRow,
+      excelRow: item.excelRow,
       codProduto: item.codProduto,
       nomeProduto: item.nomeProduto,
-      qtdReal: lancamento.qtdReal,
-      dataInicio: lancamento.dataInicio,
-      dataFinal: lancamento.dataFinal,
-      responsavel: lancamento.responsavel,
+      qtdReal: item.qtdReal,
+      dataInicio: item.dataInicio,
+      dataFinal: item.dataFinal,
+      responsavel: item.responsavel,
     })
   }
 
@@ -284,10 +268,19 @@ export async function enviarEmailCorteProducao(
 
   const db = getSqlite()
   const enviadoEm = new Date().toISOString()
+  const alertaId = `${pedidoNorm}-${Date.now()}`
   const marcar = db.prepare(
     `UPDATE corte_producao_lancamento
      SET aviso_data_final = ?
-     WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
+     WHERE pedido_norm = ? AND cod_produto = ?`,
+  )
+  const garantir = db.prepare(
+    `INSERT INTO corte_producao_lancamento (
+       pedido_norm, cod_produto, excel_row, qtd_real, data_inicio, data_final,
+       responsavel, aviso_data_final, atualizado_em
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
+       aviso_data_final = excluded.aviso_data_final`,
   )
   const criarAlerta = db.prepare(
     `INSERT INTO corte_producao_alerta (pedido_norm, cliente, enviado_em)
@@ -300,13 +293,26 @@ export async function enviarEmailCorteProducao(
   )
   const gravar = db.transaction(() => {
     for (const item of pendentes) {
-      marcar.run(item.dataFinal, pedidoNorm, item.codProduto, item.excelRow)
+      const atualizado = marcar.run(item.dataFinal, pedidoNorm, item.codProduto)
+      if (atualizado.changes === 0) {
+        garantir.run(
+          pedidoNorm,
+          item.codProduto,
+          item.excelRow,
+          item.qtdReal,
+          item.dataInicio,
+          item.dataFinal,
+          item.responsavel,
+          item.dataFinal,
+          enviadoEm,
+        )
+      }
     }
     const alerta = criarAlerta.run(pedidoNorm, consulta.cliente, enviadoEm)
-    const alertaId = Number(alerta.lastInsertRowid)
+    const alertaLocal = Number(alerta.lastInsertRowid)
     for (const item of pendentes) {
       criarItem.run(
-        alertaId,
+        alertaLocal,
         item.codProduto,
         item.nomeProduto,
         item.qtdReal,
@@ -317,37 +323,70 @@ export async function enviarEmailCorteProducao(
     }
   })
   gravar()
+
+  const falhasNuvem: string[] = []
+  for (const item of pendentes) {
+    const marcado = await marcarAvisoNuvem(pedidoNorm, item.codProduto, item.dataFinal)
+    if (!marcado.ok) falhasNuvem.push(marcado.error)
+  }
+  const alertaNuvem = await criarAlertaNuvem({
+    id: alertaId,
+    pedidoNorm,
+    cliente: consulta.cliente,
+    enviadoEm,
+    vistoEm: null,
+    itens: pendentes.map((item) => ({
+      codProduto: item.codProduto,
+      nomeProduto: item.nomeProduto,
+      qtdReal: item.qtdReal,
+      dataInicio: item.dataInicio,
+      dataFinal: item.dataFinal,
+      responsavel: item.responsavel,
+    })),
+  })
+  if (!alertaNuvem.ok) falhasNuvem.push(alertaNuvem.error)
+
   revalidatePath('/corte/producao')
   revalidatePath('/')
 
   const enviados = pendentes.length
+  const base =
+    enviados === 1
+      ? 'E-mail enviado com 1 item. O alerta entrou na Visão Geral.'
+      : `E-mail enviado com ${enviados} itens. O alerta entrou na Visão Geral.`
   return {
     ok: true,
     enviados,
-    aviso:
-      enviados === 1
-        ? 'E-mail enviado com 1 item. O alerta entrou na Visão Geral.'
-        : `E-mail enviado com ${enviados} itens. O alerta entrou na Visão Geral.`,
+    aviso: falhasNuvem.length
+      ? `${base} A nuvem não gravou o envio (${falhasNuvem[0]}). Ao reabrir, pode parecer que o e-mail não saiu.`
+      : base,
   }
 }
 
-export async function marcarAlertaCorteVisto(alertaId: number) {
+export async function marcarAlertaCorteVisto(alertaId: string) {
   const session = await readSession()
   if (!session || !canAccessPath('/', session.acessos)) {
     return { ok: false as const, error: 'Sem permissão para marcar o alerta como visto.' }
   }
-  const id = Number(alertaId)
-  if (!Number.isInteger(id) || id < 1) {
+  const id = alertaId.trim()
+  if (!id || id.length > 80) {
     return { ok: false as const, error: 'Alerta inválido.' }
   }
   await ensureCloudDatabase()
-  getSqlite()
-    .prepare(
-      `UPDATE corte_producao_alerta
-       SET visto_em = ?
-       WHERE id = ? AND visto_em IS NULL`,
-    )
-    .run(new Date().toISOString(), id)
+  const vistoEm = new Date().toISOString()
+  if (/^\d+$/.test(id)) {
+    getSqlite()
+      .prepare(
+        `UPDATE corte_producao_alerta
+         SET visto_em = ?
+         WHERE id = ? AND visto_em IS NULL`,
+      )
+      .run(vistoEm, Number(id))
+  }
+  const nuvem = await marcarAlertaNuvemVisto(id)
+  if (!nuvem.ok) {
+    return { ok: false as const, error: nuvem.error ?? 'Não marcou o alerta na nuvem.' }
+  }
   revalidatePath('/')
   return { ok: true as const }
 }
