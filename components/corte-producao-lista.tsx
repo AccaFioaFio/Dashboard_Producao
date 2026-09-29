@@ -47,6 +47,15 @@ function textoQtd(value: number | null) {
   return String(value)
 }
 
+function lancamentoIgual(a: Lancamento, b: Lancamento) {
+  return (
+    a.qtdReal.trim() === b.qtdReal.trim() &&
+    a.dataInicio === b.dataInicio &&
+    a.dataFinal === b.dataFinal &&
+    a.responsavel === b.responsavel
+  )
+}
+
 function Linha({
   pedidoNorm,
   item,
@@ -67,43 +76,44 @@ function Linha({
   const [dataFinal, setDataFinal] = useState(inicial.dataFinal)
   const [responsavel, setResponsavel] = useState(inicial.responsavel)
   const valores = useRef(inicial)
+  const gravado = useRef(inicial)
   const espera = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fila = useRef(Promise.resolve())
+  const geracao = useRef(0)
+  const viva = useRef(true)
   const [erro, setErro] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
-  const [pending, startTransition] = useTransition()
   const descricao = item.nomeProduto?.replace(/\s+/g, ' ').trim() || '—'
 
   function gravar(next: Lancamento) {
-    const salvo: Lancamento = {
-      qtdReal: textoQtd(item.qtdReal),
-      dataInicio: item.dataInicio ?? '',
-      dataFinal: item.dataFinal ?? '',
-      responsavel: item.responsavel ?? '',
-    }
-    if (
-      next.qtdReal.trim() === salvo.qtdReal &&
-      next.dataInicio === salvo.dataInicio &&
-      next.dataFinal === salvo.dataFinal &&
-      next.responsavel === salvo.responsavel
-    ) {
+    if (lancamentoIgual(next, gravado.current)) {
       onOcupada(false)
       return
     }
-    startTransition(async () => {
+    const ticket = ++geracao.current
+    onOcupada(true)
+    fila.current = fila.current.then(async () => {
+      const atual = valores.current
+      if (ticket !== geracao.current || lancamentoIgual(atual, gravado.current)) {
+        if (ticket === geracao.current) onOcupada(false)
+        return
+      }
       try {
         const result = await salvarCorteProducao({
           pedidoNorm,
           codProduto: item.codProduto,
           excelRow: item.excelRow,
-          qtdReal: next.qtdReal,
-          dataInicio: next.dataInicio,
-          dataFinal: next.dataFinal,
-          responsavel: next.responsavel,
+          qtdReal: atual.qtdReal,
+          dataInicio: atual.dataInicio,
+          dataFinal: atual.dataFinal,
+          responsavel: atual.responsavel,
         })
+        if (!viva.current || ticket !== geracao.current) return
+        if (result.ok) gravado.current = atual
         setErro(result.ok ? null : result.error)
         setAviso(result.ok ? (result.aviso ?? null) : null)
       } finally {
-        onOcupada(false)
+        if (viva.current && ticket === geracao.current) onOcupada(false)
       }
     })
   }
@@ -119,11 +129,14 @@ function Linha({
   }
 
   useEffect(() => {
+    viva.current = true
     return () => {
+      viva.current = false
       if (!espera.current) return
       clearTimeout(espera.current)
       espera.current = null
       const next = valores.current
+      if (lancamentoIgual(next, gravado.current)) return
       void salvarCorteProducao({
         pedidoNorm,
         codProduto: item.codProduto,
@@ -155,7 +168,6 @@ function Linha({
           <select
             aria-label={`Responsável de ${descricao}`}
             value={responsavel}
-            disabled={pending}
             className={campo}
             onChange={(event) => {
               const next = event.currentTarget.value
@@ -176,7 +188,6 @@ function Linha({
             aria-label={`Qtd real corte de ${descricao}`}
             inputMode="decimal"
             value={qtdReal}
-            disabled={pending}
             className={cn(campo, 'text-right tabular-nums')}
             onChange={(event) => {
               const next = event.currentTarget.value
@@ -195,7 +206,6 @@ function Linha({
             aria-label={`Data início corte de ${descricao}`}
             type="date"
             value={dataInicio}
-            disabled={pending}
             className={campo}
             onChange={(event) => {
               const next = event.currentTarget.value
@@ -214,7 +224,6 @@ function Linha({
             aria-label={`Data final corte de ${descricao}`}
             type="date"
             value={dataFinal}
-            disabled={pending}
             className={campo}
             onChange={(event) => {
               const next = event.currentTarget.value
