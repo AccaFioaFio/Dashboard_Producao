@@ -15,11 +15,12 @@ function combinacoes(nomes: readonly string[]) {
   }
   visitar(0)
   return grupos
-    .filter((grupo) => grupo.length === 2)
+    .filter((grupo) => grupo.length <= 2)
+    .sort((a, b) => a.length - b.length)
     .map((grupo) => grupo.join(' / '))
 }
 
-/** Só as duplas, na ordem da lista. */
+/** Cada nome sozinho e as duplas, na ordem da lista. */
 export const OPCOES_RESPONSAVEL_CORTE = combinacoes(RESPONSAVEIS_CORTE)
 
 export function responsavelCorteValido(value: string) {
