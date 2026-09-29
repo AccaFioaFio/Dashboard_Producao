@@ -355,6 +355,35 @@ export const corteProducaoAviso = sqliteTable('corte_producao_aviso', {
   enviadoEm: text('enviado_em').notNull(),
 })
 
+export const corteProducaoAlerta = sqliteTable(
+  'corte_producao_alerta',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    pedidoNorm: text('pedido_norm').notNull(),
+    cliente: text('cliente'),
+    enviadoEm: text('enviado_em').notNull(),
+    vistoEm: text('visto_em'),
+  },
+  (table) => [index('idx_corte_alerta_aberto').on(table.vistoEm, table.enviadoEm)],
+)
+
+export const corteProducaoAlertaItem = sqliteTable(
+  'corte_producao_alerta_item',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    alertaId: integer('alerta_id')
+      .notNull()
+      .references(() => corteProducaoAlerta.id),
+    codProduto: text('cod_produto').notNull(),
+    nomeProduto: text('nome_produto'),
+    qtdReal: real('qtd_real'),
+    dataInicio: text('data_inicio'),
+    dataFinal: text('data_final').notNull(),
+    responsavel: text('responsavel'),
+  },
+  (table) => [index('idx_corte_alerta_item').on(table.alertaId)],
+)
+
 export const qualidadeEvento = sqliteTable('qualidade_evento', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   tipo: text('tipo').notNull(),

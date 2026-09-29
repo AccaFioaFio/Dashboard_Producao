@@ -3,9 +3,11 @@ import { PageShell } from '@/components/page-shell'
 import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { FunnelCard } from '@/components/funnel-card'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
+import { AlertaCorteLista } from '@/components/alerta-corte-lista'
 import { AlertsBanner } from '@/components/alerts-banner'
 import { SectionPlaceholder } from '@/components/section-placeholder'
 import { LayoutDashboard } from 'lucide-react'
+import { getAlertasCorteAbertos } from '@/data/corte-alertas'
 import {
   getAlertas,
   getFunil,
@@ -22,13 +24,14 @@ export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Visão Geral' }
 
 export default async function Page() {
-  const [header, funil, serie, diaria, alertas, carga] = await Promise.all([
+  const [header, funil, serie, diaria, alertas, carga, cortesAvisados] = await Promise.all([
     getHeaderKpis(),
     getFunil(),
     getSerieMensal(),
     getSerieDiaria(30),
     getAlertas(),
     getLatestCarga(),
+    getAlertasCorteAbertos(),
   ])
 
   if (!header || !funil) {
@@ -63,7 +66,9 @@ export default async function Page() {
         oficinasPendentes={header.oficinasPendentes}
         ultimaRevisao={alertas.ultimaRevisao}
         ultimoEnvio={alertas.ultimoEnvio}
+        cortesAvisados={cortesAvisados.reduce((sum, alerta) => sum + alerta.itens.length, 0)}
       />
+      <AlertaCorteLista alertas={cortesAvisados} />
 
       <KpiGrid>
         <KpiCard

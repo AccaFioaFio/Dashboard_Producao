@@ -41,6 +41,7 @@ function applyMigrations(connection: Database.Database) {
     '0013_corte_producao.sql',
     '0014_corte_producao_responsavel.sql',
     '0015_corte_producao_aviso.sql',
+    '0016_corte_producao_alerta.sql',
   ]
   for (const file of files) {
     if (applied.has(file)) continue

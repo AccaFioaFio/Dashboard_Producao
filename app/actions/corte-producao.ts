@@ -283,18 +283,42 @@ export async function enviarEmailCorteProducao(
   }
 
   const db = getSqlite()
+  const enviadoEm = new Date().toISOString()
   const marcar = db.prepare(
     `UPDATE corte_producao_lancamento
      SET aviso_data_final = ?
      WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
   )
+  const criarAlerta = db.prepare(
+    `INSERT INTO corte_producao_alerta (pedido_norm, cliente, enviado_em)
+     VALUES (?, ?, ?)`,
+  )
+  const criarItem = db.prepare(
+    `INSERT INTO corte_producao_alerta_item (
+       alerta_id, cod_produto, nome_produto, qtd_real, data_inicio, data_final, responsavel
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  )
   const gravar = db.transaction(() => {
     for (const item of pendentes) {
       marcar.run(item.dataFinal, pedidoNorm, item.codProduto, item.excelRow)
     }
+    const alerta = criarAlerta.run(pedidoNorm, consulta.cliente, enviadoEm)
+    const alertaId = Number(alerta.lastInsertRowid)
+    for (const item of pendentes) {
+      criarItem.run(
+        alertaId,
+        item.codProduto,
+        item.nomeProduto,
+        item.qtdReal,
+        item.dataInicio,
+        item.dataFinal,
+        item.responsavel,
+      )
+    }
   })
   gravar()
   revalidatePath('/corte/producao')
+  revalidatePath('/')
 
   const enviados = pendentes.length
   return {
@@ -302,7 +326,28 @@ export async function enviarEmailCorteProducao(
     enviados,
     aviso:
       enviados === 1
-        ? 'E-mail enviado com 1 item.'
-        : `E-mail enviado com ${enviados} itens.`,
+        ? 'E-mail enviado com 1 item. O alerta entrou na Visão Geral.'
+        : `E-mail enviado com ${enviados} itens. O alerta entrou na Visão Geral.`,
   }
+}
+
+export async function marcarAlertaCorteVisto(alertaId: number) {
+  const session = await readSession()
+  if (!session || !canAccessPath('/', session.acessos)) {
+    return { ok: false as const, error: 'Sem permissão para marcar o alerta como visto.' }
+  }
+  const id = Number(alertaId)
+  if (!Number.isInteger(id) || id < 1) {
+    return { ok: false as const, error: 'Alerta inválido.' }
+  }
+  await ensureCloudDatabase()
+  getSqlite()
+    .prepare(
+      `UPDATE corte_producao_alerta
+       SET visto_em = ?
+       WHERE id = ? AND visto_em IS NULL`,
+    )
+    .run(new Date().toISOString(), id)
+  revalidatePath('/')
+  return { ok: true as const }
 }

@@ -20,6 +20,7 @@ export function AlertsBanner({
   oficinasPendentes,
   ultimaRevisao,
   ultimoEnvio,
+  cortesAvisados = 0,
 }: {
   wipPedidos: number
   wipPecas: number
@@ -29,6 +30,7 @@ export function AlertsBanner({
   oficinasPendentes: number
   ultimaRevisao: string | null
   ultimoEnvio: string | null
+  cortesAvisados?: number
 }) {
   const items: AlertItem[] = []
   if (wipPedidos) {
@@ -53,6 +55,14 @@ export function AlertsBanner({
       text: `Peças pendentes em oficina: ${formatInt(oficinasPendentes)}`,
       href: '/oficinas',
       tone: 'block',
+    })
+  }
+  if (cortesAvisados) {
+    items.push({
+      key: 'corte-avisado',
+      text: `Cortes avisados: ${formatInt(cortesAvisados)} produto${cortesAvisados === 1 ? '' : 's'}`,
+      href: '/#cortes-avisados',
+      tone: 'lag',
     })
   }
   items.push({
