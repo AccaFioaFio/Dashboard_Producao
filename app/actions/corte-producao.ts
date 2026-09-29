@@ -175,11 +175,12 @@ export async function salvarCorteProducao(
       responsavel: responsavel || null,
     })
   } catch (error) {
+    const detalhe = error instanceof Error ? error.message : String(error)
     console.error(
       'aviso de corte finalizado não enviado',
       pedidoNorm,
       codProduto,
-      error instanceof Error ? error.message : error,
+      detalhe,
     )
     db.prepare(
       `UPDATE corte_producao_lancamento
@@ -188,8 +189,7 @@ export async function salvarCorteProducao(
     ).run(anterior?.avisoDataFinal ?? null, pedidoNorm, codProduto, excelRow)
     return {
       ok: true,
-      aviso:
-        'Data gravada. O e-mail não saiu e será tentado de novo ao salvar este item.',
+      aviso: `Data gravada. O e-mail não saiu (${detalhe.slice(0, 140)}). Será tentado de novo ao salvar este item.`,
     }
   }
 

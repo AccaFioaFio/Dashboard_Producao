@@ -1,7 +1,6 @@
 import 'server-only'
 
 import nodemailer from 'nodemailer'
-import { connection } from 'next/server'
 import { formatDate, formatNumber } from '@/lib/format'
 
 const DESTINOS = [
@@ -35,8 +34,7 @@ function destinatarios() {
   return lista.length ? lista : DESTINOS
 }
 
-async function transporte() {
-  await connection()
+function transporte() {
   const user = envValue('SMTP_USER').trim()
   const pass = envValue('SMTP_PASS').replace(/\s+/g, '')
   if (!user || !pass) return null
@@ -44,8 +42,8 @@ async function transporte() {
     user,
     mail: nodemailer.createTransport({
       host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
+      port: 465,
+      secure: true,
       auth: { user, pass },
     }),
   }
@@ -57,7 +55,7 @@ function quantidade(value: number | null) {
 }
 
 export async function enviarAvisoCorteFinalizado(aviso: AvisoCorteFinalizado) {
-  const smtp = await transporte()
+  const smtp = transporte()
   if (!smtp) {
     throw new Error('SMTP sem usuário ou senha de app.')
   }
