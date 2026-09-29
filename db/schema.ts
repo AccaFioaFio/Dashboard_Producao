@@ -335,6 +335,7 @@ export const corteProducaoLancamento = sqliteTable(
     codProduto: text('cod_produto').notNull(),
     excelRow: integer('excel_row').notNull(),
     qtdReal: real('qtd_real'),
+    semCorte: integer('sem_corte').notNull().default(0),
     dataInicio: text('data_inicio'),
     dataFinal: text('data_final'),
     responsavel: text('responsavel'),
@@ -348,6 +349,11 @@ export const corteProducaoLancamento = sqliteTable(
     index('idx_corte_producao_pedido').on(table.pedidoNorm),
   ],
 )
+
+export const corteProducaoAviso = sqliteTable('corte_producao_aviso', {
+  pedidoNorm: text('pedido_norm').primaryKey(),
+  enviadoEm: text('enviado_em').notNull(),
+})
 
 export const qualidadeEvento = sqliteTable('qualidade_evento', {
   id: integer('id').primaryKey({ autoIncrement: true }),
