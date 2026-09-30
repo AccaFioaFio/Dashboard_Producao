@@ -189,6 +189,7 @@ export type ItensPedidoConsulta = {
     nomeProduto: string | null
     qtdPedida: number
     qtdReal: number | null
+    qtdVolumes: number | null
     dataInicio: string | null
     dataFinal: string | null
     responsavel: string | null
@@ -724,6 +725,7 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
     qtdPedida: number
     excelRow: number
     qtdReal: number | null
+    qtdVolumes: number | null
     dataInicio: string | null
     dataFinal: string | null
     responsavel: string | null
@@ -733,7 +735,7 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
   const locais = new Map<string, CorteNuvemLancamento>()
   for (const lancamento of sqlite()
     .prepare(
-      `SELECT cod_produto as codProduto, qtd_real as qtdReal,
+      `SELECT cod_produto as codProduto, qtd_real as qtdReal, qtd_volumes as qtdVolumes,
               data_inicio as dataInicio, data_final as dataFinal,
               responsavel, aviso_data_final as avisoDataFinal,
               atualizado_em as atualizadoEm
@@ -757,6 +759,7 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
     rows.map((row) => ({
       ...row,
       qtdReal: null,
+      qtdVolumes: null,
       dataInicio: null,
       dataFinal: null,
       responsavel: null,
@@ -781,6 +784,7 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
         nomeProduto: row.nomeProduto,
         qtdPedida: row.qtdPedida,
         qtdReal: lancamento?.qtdReal ?? null,
+        qtdVolumes: lancamento?.qtdVolumes ?? null,
         dataInicio: lancamento?.dataInicio ?? null,
         dataFinal: lancamento?.dataFinal ?? null,
         responsavel: lancamento?.responsavel ?? null,

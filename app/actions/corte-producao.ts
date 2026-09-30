@@ -23,6 +23,7 @@ export type SalvarCorteProducaoInput = {
   codProduto: string
   excelRow: number
   qtdReal: string
+  qtdVolumes: string
   dataInicio: string
   dataFinal: string
   responsavel: string
@@ -81,6 +82,10 @@ export async function salvarCorteProducao(
   if (qtdReal === 'invalida') {
     return { ok: false, error: 'Quantidade real precisa ser um número a partir de zero.' }
   }
+  const qtdVolumes = quantidade(input.qtdVolumes)
+  if (qtdVolumes === 'invalida') {
+    return { ok: false, error: 'Quantidade de volumes precisa ser um número a partir de zero.' }
+  }
 
   const dataInicio = input.dataInicio.trim()
   const dataFinal = input.dataFinal.trim()
@@ -120,7 +125,7 @@ export async function salvarCorteProducao(
     | { avisoDataFinal: string | null }
     | undefined
 
-  if (qtdReal == null && !dataInicio && !dataFinal && !responsavel) {
+  if (qtdReal == null && qtdVolumes == null && !dataInicio && !dataFinal && !responsavel) {
     db.prepare(
       `DELETE FROM corte_producao_lancamento
        WHERE pedido_norm = ? AND cod_produto = ?`,
@@ -138,11 +143,12 @@ export async function salvarCorteProducao(
 
   db.prepare(
     `INSERT INTO corte_producao_lancamento (
-       pedido_norm, cod_produto, excel_row, qtd_real, data_inicio, data_final,
+       pedido_norm, cod_produto, excel_row, qtd_real, qtd_volumes, data_inicio, data_final,
        responsavel, atualizado_em
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
        qtd_real = excluded.qtd_real,
+       qtd_volumes = excluded.qtd_volumes,
        data_inicio = excluded.data_inicio,
        data_final = excluded.data_final,
        responsavel = excluded.responsavel,
@@ -152,6 +158,7 @@ export async function salvarCorteProducao(
     codProduto,
     excelRow,
     qtdReal,
+    qtdVolumes,
     dataInicio || null,
     dataFinal || null,
     responsavel || null,
@@ -173,6 +180,7 @@ export async function salvarCorteProducao(
 
   const nuvem = await gravarLancamentoNuvem(pedidoNorm, codProduto, {
     qtdReal,
+    qtdVolumes,
     dataInicio: dataInicio || null,
     dataFinal: dataFinal || null,
     responsavel: responsavel || null,
@@ -224,6 +232,7 @@ export async function salvarListaCortador(
     codProduto: string
     nomeProduto: string | null
     qtdReal: number | null
+    qtdVolumes: number | null
     dataInicio: string | null
     dataFinal: string
     responsavel: string | null
@@ -239,6 +248,7 @@ export async function salvarListaCortador(
       codProduto: item.codProduto,
       nomeProduto: item.nomeProduto,
       qtdReal: item.qtdReal,
+      qtdVolumes: item.qtdVolumes,
       dataInicio: item.dataInicio,
       dataFinal: item.dataFinal,
       responsavel: item.responsavel,
@@ -281,9 +291,9 @@ export async function salvarListaCortador(
   )
   const garantir = db.prepare(
     `INSERT INTO corte_producao_lancamento (
-       pedido_norm, cod_produto, excel_row, qtd_real, data_inicio, data_final,
+       pedido_norm, cod_produto, excel_row, qtd_real, qtd_volumes, data_inicio, data_final,
        responsavel, aviso_data_final, atualizado_em
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
        aviso_data_final = excluded.aviso_data_final`,
   )
@@ -305,6 +315,7 @@ export async function salvarListaCortador(
           item.codProduto,
           item.excelRow,
           item.qtdReal,
+          item.qtdVolumes,
           item.dataInicio,
           item.dataFinal,
           item.responsavel,

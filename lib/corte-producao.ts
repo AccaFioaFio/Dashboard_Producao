@@ -33,6 +33,7 @@ export type ItemCortePedido = {
   nomeProduto: string | null
   qtdPedida: number
   qtdReal: number | null
+  qtdVolumes: number | null
   dataInicio: string | null
   dataFinal: string | null
   responsavel: string | null
@@ -51,6 +52,7 @@ function faturamentoEntregaFutura(tipo: string | null) {
 function preenchimento(row: ItemCortePedido) {
   return (
     (row.qtdReal != null ? 1 : 0) +
+    (row.qtdVolumes != null ? 1 : 0) +
     (row.dataInicio ? 1 : 0) +
     (row.dataFinal ? 1 : 0) +
     (row.responsavel ? 1 : 0)
@@ -94,6 +96,7 @@ export function collapseItensCorte<T extends ItemCortePedido>(rows: T[]): T[] {
       ...escolhida,
       qtdPedida,
       qtdReal: lancamento?.qtdReal ?? escolhida.qtdReal,
+      qtdVolumes: lancamento?.qtdVolumes ?? escolhida.qtdVolumes,
       dataInicio: lancamento?.dataInicio ?? escolhida.dataInicio,
       dataFinal: lancamento?.dataFinal ?? escolhida.dataFinal,
       responsavel: lancamento?.responsavel ?? escolhida.responsavel,

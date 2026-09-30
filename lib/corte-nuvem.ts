@@ -4,6 +4,7 @@ import { CARGA_BUCKET } from '@/lib/supabase/constants'
 /** Lançamento do corte fora do SQLite da carga (esse arquivo é trocado a cada publicação). */
 export type CorteNuvemLancamento = {
   qtdReal: number | null
+  qtdVolumes: number | null
   dataInicio: string | null
   dataFinal: string | null
   responsavel: string | null
@@ -68,6 +69,7 @@ function lancamentoDe(raw: unknown): CorteNuvemLancamento | null {
   if (!atualizadoEm) return null
   return {
     qtdReal: numero(row.qtdReal),
+    qtdVolumes: numero(row.qtdVolumes),
     dataInicio: texto(row.dataInicio),
     dataFinal: texto(row.dataFinal),
     responsavel: texto(row.responsavel),
@@ -144,6 +146,7 @@ export async function gravarLancamentoNuvem(
   const avisoInformado = 'avisoDataFinal' in lancamento
   const corpo: CorteNuvemLancamento = {
     qtdReal: lancamento.qtdReal,
+    qtdVolumes: lancamento.qtdVolumes,
     dataInicio: lancamento.dataInicio,
     dataFinal,
     responsavel: lancamento.responsavel,

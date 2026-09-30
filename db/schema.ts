@@ -335,6 +335,7 @@ export const corteProducaoLancamento = sqliteTable(
     codProduto: text('cod_produto').notNull(),
     excelRow: integer('excel_row').notNull(),
     qtdReal: real('qtd_real'),
+    qtdVolumes: real('qtd_volumes'),
     semCorte: integer('sem_corte').notNull().default(0),
     dataInicio: text('data_inicio'),
     dataFinal: text('data_final'),

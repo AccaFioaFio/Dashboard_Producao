@@ -15,6 +15,7 @@ export type CorteProducaoItem = {
   nomeProduto: string | null
   qtdPedida: number
   qtdReal: number | null
+  qtdVolumes: number | null
   dataInicio: string | null
   dataFinal: string | null
   responsavel: string | null
@@ -23,6 +24,7 @@ export type CorteProducaoItem = {
 
 type Lancamento = {
   qtdReal: string
+  qtdVolumes: string
   dataInicio: string
   dataFinal: string
   responsavel: string
@@ -50,6 +52,7 @@ function textoQtd(value: number | null) {
 function lancamentoIgual(a: Lancamento, b: Lancamento) {
   return (
     a.qtdReal.trim() === b.qtdReal.trim() &&
+    a.qtdVolumes.trim() === b.qtdVolumes.trim() &&
     a.dataInicio === b.dataInicio &&
     a.dataFinal === b.dataFinal &&
     a.responsavel === b.responsavel
@@ -67,11 +70,13 @@ function Linha({
 }) {
   const inicial: Lancamento = {
     qtdReal: textoQtd(item.qtdReal),
+    qtdVolumes: textoQtd(item.qtdVolumes),
     dataInicio: item.dataInicio ?? '',
     dataFinal: item.dataFinal ?? '',
     responsavel: item.responsavel ?? '',
   }
   const [qtdReal, setQtdReal] = useState(inicial.qtdReal)
+  const [qtdVolumes, setQtdVolumes] = useState(inicial.qtdVolumes)
   const [dataInicio, setDataInicio] = useState(inicial.dataInicio)
   const [dataFinal, setDataFinal] = useState(inicial.dataFinal)
   const [responsavel, setResponsavel] = useState(inicial.responsavel)
@@ -104,6 +109,7 @@ function Linha({
           codProduto: item.codProduto,
           excelRow: item.excelRow,
           qtdReal: atual.qtdReal,
+          qtdVolumes: atual.qtdVolumes,
           dataInicio: atual.dataInicio,
           dataFinal: atual.dataFinal,
           responsavel: atual.responsavel,
@@ -142,6 +148,7 @@ function Linha({
         codProduto: item.codProduto,
         excelRow: item.excelRow,
         qtdReal: next.qtdReal,
+        qtdVolumes: next.qtdVolumes,
         dataInicio: next.dataInicio,
         dataFinal: next.dataFinal,
         responsavel: next.responsavel,
@@ -201,6 +208,24 @@ function Linha({
             }}
           />
         </td>
+        <td className="w-28 px-1.5 py-1">
+          <input
+            aria-label={`Qtd volumes de ${descricao}`}
+            inputMode="decimal"
+            value={qtdVolumes}
+            className={cn(campo, 'text-right tabular-nums')}
+            onChange={(event) => {
+              const next = event.currentTarget.value
+              setQtdVolumes(next)
+              agendar({ ...valores.current, qtdVolumes: next })
+            }}
+            onBlur={(event) => {
+              const next = event.currentTarget.value
+              setQtdVolumes(next)
+              agendar({ ...valores.current, qtdVolumes: next })
+            }}
+          />
+        </td>
         <td className="w-36 px-1.5 py-1">
           <input
             aria-label={`Data início corte de ${descricao}`}
@@ -243,13 +268,13 @@ function Linha({
       </tr>
       {erro ? (
         <tr>
-          <td colSpan={8} className="px-1.5 pb-1 text-[11px] text-destructive">
+          <td colSpan={9} className="px-1.5 pb-1 text-[11px] text-destructive">
             {erro}
           </td>
         </tr>
       ) : aviso ? (
         <tr>
-          <td colSpan={8} className="px-1.5 pb-1 text-[11px] text-muted-foreground">
+          <td colSpan={9} className="px-1.5 pb-1 text-[11px] text-muted-foreground">
             {aviso}
           </td>
         </tr>
@@ -330,6 +355,7 @@ export function CorteProducaoLista({
             <th className="px-1.5 py-1">Descrição do produto</th>
             <th className="px-1.5 py-1">Responsável</th>
             <th className="px-1.5 py-1">Qtd Real Corte</th>
+            <th className="px-1.5 py-1">Qtd volumes</th>
             <th className="px-1.5 py-1">Data Inicio Corte</th>
             <th className="px-1.5 py-1">Data Final Corte</th>
             <th className="px-1.5 py-1">Lista</th>
