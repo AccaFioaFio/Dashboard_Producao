@@ -10,7 +10,18 @@ export type ProjecaoLinha = {
   participacaoFechadaPct: number
   realizadoMesAberto: number
   projecaoMesAberto: number | null
+  /** Fatia desta chave na projeção da empresa para o mês seguinte. */
   projecaoProximoMes: number | null
+  /** Ritmo dos meses fechados desta chave. Null quando o ano anterior não tem base. */
+  ritmoIndividual: number | null
+  /**
+   * Mês seguinte do ano anterior desta chave × ritmo dela.
+   * Sem base no período fechado, usa o ritmo da empresa sobre o mês dela.
+   * Null quando não há base nenhuma no ano anterior.
+   */
+  projecaoProximoMesIndividual: number | null
+  /** A projeção individual acima usou o ritmo da empresa por falta de base no período. */
+  projecaoIndividualUsaRitmoEmpresa: boolean
 }
 
 export type ProjecaoVenda = {
@@ -38,9 +49,13 @@ function soma(
 }
 
 /**
- * Uma projeção para a empresa inteira: o mesmo mês do ano anterior × ritmo dos
- * meses já fechados. Cada linha recebe a fatia que teve nesses meses fechados,
- * para o total por estado e por representante ser o mesmo número.
+ * Duas leituras do mesmo mês seguinte.
+ * Empresa: o mês do ano anterior × ritmo dos meses já fechados, repartido pela
+ * fatia de cada chave nesse período. A soma por estado e por representante é
+ * o mesmo número.
+ * Individual: o mesmo mês do ano anterior da própria chave × o ritmo dela.
+ * Sem faturado dela nos meses fechados do ano anterior, entra o ritmo da empresa
+ * sobre o mês dela. Sem nenhuma base, a projeção individual fica vazia.
  */
 export function calcularProjecao({
   serie,
@@ -78,6 +93,14 @@ export function calcularProjecao({
     const fechado =
       mesesFechados >= 1 ? soma(serie, ano, 1, mesesFechados, chave) : 0
     const parte = atualFechado > 0 ? fechado / atualFechado : 0
+    const anteriorChave =
+      mesesFechados >= 1 ? soma(serie, ano - 1, 1, mesesFechados, chave) : 0
+    const baseProximoChave =
+      mesProximo != null ? soma(serie, ano - 1, mesProximo, mesProximo, chave) : 0
+    const ritmoIndividual = anteriorChave > 0 ? fechado / anteriorChave : null
+    const usaRitmoEmpresa =
+      mesProximo != null && ritmoIndividual == null && ritmoGeral != null && baseProximoChave > 0
+    const ritmoIndividualAplicado = ritmoIndividual ?? (usaRitmoEmpresa ? ritmoGeral : null)
     porChave.set(chave, {
       participacaoFechadaPct: parte * 100,
       realizadoMesAberto:
@@ -85,6 +108,12 @@ export function calcularProjecao({
       projecaoMesAberto: ritmoGeral == null ? null : projecaoMesAberto * parte,
       projecaoProximoMes:
         ritmoGeral == null || mesProximo == null ? null : projecaoProximoMes * parte,
+      ritmoIndividual,
+      projecaoProximoMesIndividual:
+        ritmoIndividualAplicado == null || mesProximo == null
+          ? null
+          : baseProximoChave * ritmoIndividualAplicado,
+      projecaoIndividualUsaRitmoEmpresa: usaRitmoEmpresa,
     })
   }
 

@@ -16,6 +16,9 @@ export type VendaRepresentanteRow = {
   realizadoMesAberto: number
   projecaoMesAberto: number | null
   projecaoProximoMes: number | null
+  ritmoIndividual: number | null
+  projecaoProximoMesIndividual: number | null
+  projecaoIndividualUsaRitmoEmpresa: boolean
 }
 
 export type VendasRepresentanteData = {
@@ -195,6 +198,9 @@ export function getVendasPorRepresentante(filters: DashFilters): VendasRepresent
       realizadoMesAberto: linha?.realizadoMesAberto ?? 0,
       projecaoMesAberto: linha?.projecaoMesAberto ?? null,
       projecaoProximoMes: linha?.projecaoProximoMes ?? null,
+      ritmoIndividual: linha?.ritmoIndividual ?? null,
+      projecaoProximoMesIndividual: linha?.projecaoProximoMesIndividual ?? null,
+      projecaoIndividualUsaRitmoEmpresa: linha?.projecaoIndividualUsaRitmoEmpresa ?? false,
     }
   })
 

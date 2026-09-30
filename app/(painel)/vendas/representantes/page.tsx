@@ -29,6 +29,29 @@ function formatTendencia(ritmo: number | null) {
   return `${pct > 0 ? '+' : ''}${pct}% vs 2025`
 }
 
+function formatRitmoCurto(ritmo: number | null) {
+  if (ritmo == null || !Number.isFinite(ritmo)) return null
+  const pct = Math.round((ritmo - 1) * 100)
+  if (pct === 0) return 'igual a 2025'
+  return `${pct > 0 ? '+' : ''}${pct}% vs 2025`
+}
+
+function formatProjecaoIndividual(
+  valor: number | null,
+  ritmo: number | null,
+  usaRitmoEmpresa: boolean,
+  mesLabel: string,
+) {
+  if (valor == null) return 'sem base'
+  if (!usaRitmoEmpresa && valor === 0 && ritmo != null && ritmo > 0) {
+    return `sem ${mesLabel}/2025`
+  }
+  const money = formatMoneyCompact(valor)
+  if (usaRitmoEmpresa) return `${money} · ritmo da empresa`
+  const ritmoTxt = formatRitmoCurto(ritmo)
+  return ritmoTxt ? `${money} · ${ritmoTxt}` : money
+}
+
 export default async function VendasRepresentantePage({
   searchParams,
 }: {
@@ -55,7 +78,7 @@ export default async function VendasRepresentantePage({
   return (
     <PageShell
       title="Venda por representante"
-      description={`Venda final de ${YEAR} pelo vendedor do pedido. A diferença é a distância para o representante acima no ranking. A projeção é o mesmo mês de ${YEAR - 1} no ritmo da empresa, repartido pela fatia de cada representante nos meses já fechados.`}
+      description={`Venda final de ${YEAR} pelo vendedor do pedido. A diferença é a distância para o representante acima no ranking. ${mesProximoLabel}\u00A0·\u00A0empresa reparte a projeção da empresa pela fatia de cada um nos meses fechados. ${mesProximoLabel}\u00A0·\u00A0ritmo dele é o mesmo mês de ${YEAR - 1} desse representante no ritmo dele.`}
       actions={<VendasEstadosButton filters={filters} />}
     >
       <FilterBar
@@ -116,7 +139,7 @@ export default async function VendasRepresentantePage({
               label={`Projeção ${mesProximoLabel}`}
               value={formatMoneyCompact(data.projecaoProximoMes)}
               hint={formatTendencia(data.ritmoGeral)}
-              detail={`Um número só para a empresa: ${mesProximoLabel} de ${YEAR - 1} × ritmo dos meses fechados. Na tabela, cada representante recebe a fatia do que faturou nesses meses. A mesma conta vale para os estados.`}
+              detail={`Um número só para a empresa: ${mesProximoLabel} de ${YEAR - 1} × ritmo dos meses fechados. Na tabela, ${mesProximoLabel} · empresa reparte esse total pela fatia de cada representante. ${mesProximoLabel} · ritmo dele usa o ${mesProximoLabel} de ${YEAR - 1} e o ritmo desse representante, e a soma dessas linhas pode diferir deste cartão.`}
               tone="indigo"
             />
           </KpiGrid>
@@ -129,7 +152,7 @@ export default async function VendasRepresentantePage({
                   : `${selected.posicao}º no ranking`}
               </p>
               <h2 className="text-lg font-bold tracking-tight break-words">{selected.representante}</h2>
-              <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm sm:grid-cols-3 xl:grid-cols-7">
                 <div>
                   <dt className="text-[10px] text-muted-foreground">Faturado</dt>
                   <dd className="font-mono font-medium tabular-nums">
@@ -163,17 +186,34 @@ export default async function VendasRepresentantePage({
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-[10px] text-muted-foreground">Projeção {mesProximoLabel}</dt>
+                  <dt className="text-[10px] text-muted-foreground">{mesProximoLabel} · empresa</dt>
                   <dd className="font-mono font-medium tabular-nums">
                     {selected.projecaoProximoMes == null
                       ? '—'
                       : formatMoneyCompact(selected.projecaoProximoMes)}
                   </dd>
                 </div>
+                <div>
+                  <dt className="text-[10px] text-muted-foreground">{mesProximoLabel} · ritmo dele</dt>
+                  <dd className="font-mono font-medium tabular-nums">
+                    {formatProjecaoIndividual(
+                      selected.projecaoProximoMesIndividual,
+                      selected.ritmoIndividual,
+                      selected.projecaoIndividualUsaRitmoEmpresa,
+                      mesProximoLabel,
+                    )}
+                  </dd>
+                </div>
               </dl>
               <p className="text-[10px] leading-snug text-muted-foreground">
-                {formatNumber(selected.participacaoFechadaPct, 1)}% dos meses fechados
+                {formatNumber(selected.participacaoFechadaPct, 1)}% da projeção da empresa
                 · {mesAbertoLabel} realizado {formatMoneyCompact(selected.realizadoMesAberto)}
+                ·{' '}
+                {selected.projecaoIndividualUsaRitmoEmpresa
+                  ? 'ritmo dele usa o ritmo da empresa, porque não há base nos meses fechados de 2025'
+                  : selected.ritmoIndividual == null
+                    ? 'ritmo dele sem base em 2025'
+                    : `ritmo dele ${formatRitmoCurto(selected.ritmoIndividual)}`}
               </p>
             </section>
           ) : null}
@@ -183,8 +223,12 @@ export default async function VendasRepresentantePage({
             <p className="text-xs text-muted-foreground">
               Diferença = quanto este representante fica atrás do imediatamente acima,
               em reais e em pontos de participação. Pedidos e clientes são a contagem
-              da venda final no recorte. Projeção {mesProximoLabel} é a fatia dele na
-              projeção da empresa e não acompanha o filtro de mês.
+              da venda final no recorte. {mesProximoLabel} · empresa é a fatia dele na
+              projeção da empresa. {mesProximoLabel} · ritmo dele é o {mesProximoLabel}{' '}
+              de {YEAR - 1} desse representante multiplicado pelo ritmo dele nos meses
+              já fechados. As duas colunas ignoram o filtro de mês. Sem venda dele nesse
+              período de {YEAR - 1}, a coluna fica sem base; se a base existir só no mês,
+              entra o ritmo da empresa.
             </p>
             <SimpleTable
               comfortable
@@ -196,7 +240,8 @@ export default async function VendasRepresentantePage({
                 { key: 'pedidos', label: 'Pedidos', numeric: true },
                 { key: 'clientes', label: 'Clientes', numeric: true },
                 { key: 'diferenca', label: 'Diferença', numeric: true },
-                { key: 'projecao', label: `Projeção ${mesProximoLabel}`, numeric: true },
+                { key: 'projecao', label: `${mesProximoLabel} · empresa`, numeric: true },
+                { key: 'projecaoIndividual', label: `${mesProximoLabel} · ritmo dele`, numeric: true },
               ]}
               rows={data.ranking.map((row) => ({
                 href: hrefFor(row.representante),
@@ -215,6 +260,12 @@ export default async function VendasRepresentantePage({
                   row.projecaoProximoMes == null
                     ? '—'
                     : formatMoneyCompact(row.projecaoProximoMes),
+                projecaoIndividual: formatProjecaoIndividual(
+                  row.projecaoProximoMesIndividual,
+                  row.ritmoIndividual,
+                  row.projecaoIndividualUsaRitmoEmpresa,
+                  mesProximoLabel,
+                ),
               }))}
               empty="Nenhuma venda final neste recorte."
             />
