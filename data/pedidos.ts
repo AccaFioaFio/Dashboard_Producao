@@ -176,6 +176,19 @@ export type SerieDiariaRow = {
   revisao: number
 }
 
+export type ItemPedidoConsulta = {
+  codProduto: string
+  excelRow: number
+  nomeProduto: string | null
+  qtdPedida: number | null
+  qtdReal: number | null
+  qtdVolumes: number | null
+  dataInicio: string | null
+  dataFinal: string | null
+  responsavel: string | null
+  avisoDataFinal: string | null
+}
+
 export type ItensPedidoConsulta = {
   pedidoInformado: string
   pedidoNorm: string | null
@@ -183,19 +196,17 @@ export type ItensPedidoConsulta = {
   canal: string | null
   status: string | null
   loaded: boolean
-  itens: {
-    codProduto: string
-    excelRow: number
-    nomeProduto: string | null
-    qtdPedida: number
-    qtdReal: number | null
-    qtdVolumes: number | null
-    dataInicio: string | null
-    dataFinal: string | null
-    responsavel: string | null
-    avisoDataFinal: string | null
-  }[]
+  /** Pedido na Corte e Costura, sem linhas deste número em Itens.xlsx. */
+  inclusaoManual: boolean
+  itens: ItemPedidoConsulta[]
 }
+
+export type ProdutoBaseItens = {
+  codProduto: string
+  nomeProduto: string | null
+}
+
+const COD_PRODUTO_IGUAL = `replace(trim(cod_produto), ' ', '') = replace(trim(?), ' ', '')`
 
 function sqlite() {
   return getSqlite()
@@ -686,6 +697,86 @@ export const getSerieDiaria = cache(async (dias = 30): Promise<SerieDiariaRow[]>
   return [...byDay.values()]
 })
 
+export function produtoNaBaseItens(cod: string): ProdutoBaseItens | null {
+  const texto = cod.trim()
+  if (!texto || !hasPedidoItemTable()) return null
+  const row = sqlite()
+    .prepare(
+      `SELECT cod_produto as codProduto, nome_produto as nomeProduto
+       FROM fato_pedido_item
+       WHERE ${COD_PRODUTO_IGUAL}
+       ORDER BY CASE WHEN nome_produto IS NOT NULL AND trim(nome_produto) != '' THEN 0 ELSE 1 END,
+                excel_row DESC
+       LIMIT 1`,
+    )
+    .get(texto) as ProdutoBaseItens | undefined
+  return row ?? null
+}
+
+export function cabecaPedidoCorte(pedidoNorm: string) {
+  return (
+    sqlite()
+      .prepare(
+        `SELECT cliente, canal, status_vigente as status
+         FROM fato_corte_pedido
+         WHERE pedido_norm = ?`,
+      )
+      .get(pedidoNorm) as
+      | { cliente: string | null; canal: string | null; status: string | null }
+      | undefined
+  ) ?? null
+}
+
+async function lancamentosDoPedido(pedidoNorm: string) {
+  const locais = new Map<string, { excelRow: number } & CorteNuvemLancamento>()
+  for (const lancamento of sqlite()
+    .prepare(
+      `SELECT cod_produto as codProduto, excel_row as excelRow,
+              qtd_real as qtdReal, qtd_volumes as qtdVolumes,
+              data_inicio as dataInicio, data_final as dataFinal,
+              responsavel, aviso_data_final as avisoDataFinal,
+              atualizado_em as atualizadoEm
+       FROM corte_producao_lancamento
+       WHERE pedido_norm = ?
+       ORDER BY atualizado_em DESC`,
+    )
+    .all(pedidoNorm) as ({
+    codProduto: string
+    excelRow: number
+  } & CorteNuvemLancamento)[]) {
+    if (!locais.has(lancamento.codProduto)) locais.set(lancamento.codProduto, lancamento)
+  }
+
+  let nuvem = new Map<string, CorteNuvemLancamento>()
+  try {
+    nuvem = await lerLancamentosNuvem(pedidoNorm)
+  } catch (error) {
+    console.error('leitura do corte na nuvem falhou', pedidoNorm, error)
+  }
+  return { locais, nuvem }
+}
+
+function itemDoLancamento(
+  codProduto: string,
+  excelRow: number,
+  lancamento: CorteNuvemLancamento | undefined,
+  qtdPedida: number | null,
+  nomeProduto: string | null,
+): ItemPedidoConsulta {
+  return {
+    codProduto,
+    excelRow,
+    nomeProduto,
+    qtdPedida,
+    qtdReal: lancamento?.qtdReal ?? null,
+    qtdVolumes: lancamento?.qtdVolumes ?? null,
+    dataInicio: lancamento?.dataInicio ?? null,
+    dataFinal: lancamento?.dataFinal ?? null,
+    responsavel: lancamento?.responsavel ?? null,
+    avisoDataFinal: lancamento?.avisoDataFinal ?? null,
+  }
+}
+
 export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoConsulta> => {
   await ensureCloudDatabase()
   const pedidoInformado = parsePedidoParam(raw).trim()
@@ -696,6 +787,7 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
     canal: null,
     status: null,
     loaded: hasPedidoItemTable(),
+    inclusaoManual: false,
     itens: [],
   }
   if (!pedidoInformado || !vazio.loaded) return vazio
@@ -732,29 +824,39 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
     avisoDataFinal: string | null
   }[]
 
-  const locais = new Map<string, CorteNuvemLancamento>()
-  for (const lancamento of sqlite()
-    .prepare(
-      `SELECT cod_produto as codProduto, qtd_real as qtdReal, qtd_volumes as qtdVolumes,
-              data_inicio as dataInicio, data_final as dataFinal,
-              responsavel, aviso_data_final as avisoDataFinal,
-              atualizado_em as atualizadoEm
-       FROM corte_producao_lancamento
-       WHERE pedido_norm = ?
-       ORDER BY atualizado_em DESC`,
-    )
-    .all(pedidoNorm) as ({ codProduto: string } & CorteNuvemLancamento)[]) {
-    if (!locais.has(lancamento.codProduto)) locais.set(lancamento.codProduto, lancamento)
-  }
-
-  let nuvem = new Map<string, CorteNuvemLancamento>()
-  try {
-    nuvem = await lerLancamentosNuvem(pedidoNorm)
-  } catch (error) {
-    console.error('leitura do corte na nuvem falhou', pedidoNorm, error)
-  }
-
+  const { locais, nuvem } = await lancamentosDoPedido(pedidoNorm)
   const cabeca = rows[0]
+  if (!cabeca) {
+    const corte = cabecaPedidoCorte(pedidoNorm)
+    if (!corte) {
+      return { ...vazio, pedidoNorm, loaded: true }
+    }
+    const codigos = new Set<string>([...locais.keys(), ...nuvem.keys()])
+    const itens = [...codigos].map((codProduto) => {
+      const local = locais.get(codProduto)
+      const lancamento = escolherLancamento(local, nuvem.get(codProduto))
+      const produto = produtoNaBaseItens(codProduto)
+      return itemDoLancamento(
+        produto?.codProduto ?? codProduto,
+        local?.excelRow ?? 0,
+        lancamento,
+        null,
+        produto?.nomeProduto ?? null,
+      )
+    })
+    itens.sort((a, b) => a.codProduto.localeCompare(b.codProduto))
+    return {
+      pedidoInformado,
+      pedidoNorm,
+      cliente: corte.cliente,
+      canal: corte.canal,
+      status: corte.status,
+      loaded: true,
+      inclusaoManual: true,
+      itens,
+    }
+  }
+
   const itens = collapseItensCorte(
     rows.map((row) => ({
       ...row,
@@ -768,28 +870,24 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
   )
   return {
     pedidoInformado,
-    pedidoNorm: cabeca?.pedidoNorm ?? pedidoNorm,
-    cliente: cabeca?.cliente ?? null,
-    canal: cabeca?.canal ?? null,
-    status: cabeca?.status ?? null,
+    pedidoNorm: cabeca.pedidoNorm,
+    cliente: cabeca.cliente,
+    canal: cabeca.canal,
+    status: cabeca.status,
     loaded: true,
+    inclusaoManual: false,
     itens: itens.map((row) => {
       const lancamento = escolherLancamento(
         locais.get(row.codProduto),
         nuvem.get(row.codProduto),
       )
-      return {
-        codProduto: row.codProduto,
-        excelRow: row.excelRow,
-        nomeProduto: row.nomeProduto,
-        qtdPedida: row.qtdPedida,
-        qtdReal: lancamento?.qtdReal ?? null,
-        qtdVolumes: lancamento?.qtdVolumes ?? null,
-        dataInicio: lancamento?.dataInicio ?? null,
-        dataFinal: lancamento?.dataFinal ?? null,
-        responsavel: lancamento?.responsavel ?? null,
-        avisoDataFinal: lancamento?.avisoDataFinal ?? null,
-      }
+      return itemDoLancamento(
+        row.codProduto,
+        row.excelRow,
+        lancamento,
+        row.qtdPedida,
+        row.nomeProduto,
+      )
     }),
   }
 })

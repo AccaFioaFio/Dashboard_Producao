@@ -2,12 +2,19 @@
 
 import { revalidatePath } from 'next/cache'
 import { getSqlite } from '@/db'
-import { getItensPorPedido } from '@/data/pedidos'
+import {
+  cabecaPedidoCorte,
+  getItensPorPedido,
+  produtoNaBaseItens,
+} from '@/data/pedidos'
 import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { canAccessPath } from '@/lib/auth/access'
 import { readSession } from '@/lib/auth/cookie'
 import { pedidoDigits } from '@/lib/pedido'
-import { responsavelCorteValido } from '@/lib/corte-producao'
+import {
+  EXCEL_ROW_FORA_DA_CARGA,
+  responsavelCorteValido,
+} from '@/lib/corte-producao'
 import {
   apagarLancamentoNuvem,
   criarAlertaNuvem,
@@ -61,6 +68,48 @@ function quantidade(value: string): number | null | 'invalida' {
   return numero
 }
 
+export type BuscarProdutoLancamentoResult =
+  | { ok: true; codProduto: string; nomeProduto: string | null }
+  | { ok: false; error: string }
+
+export async function buscarProdutoParaLancamento(
+  pedidoNorm: string,
+  codInformado: string,
+): Promise<BuscarProdutoLancamentoResult> {
+  const session = await readSession()
+  if (!session || !canAccessPath('/corte', session.acessos)) {
+    return { ok: false, error: 'Sem permissão para incluir produto neste pedido.' }
+  }
+
+  await ensureCloudDatabase()
+  const pedido = pedidoDigits(pedidoNorm)
+  const cod = codInformado.trim()
+  if (!pedido || !cod) {
+    return { ok: false, error: 'Informe o código do produto.' }
+  }
+  if (!cabecaPedidoCorte(pedido)) {
+    return { ok: false, error: 'Este pedido não está na Corte e Costura.' }
+  }
+  const produto = produtoNaBaseItens(cod)
+  if (!produto) {
+    return { ok: false, error: 'Código não encontrado na base de itens.' }
+  }
+  const jaNaCarga = getSqlite()
+    .prepare(
+      `SELECT 1 as v FROM fato_pedido_item
+       WHERE pedido_norm = ? AND replace(trim(cod_produto), ' ', '') = replace(trim(?), ' ', '')`,
+    )
+    .get(pedido, produto.codProduto)
+  if (jaNaCarga) {
+    return { ok: false, error: 'Este código já está na carga deste pedido.' }
+  }
+  return {
+    ok: true,
+    codProduto: produto.codProduto,
+    nomeProduto: produto.nomeProduto,
+  }
+}
+
 export async function salvarCorteProducao(
   input: SalvarCorteProducaoInput,
 ): Promise<SalvarCorteProducaoResult> {
@@ -72,9 +121,10 @@ export async function salvarCorteProducao(
   await ensureCloudDatabase()
 
   const pedidoNorm = pedidoDigits(input.pedidoNorm)
-  const codProduto = input.codProduto.trim()
+  let codProduto = input.codProduto.trim()
   const excelRow = Number(input.excelRow)
-  if (!pedidoNorm || !codProduto || !Number.isInteger(excelRow) || excelRow < 1) {
+  const foraDaCarga = excelRow === EXCEL_ROW_FORA_DA_CARGA
+  if (!pedidoNorm || !codProduto || !Number.isInteger(excelRow) || excelRow < 0) {
     return { ok: false, error: 'Item do pedido inválido.' }
   }
 
@@ -104,14 +154,25 @@ export async function salvarCorteProducao(
     return { ok: false, error: 'Escolha um responsável da lista.' }
   }
 
-  const existe = getSqlite()
-    .prepare(
-      `SELECT 1 as v FROM fato_pedido_item
-       WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
-    )
-    .get(pedidoNorm, codProduto, excelRow)
-  if (!existe) {
-    return { ok: false, error: 'Este item não está na carga do pedido.' }
+  if (foraDaCarga) {
+    if (!cabecaPedidoCorte(pedidoNorm)) {
+      return { ok: false, error: 'Este pedido não está na Corte e Costura.' }
+    }
+    const produto = produtoNaBaseItens(codProduto)
+    if (!produto) {
+      return { ok: false, error: 'Código não encontrado na base de itens.' }
+    }
+    codProduto = produto.codProduto
+  } else {
+    const existe = getSqlite()
+      .prepare(
+        `SELECT 1 as v FROM fato_pedido_item
+         WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
+      )
+      .get(pedidoNorm, codProduto, excelRow)
+    if (!existe) {
+      return { ok: false, error: 'Este item não está na carga do pedido.' }
+    }
   }
 
   const db = getSqlite()

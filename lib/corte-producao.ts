@@ -1,5 +1,8 @@
 import { fold } from '@/lib/keys'
 
+/** Linha lançada na tela quando o pedido não tem itens em Itens.xlsx. */
+export const EXCEL_ROW_FORA_DA_CARGA = 0
+
 export const RESPONSAVEIS_CORTE = ['Jair', 'Gustavo', 'Vitor', 'Leonardo'] as const
 
 function combinacoes(nomes: readonly string[]) {

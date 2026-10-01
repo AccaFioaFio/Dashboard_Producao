@@ -1,11 +1,16 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { ListChecks } from 'lucide-react'
-import { salvarCorteProducao, salvarListaCortador } from '@/app/actions/corte-producao'
+import { ListChecks, Plus } from 'lucide-react'
+import {
+  buscarProdutoParaLancamento,
+  salvarCorteProducao,
+  salvarListaCortador,
+} from '@/app/actions/corte-producao'
 import { Button } from '@/components/ui/button'
-import { OPCOES_RESPONSAVEL_CORTE } from '@/lib/corte-producao'
+import { Input } from '@/components/ui/input'
+import { EXCEL_ROW_FORA_DA_CARGA, OPCOES_RESPONSAVEL_CORTE } from '@/lib/corte-producao'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -13,13 +18,17 @@ export type CorteProducaoItem = {
   codProduto: string
   excelRow: number
   nomeProduto: string | null
-  qtdPedida: number
+  qtdPedida: number | null
   qtdReal: number | null
   qtdVolumes: number | null
   dataInicio: string | null
   dataFinal: string | null
   responsavel: string | null
   avisoDataFinal: string | null
+}
+
+function chaveCodigo(cod: string) {
+  return cod.trim().replaceAll(' ', '').toLocaleLowerCase('pt-BR')
 }
 
 type Lancamento = {
@@ -163,7 +172,9 @@ function Linha({
     <>
       <tr className="border-t border-border/80">
         <td className="w-px px-1.5 py-1 text-right font-medium whitespace-nowrap tabular-nums">
-          {formatNumber(item.qtdPedida, item.qtdPedida % 1 ? 2 : 0)}
+          {item.qtdPedida == null
+            ? '—'
+            : formatNumber(item.qtdPedida, item.qtdPedida % 1 ? 2 : 0)}
         </td>
         <td className="px-1.5 py-1 font-medium whitespace-nowrap tabular-nums">
           {item.codProduto}
@@ -283,18 +294,95 @@ function Linha({
   )
 }
 
+function IncluirProduto({
+  pedidoNorm,
+  existentes,
+  onIncluir,
+}: {
+  pedidoNorm: string
+  existentes: Set<string>
+  onIncluir: (item: CorteProducaoItem) => void
+}) {
+  const [cod, setCod] = useState('')
+  const [erro, setErro] = useState<string | null>(null)
+  const [pendente, start] = useTransition()
+
+  function enviar(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const texto = cod.trim()
+    if (!texto) {
+      setErro('Informe o código do produto.')
+      return
+    }
+    setErro(null)
+    start(async () => {
+      const result = await buscarProdutoParaLancamento(pedidoNorm, texto)
+      if (!result.ok) {
+        setErro(result.error)
+        return
+      }
+      if (existentes.has(chaveCodigo(result.codProduto))) {
+        setErro('Este código já está na lista.')
+        return
+      }
+      setCod('')
+      onIncluir({
+        codProduto: result.codProduto,
+        excelRow: EXCEL_ROW_FORA_DA_CARGA,
+        nomeProduto: result.nomeProduto,
+        qtdPedida: null,
+        qtdReal: null,
+        qtdVolumes: null,
+        dataInicio: null,
+        dataFinal: null,
+        responsavel: null,
+        avisoDataFinal: null,
+      })
+    })
+  }
+
+  return (
+    <form onSubmit={enviar} className="flex flex-wrap items-end gap-2">
+      <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground">
+        Código do produto
+        <Input
+          value={cod}
+          onChange={(event) => setCod(event.currentTarget.value)}
+          placeholder="Código que já existe em Itens"
+          autoComplete="off"
+          disabled={pendente}
+        />
+      </label>
+      <Button type="submit" size="sm" disabled={pendente}>
+        <Plus />
+        {pendente ? 'Buscando…' : 'Incluir'}
+      </Button>
+      {erro ? <p className="w-full text-xs text-destructive">{erro}</p> : null}
+    </form>
+  )
+}
+
 export function CorteProducaoLista({
   pedidoNorm,
   itens,
+  permitirInclusao = false,
 }: {
   pedidoNorm: string
   itens: CorteProducaoItem[]
+  permitirInclusao?: boolean
 }) {
+  const [extras, setExtras] = useState<CorteProducaoItem[]>([])
   const [ocupadas, setOcupadas] = useState<Record<string, boolean>>({})
   const [lista, setLista] = useState<{ ok: boolean; texto: string } | null>(null)
   const [salvando, startSalvar] = useTransition()
   const router = useRouter()
   const gravando = Object.values(ocupadas).some(Boolean)
+  const chavesServidor = new Set(itens.map((item) => chaveCodigo(item.codProduto)))
+  const visiveis = [
+    ...itens,
+    ...extras.filter((item) => !chavesServidor.has(chaveCodigo(item.codProduto))),
+  ]
+  const chaves = new Set(visiveis.map((item) => chaveCodigo(item.codProduto)))
 
   function marcarOcupada(chave: string, ocupada: boolean) {
     setOcupadas((atual) => {
@@ -336,6 +424,13 @@ export function CorteProducaoLista({
             : 'O que já entrou na lista fica neste pedido. O próximo clique leva só os itens novos com data final. O e-mail está pausado.'}
         </p>
       </div>
+      {permitirInclusao ? (
+        <IncluirProduto
+          pedidoNorm={pedidoNorm}
+          existentes={chaves}
+          onIncluir={(item) => setExtras((atual) => [...atual, item])}
+        />
+      ) : null}
       {lista ? (
         <p
           className={cn(
@@ -346,6 +441,11 @@ export function CorteProducaoLista({
           {lista.texto}
         </p>
       ) : null}
+      {!visiveis.length ? (
+        <p className="text-xs text-muted-foreground">
+          Informe o código do produto para trazer a descrição da base de itens.
+        </p>
+      ) : (
       <div className="card-surface table-surface min-w-0 overflow-x-auto">
       <table className={cn('w-full text-left text-[10px] leading-snug')}>
         <thead className="bg-muted/50 text-[9px] font-semibold tracking-wide text-muted-foreground uppercase">
@@ -362,7 +462,7 @@ export function CorteProducaoLista({
           </tr>
         </thead>
         <tbody>
-          {itens.map((item) => (
+          {visiveis.map((item) => (
             <Linha
               key={`${item.codProduto}:${item.excelRow}`}
               pedidoNorm={pedidoNorm}
@@ -375,6 +475,7 @@ export function CorteProducaoLista({
         </tbody>
       </table>
       </div>
+      )}
     </div>
   )
 }

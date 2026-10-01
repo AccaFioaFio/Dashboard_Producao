@@ -25,10 +25,12 @@ export default async function CorteProducaoPage({
   const params = await searchParams
   const pedido = first(params.pedido)?.trim() ?? ''
   const consulta = pedido ? await getItensPorPedido(pedido) : null
+  const temQtdPedida = consulta?.itens.some((row) => row.qtdPedida != null) ?? false
   const totalPecas =
-    consulta?.itens.reduce((sum, row) => sum + row.qtdPedida, 0) ?? 0
+    consulta?.itens.reduce((sum, row) => sum + (row.qtdPedida ?? 0), 0) ?? 0
   const totalReal =
     consulta?.itens.reduce((sum, row) => sum + (row.qtdReal ?? 0), 0) ?? 0
+  const mostrarLista = Boolean(consulta?.itens.length || consulta?.inclusaoManual)
 
   return (
     <PageShell
@@ -65,28 +67,40 @@ export default async function CorteProducaoPage({
           A carga de Itens.xlsx ainda não entrou. Atualize os dados em
           Configurações.
         </p>
-      ) : consulta.itens.length ? (
+      ) : mostrarLista ? (
         <>
           <KpiGrid columns={4}>
             <KpiCard
               label="Pedido"
               value={consulta.pedidoNorm ?? consulta.pedidoInformado}
               hint={consulta.cliente ?? 'Sem cliente nesta carga'}
-              detail="Número do pedido pesquisado em Itens.xlsx."
+              detail={
+                consulta.inclusaoManual
+                  ? 'Pedido localizado na Corte e Costura.'
+                  : 'Número do pedido pesquisado em Itens.xlsx.'
+              }
               tone="indigo"
             />
             <KpiCard
               label="Itens"
               value={formatInt(consulta.itens.length)}
               hint={consulta.status ?? '—'}
-              detail="Cada código deste pedido aparece uma vez."
+              detail={
+                consulta.inclusaoManual
+                  ? 'Produtos incluídos pelo código. A descrição vem da base de itens.'
+                  : 'Cada código deste pedido aparece uma vez.'
+              }
               tone="teal"
             />
             <KpiCard
               label="Quantidade pedida"
-              value={formatInt(totalPecas)}
+              value={temQtdPedida ? formatInt(totalPecas) : '—'}
               hint={consulta.canal ?? '—'}
-              detail="Soma de Qtd Pedida dos itens deste pedido."
+              detail={
+                consulta.inclusaoManual
+                  ? 'Este pedido não tem quantidade pedida em Itens.xlsx.'
+                  : 'Soma de Qtd Pedida dos itens deste pedido.'
+              }
               tone="amber"
             />
             <KpiCard
@@ -101,12 +115,15 @@ export default async function CorteProducaoPage({
           <section className="flex min-w-0 flex-col gap-2">
             <h2 className="text-sm font-medium">Itens do pedido</h2>
             <p className="text-xs text-muted-foreground">
-              {`Itens.xlsx · ${formatInt(consulta.itens.length)} produto${consulta.itens.length === 1 ? '' : 's'}. A qtd pedida é fixa. O que já foi preenchido e o que já entrou na lista continuam neste pedido.`}
+              {consulta.inclusaoManual
+                ? 'Este pedido está na Corte e Costura e não tem linhas em Itens.xlsx. Informe o código do produto: a descrição entra da base de itens e a quantidade pedida fica em branco. Responsável, quantidades e datas gravam como nos outros pedidos.'
+                : `Itens.xlsx · ${formatInt(consulta.itens.length)} produto${consulta.itens.length === 1 ? '' : 's'}. A qtd pedida é fixa. O que já foi preenchido e o que já entrou na lista continuam neste pedido.`}
             </p>
             <CorteProducaoLista
               key={consulta.pedidoNorm ?? pedido}
               pedidoNorm={consulta.pedidoNorm ?? pedido}
               itens={consulta.itens}
+              permitirInclusao={consulta.inclusaoManual}
             />
           </section>
         </>
