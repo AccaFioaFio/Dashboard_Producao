@@ -10,7 +10,13 @@ import {
   sameMtimes,
   type SourceMtimes,
 } from '../lib/etl/publish'
+import { formatLogTime } from '../lib/format'
 import { sourceFilePaths } from '../lib/paths'
+import {
+  originWatchDirs,
+  readOriginMtimes,
+  syncExcelToProject,
+} from '../lib/etl/sync-sources'
 
 /** Espera após o último save; tecto máximo desde o 1º evento (OneDrive/Excel spamma events). */
 const DEBOUNCE_MS = 45_000
@@ -19,7 +25,7 @@ const POLL_MS = 30_000
 const BACKOFF_MS = [5_000, 15_000, 30_000, 60_000]
 
 function log(message: string) {
-  console.log(`${new Date().toISOString()} ${message}`)
+  console.log(`${formatLogTime()} ${message}`)
 }
 
 function sleep(ms: number) {
@@ -47,7 +53,7 @@ async function main() {
 
 async function runWatch() {
   const paths = sourceFilePaths()
-  log('vigia no ar (Excel → SQLite → Supabase). Ctrl+C para parar.')
+  log('vigia no ar (origem compartilhada → SQLite → Supabase). Ctrl+C para parar.')
   log(
     `debounce ${DEBOUNCE_MS / 1000}s após o último save; no máximo ${MAX_WAIT_MS / 1000}s desde a 1ª mudança.`,
   )
@@ -61,6 +67,7 @@ async function runWatch() {
 
   let lastSuccess: SourceMtimes | null = null
   let lastPermanentFail: SourceMtimes | null = null
+  let lastOriginKey = ''
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
   let maxWaitTimer: ReturnType<typeof setTimeout> | null = null
   let firstQueuedAt = 0
@@ -122,8 +129,32 @@ async function runWatch() {
     }
   }
 
+  function originKey() {
+    return JSON.stringify(readOriginMtimes())
+  }
+
   async function publishWithRetry() {
     for (;;) {
+      const key = originKey()
+      if (lastOriginKey && key === lastOriginKey) {
+        log('sem mudança na origem; ignorado')
+        backoffIndex = 0
+        return
+      }
+
+      const synced = await syncExcelToProject()
+      if (!synced.ok) {
+        if (!isRetryablePublishError(synced.error)) {
+          backoffIndex = 0
+          log(`[sinc] erro ${synced.error}`)
+          return
+        }
+        const wait = nextBackoff()
+        log(`[sinc] ${synced.error}; nova tentativa em ${wait / 1000}s`)
+        await sleep(wait)
+        continue
+      }
+
       let mtimes: SourceMtimes
       try {
         mtimes = readSourceMtimes()
@@ -136,6 +167,7 @@ async function runWatch() {
       }
 
       if (lastSuccess && sameMtimes(mtimes, lastSuccess)) {
+        lastOriginKey = key
         log('sem mudança de mtime; ignorado')
         backoffIndex = 0
         return
@@ -154,8 +186,9 @@ async function runWatch() {
         if (published.ok) {
           lastSuccess = mtimes
           lastPermanentFail = null
+          lastOriginKey = key
           backoffIndex = 0
-          log(`[carga] ok sqlite já local; publicado lidaEm=${published.lidaEm}`)
+          log(`[carga] ok sqlite já local; publicado lidaEm=${formatLogTime(published.lidaEm)}`)
           return
         }
         if (!isRetryablePublishError(published.error)) {
@@ -183,6 +216,7 @@ async function runWatch() {
           parceiros: result.parceirosLastWrite,
         }
         lastPermanentFail = null
+        lastOriginKey = key
         backoffIndex = 0
         console.log(formatPublishLog(result, paths))
         return
@@ -206,17 +240,13 @@ async function runWatch() {
     return wait
   }
 
-  const basenames = new Set(Object.values(paths).map((filePath) => path.basename(filePath)))
-  const dirs = [...new Set(Object.values(paths).map((filePath) => path.dirname(filePath)))]
+  const dirs = originWatchDirs()
   for (const dir of dirs) {
     try {
       watch(dir, (_event, filename) => {
-        if (filename) {
-          const base = path.basename(String(filename))
-          if (base.startsWith('~$')) return
-          if (!basenames.has(base)) return
-        }
-        requestPublish(filename ? String(filename) : dir)
+        const base = filename ? path.basename(String(filename)) : ''
+        if (base.startsWith('~$')) return
+        requestPublish(base || dir)
       })
       log(`observando ${dir}`)
     } catch (error) {
@@ -227,8 +257,8 @@ async function runWatch() {
 
   setInterval(() => {
     try {
-      const mtimes = readSourceMtimes()
-      if (lastSuccess && sameMtimes(mtimes, lastSuccess)) return
+      const key = originKey()
+      if (lastOriginKey && key === lastOriginKey) return
       requestPublish('poll')
     } catch {
       requestPublish('poll origem ausente')

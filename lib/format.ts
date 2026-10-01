@@ -92,6 +92,15 @@ export function formatDateTime(iso: string | null | undefined) {
   }).format(date)
 }
 
+/** Horário do relógio da máquina (o processo), com segundos. */
+export function formatLogTime(value: Date | string | null | undefined = new Date()) {
+  if (value == null || value === '') return '—'
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
 export const MONTH_LABELS = [
   'Jan',
   'Fev',

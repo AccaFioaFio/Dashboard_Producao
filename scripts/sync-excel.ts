@@ -1,4 +1,5 @@
 import { watch } from 'node:fs'
+import { formatLogTime } from '../lib/format'
 import { loadLocalEnv } from '../lib/load-env'
 import {
   originWatchDirs,
@@ -11,7 +12,7 @@ const DEBOUNCE_MS = 4_000
 const POLL_MS = 20_000
 
 function log(message: string) {
-  console.log(`${new Date().toISOString()} ${message}`)
+  console.log(`${formatLogTime()} ${message}`)
 }
 
 function formatSync(result: SyncResult) {

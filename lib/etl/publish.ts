@@ -3,6 +3,7 @@ import { getSqlite } from '@/db'
 import { publishSqliteToSupabase } from '@/lib/etl/publish-supabase'
 import { refreshFromExcel, type RefreshResult } from '@/lib/etl/refresh'
 import { isSupabaseWriteConfigured } from '@/lib/supabase/admin'
+import { formatLogTime } from '@/lib/format'
 import { sourceFilePaths, type SourceFilePaths } from '@/lib/paths'
 
 export type SourceMtimes = {
@@ -100,13 +101,13 @@ export async function publishCargaFromExcel(): Promise<RefreshResult> {
 export function formatPublishLog(result: RefreshResult, paths: SourceFilePaths) {
   if (!result.ok) return `[carga] erro ${result.error}`
   return [
-    `[carga] ok lidaEm=${result.lidaEm} (SQLite local + Supabase)`,
-    `  corte    ${result.corteLastWrite}  ${paths.corte}`,
-    `  oficinas ${result.oficinasLastWrite}  ${paths.oficinas}`,
-    `  signus   ${result.signusLastWrite}  ${paths.signus}`,
-    `  estoque  ${result.estoqueLastWrite}  ${paths.estoque}`,
-    `  pedidos  ${result.pedidosLastWrite ?? '—'}  ${paths.pedidos}`,
-    `  itens    ${result.itensLastWrite ?? '—'}  ${paths.itens}`,
-    `  parceiros ${result.parceirosLastWrite ?? '—'}  ${paths.parceiros}`,
+    `[carga] ok lidaEm=${formatLogTime(result.lidaEm)} (SQLite local + Supabase)`,
+    `  corte    ${formatLogTime(result.corteLastWrite)}  ${paths.corte}`,
+    `  oficinas ${formatLogTime(result.oficinasLastWrite)}  ${paths.oficinas}`,
+    `  signus   ${formatLogTime(result.signusLastWrite)}  ${paths.signus}`,
+    `  estoque  ${formatLogTime(result.estoqueLastWrite)}  ${paths.estoque}`,
+    `  pedidos  ${formatLogTime(result.pedidosLastWrite)}  ${paths.pedidos}`,
+    `  itens    ${formatLogTime(result.itensLastWrite)}  ${paths.itens}`,
+    `  parceiros ${formatLogTime(result.parceirosLastWrite)}  ${paths.parceiros}`,
   ].join('\n')
 }
