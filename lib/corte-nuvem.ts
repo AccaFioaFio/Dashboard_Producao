@@ -9,6 +9,7 @@ export type CorteNuvemLancamento = {
   dataFinal: string | null
   responsavel: string | null
   avisoDataFinal: string | null
+  nomeProduto: string | null
   atualizadoEm: string
 }
 
@@ -74,6 +75,7 @@ function lancamentoDe(raw: unknown): CorteNuvemLancamento | null {
     dataFinal: texto(row.dataFinal),
     responsavel: texto(row.responsavel),
     avisoDataFinal: texto(row.avisoDataFinal),
+    nomeProduto: texto(row.nomeProduto),
     atualizadoEm,
   }
 }
@@ -103,15 +105,17 @@ export function escolherLancamento(
   if (!nuvem) return local
   const maisNovo = local.atualizadoEm >= nuvem.atualizadoEm ? local : nuvem
   const outro = maisNovo === local ? nuvem : local
+  const nomeProduto = maisNovo.nomeProduto ?? outro.nomeProduto
   if (
     maisNovo.dataFinal &&
     maisNovo.dataFinal === outro.dataFinal &&
     outro.avisoDataFinal === outro.dataFinal &&
     maisNovo.avisoDataFinal !== maisNovo.dataFinal
   ) {
-    return { ...maisNovo, avisoDataFinal: outro.avisoDataFinal }
+    return { ...maisNovo, avisoDataFinal: outro.avisoDataFinal, nomeProduto }
   }
-  return maisNovo
+  if (nomeProduto === maisNovo.nomeProduto) return maisNovo
+  return { ...maisNovo, nomeProduto }
 }
 
 export async function lerLancamentosNuvem(pedidoNorm: string) {
@@ -141,8 +145,9 @@ export async function lerLancamentosNuvem(pedidoNorm: string) {
 export async function gravarLancamentoNuvem(
   pedidoNorm: string,
   codProduto: string,
-  lancamento: Omit<CorteNuvemLancamento, 'avisoDataFinal' | 'atualizadoEm'> & {
+  lancamento: Omit<CorteNuvemLancamento, 'avisoDataFinal' | 'atualizadoEm' | 'nomeProduto'> & {
     avisoDataFinal?: string | null
+    nomeProduto?: string | null
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const client = clienteEscrita()
@@ -177,6 +182,10 @@ export async function gravarLancamentoNuvem(
     dataFinal,
     responsavel: lancamento.responsavel,
     avisoDataFinal,
+    nomeProduto:
+      lancamento.nomeProduto !== undefined
+        ? lancamento.nomeProduto
+        : (anterior?.nomeProduto ?? null),
     atualizadoEm: new Date().toISOString(),
   }
   const { error } = await client.storage.from(CARGA_BUCKET).upload(path, JSON.stringify(corpo), {

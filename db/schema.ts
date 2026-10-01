@@ -341,6 +341,7 @@ export const corteProducaoLancamento = sqliteTable(
     dataFinal: text('data_final'),
     responsavel: text('responsavel'),
     avisoDataFinal: text('aviso_data_final'),
+    nomeProduto: text('nome_produto'),
     atualizadoEm: text('atualizado_em').notNull(),
   },
   (table) => [
@@ -348,6 +349,47 @@ export const corteProducaoLancamento = sqliteTable(
       columns: [table.pedidoNorm, table.codProduto, table.excelRow],
     }),
     index('idx_corte_producao_pedido').on(table.pedidoNorm),
+  ],
+)
+
+export const costuraLancamento = sqliteTable(
+  'costura_lancamento',
+  {
+    pedidoNorm: text('pedido_norm').notNull(),
+    codProduto: text('cod_produto').notNull(),
+    excelRow: integer('excel_row').notNull(),
+    origem: text('origem'),
+    qtdPecas: real('qtd_pecas'),
+    dataProducao: text('data_producao'),
+    responsavel: text('responsavel'),
+    nomeProduto: text('nome_produto'),
+    atualizadoEm: text('atualizado_em').notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.pedidoNorm, table.codProduto, table.excelRow],
+    }),
+    index('idx_costura_lancamento_pedido').on(table.pedidoNorm),
+  ],
+)
+
+export const revisaoLancamento = sqliteTable(
+  'revisao_lancamento',
+  {
+    pedidoNorm: text('pedido_norm').notNull(),
+    codProduto: text('cod_produto').notNull(),
+    excelRow: integer('excel_row').notNull(),
+    qtdPecas: real('qtd_pecas'),
+    dataProducao: text('data_producao'),
+    responsavel: text('responsavel'),
+    nomeProduto: text('nome_produto'),
+    atualizadoEm: text('atualizado_em').notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.pedidoNorm, table.codProduto, table.excelRow],
+    }),
+    index('idx_revisao_lancamento_pedido').on(table.pedidoNorm),
   ],
 )
 

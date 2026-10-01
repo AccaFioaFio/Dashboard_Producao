@@ -1,47 +1,47 @@
-import type { Metadata } from 'next'
 import { Search } from 'lucide-react'
 import { PageShell } from '@/components/page-shell'
-import { CorteProducaoLista } from '@/components/corte-producao-lista'
+import { ApontamentoLista } from '@/components/apontamento-lista'
+import { ApontamentoVoltarButton } from '@/components/apontamento-nav'
 import { KpiCard, KpiGrid } from '@/components/kpi-card'
-import { CorteVoltarButton } from '@/components/corte-acao-nav'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { getItensPorPedido } from '@/data/pedidos'
+import { getApontamentoPedido } from '@/data/apontamento'
+import { ETAPAS_APONTAMENTO, type EtapaApontamento } from '@/lib/apontamento'
 import { formatInt } from '@/lib/format'
-import { parseFilters } from '@/lib/filters'
-
-export const dynamic = 'force-dynamic'
-export const metadata: Metadata = { title: 'Corte Produção' }
 
 function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value
 }
 
-export default async function CorteProducaoPage({
+export async function ApontamentoTela({
+  etapa,
   searchParams,
 }: {
+  etapa: EtapaApontamento
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   const params = await searchParams
   const pedido = first(params.pedido)?.trim() ?? ''
-  const consulta = pedido ? await getItensPorPedido(pedido) : null
+  const consulta = pedido ? await getApontamentoPedido(etapa, pedido) : null
+  const config = ETAPAS_APONTAMENTO[etapa]
   const temQtdPedida = consulta?.itens.some((row) => row.qtdPedida != null) ?? false
   const totalPecas =
     consulta?.itens.reduce((sum, row) => sum + (row.qtdPedida ?? 0), 0) ?? 0
-  const totalReal =
-    consulta?.itens.reduce((sum, row) => sum + (row.qtdReal ?? 0), 0) ?? 0
+  const totalLancado =
+    consulta?.itens.reduce((sum, row) => sum + (row.qtdPecas ?? 0), 0) ?? 0
   const mostrarLista = Boolean(consulta?.itens.length || consulta?.inclusaoManual)
+  const descricao =
+    etapa === 'costura'
+      ? 'Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código: a descrição vem de Itens quando o código existe, e é digitada quando o código é novo. Origem, qtd peças, data de produção e responsável gravam sozinhos neste pedido.'
+      : 'Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código: a descrição vem de Itens quando o código existe, e é digitada quando o código é novo. Qtd, data de produção e responsável gravam sozinhos neste pedido.'
 
   return (
     <PageShell
-      title="Corte Produção"
-      description="Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código: a descrição vem de Itens quando o código existe, e é digitada quando o código é novo. Qtd real, qtd volumes, datas e responsável gravam sozinhos. Quando há data de início e data final gravadas, a linha em produção da planilha recebe a primeira data de início e a última data final. O botão grava a lista do cortador e o alerta na Visão Geral. O e-mail está pausado."
-      actions={<CorteVoltarButton filters={parseFilters({})} />}
+      title={config.titulo}
+      description={descricao}
+      actions={<ApontamentoVoltarButton etapa={etapa} />}
     >
-      <form
-        action="/corte/producao"
-        className="card-surface flex flex-wrap items-end gap-2 p-3"
-      >
+      <form action={config.href} className="card-surface flex flex-wrap items-end gap-2 p-3">
         <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground">
           Número do pedido
           <Input
@@ -64,8 +64,7 @@ export default async function CorteProducaoPage({
         </p>
       ) : !consulta.loaded ? (
         <p className="card-surface px-4 py-3 text-xs text-muted-foreground">
-          A carga de Itens.xlsx ainda não entrou. Atualize os dados em
-          Configurações.
+          A carga de Itens.xlsx ainda não entrou. Atualize os dados em Configurações.
         </p>
       ) : mostrarLista ? (
         <>
@@ -112,10 +111,14 @@ export default async function CorteProducaoPage({
               tone="amber"
             />
             <KpiCard
-              label="Qtd real cortada"
-              value={formatInt(totalReal)}
-              hint="Soma do que foi lançado na lista"
-              detail="Soma de Qtd Real Corte preenchida nesta tela."
+              label="Qtd lançada"
+              value={formatInt(totalLancado)}
+              hint="Soma do que foi preenchido nesta lista"
+              detail={
+                etapa === 'costura'
+                  ? 'Soma de Qtd peças preenchida nesta tela.'
+                  : 'Soma de Qtd preenchida nesta tela.'
+              }
               tone="magenta"
             />
           </KpiGrid>
@@ -125,20 +128,23 @@ export default async function CorteProducaoPage({
             <p className="text-xs text-muted-foreground">
               {consulta.inclusaoManual
                 ? 'Informe o código do produto. Se ele já existe em Itens, a descrição entra do cadastro. Se não existe, digite a descrição. A quantidade pedida fica em branco.'
-                : `Itens.xlsx · ${formatInt(consulta.itens.length)} produto${consulta.itens.length === 1 ? '' : 's'}. A qtd pedida é fixa. O que já foi preenchido e o que já entrou na lista continuam neste pedido.`}
+                : `Itens.xlsx · ${formatInt(consulta.itens.length)} produto${consulta.itens.length === 1 ? '' : 's'}. A qtd pedida é fixa. O que já foi preenchido continua neste pedido.`}
             </p>
-            <CorteProducaoLista
+            <ApontamentoLista
               key={consulta.pedidoNorm ?? pedido}
+              etapa={etapa}
               pedidoNorm={consulta.pedidoNorm ?? pedido}
               itens={consulta.itens}
               permitirInclusao={consulta.inclusaoManual}
+              temOrigem={config.temOrigem}
+              qtdLabel={config.qtdLabel}
             />
           </section>
         </>
       ) : (
         <p className="card-surface px-4 py-3 text-xs text-muted-foreground">
-          Nenhum item do pedido {consulta.pedidoInformado} na carga de
-          Itens.xlsx. Confira o número ou atualize os dados.
+          Nenhum item do pedido {consulta.pedidoInformado} na carga de Itens.xlsx. Confira o
+          número ou atualize os dados.
         </p>
       )}
     </PageShell>

@@ -126,6 +126,7 @@ function Linha({
           dataInicio: atual.dataInicio,
           dataFinal: atual.dataFinal,
           responsavel: atual.responsavel,
+          nomeProduto: item.nomeProduto,
         })
         if (!viva.current || ticket !== geracao.current) return
         if (result.ok) gravado.current = atual
@@ -165,6 +166,7 @@ function Linha({
         dataInicio: next.dataInicio,
         dataFinal: next.dataFinal,
         responsavel: next.responsavel,
+        nomeProduto: item.nomeProduto,
       })
     }
   }, [item.codProduto, item.excelRow, pedidoNorm])
@@ -312,6 +314,8 @@ function IncluirProduto({
   onIncluir: (item: CorteProducaoItem) => void
 }) {
   const [cod, setCod] = useState('')
+  const [descricao, setDescricao] = useState('')
+  const [pedirDescricao, setPedirDescricao] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [pendente, start] = useTransition()
 
@@ -322,11 +326,24 @@ function IncluirProduto({
       setErro('Informe o código do produto.')
       return
     }
+    if (pedirDescricao && !descricao.trim()) {
+      setErro('Informe a descrição do produto.')
+      return
+    }
     setErro(null)
     start(async () => {
-      const result = await buscarProdutoParaLancamento(pedidoNorm, texto)
+      const result = await buscarProdutoParaLancamento(
+        pedidoNorm,
+        texto,
+        pedirDescricao ? descricao : '',
+      )
       if (!result.ok) {
         setErro(result.error)
+        return
+      }
+      if (result.precisaDescricao) {
+        setPedirDescricao(true)
+        setErro(null)
         return
       }
       if (existentes.has(chaveCodigo(result.codProduto))) {
@@ -334,6 +351,8 @@ function IncluirProduto({
         return
       }
       setCod('')
+      setDescricao('')
+      setPedirDescricao(false)
       onIncluir({
         codProduto: result.codProduto,
         excelRow: EXCEL_ROW_FORA_DA_CARGA,
@@ -351,21 +370,42 @@ function IncluirProduto({
 
   return (
     <form onSubmit={enviar} className="flex flex-wrap items-end gap-2">
-      <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground">
+      <label className="flex w-36 shrink-0 flex-col gap-1 text-xs font-medium text-muted-foreground">
         Código do produto
         <Input
           value={cod}
-          onChange={(event) => setCod(event.currentTarget.value)}
-          placeholder="Código que já existe em Itens"
+          onChange={(event) => {
+            setCod(event.currentTarget.value)
+            setPedirDescricao(false)
+          }}
+          placeholder="0101056050"
+          maxLength={11}
           autoComplete="off"
           disabled={pendente}
         />
       </label>
+      {pedirDescricao ? (
+        <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground">
+          Descrição do produto
+          <Input
+            value={descricao}
+            onChange={(event) => setDescricao(event.currentTarget.value)}
+            placeholder="Este código não está em Itens"
+            autoComplete="off"
+            disabled={pendente}
+          />
+        </label>
+      ) : null}
       <Button type="submit" size="sm" disabled={pendente}>
         <Plus />
-        {pendente ? 'Buscando…' : 'Incluir'}
+        {pendente ? 'Buscando…' : pedirDescricao ? 'Cadastrar' : 'Incluir'}
       </Button>
       {erro ? <p className="w-full text-xs text-destructive">{erro}</p> : null}
+      {pedirDescricao && !erro ? (
+        <p className="w-full text-xs text-muted-foreground">
+          Código novo. Informe a descrição para cadastrar o produto neste pedido.
+        </p>
+      ) : null}
     </form>
   )
 }

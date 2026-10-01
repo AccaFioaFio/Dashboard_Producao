@@ -10,6 +10,7 @@ type LancamentoLocal = {
   dataFinal: string | null
   responsavel: string | null
   avisoDataFinal: string | null
+  nomeProduto: string | null
   atualizadoEm: string
 }
 
@@ -56,6 +57,7 @@ export function captureCorteOperacao(): CorteOperacaoBackup | null {
                 excel_row as excelRow, qtd_real as qtdReal, qtd_volumes as qtdVolumes,
                 data_inicio as dataInicio, data_final as dataFinal,
                 responsavel, aviso_data_final as avisoDataFinal,
+                nome_produto as nomeProduto,
                 atualizado_em as atualizadoEm
          FROM corte_producao_lancamento`,
       )
@@ -93,8 +95,8 @@ export function mergeCorteOperacao(backup: CorteOperacaoBackup | null) {
   const upsert = db.prepare(
     `INSERT INTO corte_producao_lancamento (
        pedido_norm, cod_produto, excel_row, qtd_real, qtd_volumes, data_inicio, data_final,
-       responsavel, aviso_data_final, atualizado_em
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       responsavel, aviso_data_final, nome_produto, atualizado_em
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
        qtd_real = excluded.qtd_real,
        qtd_volumes = excluded.qtd_volumes,
@@ -102,6 +104,7 @@ export function mergeCorteOperacao(backup: CorteOperacaoBackup | null) {
        data_final = excluded.data_final,
        responsavel = excluded.responsavel,
        aviso_data_final = excluded.aviso_data_final,
+       nome_produto = COALESCE(excluded.nome_produto, corte_producao_lancamento.nome_produto),
        atualizado_em = excluded.atualizado_em
      WHERE excluded.atualizado_em >= corte_producao_lancamento.atualizado_em`,
   )
@@ -131,6 +134,7 @@ export function mergeCorteOperacao(backup: CorteOperacaoBackup | null) {
         row.dataFinal,
         row.responsavel,
         row.avisoDataFinal,
+        row.nomeProduto,
         row.atualizadoEm,
       )
     }

@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache'
 import { getSqlite } from '@/db'
 import {
-  cabecaPedidoCorte,
   getItensPorPedido,
   produtoNaBaseItens,
 } from '@/data/pedidos'
@@ -11,6 +10,7 @@ import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { canAccessPath } from '@/lib/auth/access'
 import { readSession } from '@/lib/auth/cookie'
 import { pedidoDigits } from '@/lib/pedido'
+import { resolverProdutoParaIncluir } from '@/lib/produto-manual'
 import {
   EXCEL_ROW_FORA_DA_CARGA,
   responsavelCorteValido,
@@ -34,6 +34,7 @@ export type SalvarCorteProducaoInput = {
   dataInicio: string
   dataFinal: string
   responsavel: string
+  nomeProduto?: string | null
 }
 
 export type SalvarCorteProducaoResult =
@@ -74,12 +75,19 @@ function quantidade(value: string): number | null | 'invalida' {
 }
 
 export type BuscarProdutoLancamentoResult =
-  | { ok: true; codProduto: string; nomeProduto: string | null }
+  | {
+      ok: true
+      precisaDescricao: false
+      codProduto: string
+      nomeProduto: string | null
+    }
+  | { ok: true; precisaDescricao: true; codProduto: string }
   | { ok: false; error: string }
 
 export async function buscarProdutoParaLancamento(
   pedidoNorm: string,
   codInformado: string,
+  descricaoInformada = '',
 ): Promise<BuscarProdutoLancamentoResult> {
   const session = await readSession()
   if (!session || !canAccessPath('/corte', session.acessos)) {
@@ -88,31 +96,55 @@ export async function buscarProdutoParaLancamento(
 
   await ensureCloudDatabase()
   const pedido = pedidoDigits(pedidoNorm)
-  const cod = codInformado.trim()
-  if (!pedido || !cod) {
-    return { ok: false, error: 'Informe o código do produto.' }
-  }
-  if (!cabecaPedidoCorte(pedido)) {
-    return { ok: false, error: 'Este pedido não está na Corte e Costura.' }
-  }
-  const produto = produtoNaBaseItens(cod)
-  if (!produto) {
-    return { ok: false, error: 'Código não encontrado na base de itens.' }
-  }
-  const jaNaCarga = getSqlite()
+  const resolvido = resolverProdutoParaIncluir(pedido, codInformado, descricaoInformada)
+  if (!resolvido.ok || resolvido.precisaDescricao) return resolvido
+
+  const db = getSqlite()
+  const agora = new Date().toISOString()
+  db.prepare(
+    `INSERT INTO corte_producao_lancamento (
+       pedido_norm, cod_produto, excel_row, nome_produto, atualizado_em
+     ) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
+       nome_produto = COALESCE(excluded.nome_produto, corte_producao_lancamento.nome_produto),
+       atualizado_em = excluded.atualizado_em`,
+  ).run(pedido, resolvido.codProduto, EXCEL_ROW_FORA_DA_CARGA, resolvido.nomeProduto, agora)
+
+  const gravado = db
     .prepare(
-      `SELECT 1 as v FROM fato_pedido_item
-       WHERE pedido_norm = ? AND replace(trim(cod_produto), ' ', '') = replace(trim(?), ' ', '')`,
+      `SELECT qtd_real as qtdReal, qtd_volumes as qtdVolumes,
+              data_inicio as dataInicio, data_final as dataFinal,
+              responsavel, aviso_data_final as avisoDataFinal,
+              nome_produto as nomeProduto
+       FROM corte_producao_lancamento
+       WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
     )
-    .get(pedido, produto.codProduto)
-  if (jaNaCarga) {
-    return { ok: false, error: 'Este código já está na carga deste pedido.' }
+    .get(pedido, resolvido.codProduto, EXCEL_ROW_FORA_DA_CARGA) as {
+    qtdReal: number | null
+    qtdVolumes: number | null
+    dataInicio: string | null
+    dataFinal: string | null
+    responsavel: string | null
+    avisoDataFinal: string | null
+    nomeProduto: string | null
   }
-  return {
-    ok: true,
-    codProduto: produto.codProduto,
-    nomeProduto: produto.nomeProduto,
+  const nuvem = await gravarLancamentoNuvem(pedido, resolvido.codProduto, {
+    qtdReal: gravado?.qtdReal ?? null,
+    qtdVolumes: gravado?.qtdVolumes ?? null,
+    dataInicio: gravado?.dataInicio ?? null,
+    dataFinal: gravado?.dataFinal ?? null,
+    responsavel: gravado?.responsavel ?? null,
+    avisoDataFinal: gravado?.avisoDataFinal ?? null,
+    nomeProduto: gravado?.nomeProduto ?? resolvido.nomeProduto,
+  })
+  if (!nuvem.ok) {
+    return {
+      ok: false,
+      error: `Incluiu neste computador. A nuvem não atualizou (${nuvem.error}).`,
+    }
   }
+  revalidatePath('/corte/producao')
+  return resolvido
 }
 
 export async function salvarCorteProducao(
@@ -159,15 +191,29 @@ export async function salvarCorteProducao(
     return { ok: false, error: 'Escolha um responsável da lista.' }
   }
 
+  let nomeProduto: string | null = null
   if (foraDaCarga) {
-    if (!cabecaPedidoCorte(pedidoNorm)) {
-      return { ok: false, error: 'Este pedido não está na Corte e Costura.' }
-    }
     const produto = produtoNaBaseItens(codProduto)
-    if (!produto) {
-      return { ok: false, error: 'Código não encontrado na base de itens.' }
+    const nomeInformado = input.nomeProduto?.trim() || null
+    if (produto) {
+      codProduto = produto.codProduto
+      nomeProduto = produto.nomeProduto ?? nomeInformado
+    } else {
+      nomeProduto = nomeInformado
+      if (!nomeProduto) {
+        const guardado = getSqlite()
+          .prepare(
+            `SELECT nome_produto as nomeProduto
+             FROM corte_producao_lancamento
+             WHERE pedido_norm = ? AND cod_produto = ?`,
+          )
+          .get(pedidoNorm, codProduto) as { nomeProduto: string | null } | undefined
+        nomeProduto = guardado?.nomeProduto ?? null
+      }
+      if (!nomeProduto) {
+        return { ok: false, error: 'Informe a descrição do produto.' }
+      }
     }
-    codProduto = produto.codProduto
   } else {
     const existe = getSqlite()
       .prepare(
@@ -192,6 +238,32 @@ export async function salvarCorteProducao(
     | undefined
 
   if (qtdReal == null && qtdVolumes == null && !dataInicio && !dataFinal && !responsavel) {
+    if (foraDaCarga) {
+      db.prepare(
+        `UPDATE corte_producao_lancamento
+         SET qtd_real = NULL, qtd_volumes = NULL, data_inicio = NULL, data_final = NULL,
+             responsavel = NULL, aviso_data_final = NULL,
+             nome_produto = COALESCE(?, nome_produto), atualizado_em = ?
+         WHERE pedido_norm = ? AND cod_produto = ?`,
+      ).run(nomeProduto, new Date().toISOString(), pedidoNorm, codProduto)
+      const nuvem = await gravarLancamentoNuvem(pedidoNorm, codProduto, {
+        qtdReal: null,
+        qtdVolumes: null,
+        dataInicio: null,
+        dataFinal: null,
+        responsavel: null,
+        avisoDataFinal: null,
+        nomeProduto,
+      })
+      revalidatePath('/corte/producao')
+      if (!nuvem.ok) {
+        return {
+          ok: false,
+          error: `Limpou nesta tela. A nuvem não atualizou (${nuvem.error}).`,
+        }
+      }
+      return { ok: true }
+    }
     db.prepare(
       `DELETE FROM corte_producao_lancamento
        WHERE pedido_norm = ? AND cod_produto = ?`,
@@ -210,14 +282,15 @@ export async function salvarCorteProducao(
   db.prepare(
     `INSERT INTO corte_producao_lancamento (
        pedido_norm, cod_produto, excel_row, qtd_real, qtd_volumes, data_inicio, data_final,
-       responsavel, atualizado_em
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       responsavel, nome_produto, atualizado_em
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
        qtd_real = excluded.qtd_real,
        qtd_volumes = excluded.qtd_volumes,
        data_inicio = excluded.data_inicio,
        data_final = excluded.data_final,
        responsavel = excluded.responsavel,
+       nome_produto = COALESCE(excluded.nome_produto, corte_producao_lancamento.nome_produto),
        atualizado_em = excluded.atualizado_em`,
   ).run(
     pedidoNorm,
@@ -228,6 +301,7 @@ export async function salvarCorteProducao(
     dataInicio || null,
     dataFinal || null,
     responsavel || null,
+    nomeProduto,
     new Date().toISOString(),
   )
 
@@ -250,6 +324,7 @@ export async function salvarCorteProducao(
     dataInicio: dataInicio || null,
     dataFinal: dataFinal || null,
     responsavel: responsavel || null,
+    ...(foraDaCarga ? { nomeProduto } : {}),
   })
   if (!nuvem.ok) {
     revalidatePath('/corte/producao')

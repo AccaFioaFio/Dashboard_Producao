@@ -735,6 +735,7 @@ async function lancamentosDoPedido(pedidoNorm: string) {
               qtd_real as qtdReal, qtd_volumes as qtdVolumes,
               data_inicio as dataInicio, data_final as dataFinal,
               responsavel, aviso_data_final as avisoDataFinal,
+              nome_produto as nomeProduto,
               atualizado_em as atualizadoEm
        FROM corte_producao_lancamento
        WHERE pedido_norm = ?
@@ -826,11 +827,8 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
 
   const { locais, nuvem } = await lancamentosDoPedido(pedidoNorm)
   const cabeca = rows[0]
-  if (!cabeca) {
+    if (!cabeca) {
     const corte = cabecaPedidoCorte(pedidoNorm)
-    if (!corte) {
-      return { ...vazio, pedidoNorm, loaded: true }
-    }
     const codigos = new Set<string>([...locais.keys(), ...nuvem.keys()])
     const itens = [...codigos].map((codProduto) => {
       const local = locais.get(codProduto)
@@ -841,16 +839,16 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
         local?.excelRow ?? 0,
         lancamento,
         null,
-        produto?.nomeProduto ?? null,
+        produto?.nomeProduto ?? lancamento?.nomeProduto ?? null,
       )
     })
     itens.sort((a, b) => a.codProduto.localeCompare(b.codProduto))
     return {
       pedidoInformado,
       pedidoNorm,
-      cliente: corte.cliente,
-      canal: corte.canal,
-      status: corte.status,
+      cliente: corte?.cliente ?? null,
+      canal: corte?.canal ?? null,
+      status: corte?.status ?? null,
       loaded: true,
       inclusaoManual: true,
       itens,
