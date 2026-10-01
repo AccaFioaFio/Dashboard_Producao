@@ -3,11 +3,13 @@ import 'server-only'
 import { cache } from 'react'
 import { getSqlite } from '@/db'
 import { collapseItensCorte } from '@/lib/corte-producao'
+import { lerApontamentoNuvem, type ApontamentoNuvem } from '@/lib/apontamento-nuvem'
 import {
   escolherLancamento,
   lerLancamentosNuvem,
   type CorteNuvemLancamento,
 } from '@/lib/corte-nuvem'
+import { isProducaoOrigem } from '@/lib/keys'
 import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { leadTimeDays } from '@/lib/dates'
 import type { DashFilters } from '@/lib/filters'
@@ -128,10 +130,16 @@ export type PedidoFicha = {
     codProduto: string
     nomeProduto: string | null
     categoriaProduto: string | null
-    qtdPedida: number
+    qtdPedida: number | null
     qtdFaturada: number
     valorLiquido: number
     valorBruto: number
+    /** Código lançado na lista, sem linha deste pedido em Itens.xlsx. */
+    foraDoSignus: boolean
+    /** Peças do lançamento operacional deste código. Nulo até existir lançamento. */
+    qtdCortada: number | null
+    qtdCosturada: number | null
+    qtdRevisada: number | null
   }[]
   qualidade: { tipo: string; detalhe: string; valor: number | null }[]
   datas: {
@@ -434,6 +442,135 @@ function resolvePedidoNorm(raw: string) {
   return byDigits?.v ?? null
 }
 
+function chaveProduto(cod: string) {
+  return cod.replace(/\s+/g, '')
+}
+
+type MarcaItem = {
+  codProduto: string
+  nomeProduto: string | null
+  cortada: number | null
+  costurada: number | null
+  revisada: number | null
+}
+
+function marcaDe(marcas: Map<string, MarcaItem>, cod: string) {
+  const chave = chaveProduto(cod)
+  let marca = marcas.get(chave)
+  if (!marca) {
+    marca = {
+      codProduto: cod,
+      nomeProduto: null,
+      cortada: null,
+      costurada: null,
+      revisada: null,
+    }
+    marcas.set(chave, marca)
+  }
+  return marca
+}
+
+function guardarNome(marca: MarcaItem, nome: string | null | undefined) {
+  if (!marca.nomeProduto && nome?.trim()) marca.nomeProduto = nome.trim()
+}
+
+type ApontamentoLocal = {
+  codProduto: string
+  origem: string | null
+  qtdPecas: number | null
+  nomeProduto: string | null
+  atualizadoEm: string
+}
+
+/** Estado atual do lançamento por código. A linha mais nova, local ou nuvem, vence. */
+async function aplicarApontamento(
+  marcas: Map<string, MarcaItem>,
+  pedidoNorm: string,
+  etapa: 'costura' | 'revisao',
+) {
+  const tabela = etapa === 'costura' ? 'costura_lancamento' : 'revisao_lancamento'
+  const origemSql = etapa === 'costura' ? 'origem' : 'NULL as origem'
+  const locais = new Map<string, ApontamentoLocal>()
+  for (const row of sqlite()
+    .prepare(
+      `SELECT cod_produto as codProduto, ${origemSql},
+              qtd_pecas as qtdPecas, nome_produto as nomeProduto,
+              atualizado_em as atualizadoEm
+       FROM ${tabela}
+       WHERE pedido_norm = ?
+       ORDER BY atualizado_em DESC`,
+    )
+    .all(pedidoNorm) as ApontamentoLocal[]) {
+    const chave = chaveProduto(row.codProduto)
+    if (!locais.has(chave)) locais.set(chave, row)
+  }
+
+  const nuvem = new Map<string, ApontamentoNuvem>()
+  try {
+    for (const [cod, row] of await lerApontamentoNuvem(etapa, pedidoNorm)) {
+      const chave = chaveProduto(cod)
+      if (!nuvem.has(chave)) nuvem.set(chave, row)
+    }
+  } catch (error) {
+    console.error('leitura do lançamento na nuvem falhou', etapa, pedidoNorm, error)
+  }
+
+  for (const chave of new Set([...locais.keys(), ...nuvem.keys()])) {
+    const local = locais.get(chave)
+    const remoto = nuvem.get(chave)
+    const escolhido = !local
+      ? remoto
+      : !remoto
+        ? local
+        : local.atualizadoEm >= remoto.atualizadoEm
+          ? local
+          : remoto
+    const marca = marcaDe(marcas, escolhido?.codProduto ?? local?.codProduto ?? remoto?.codProduto ?? chave)
+    guardarNome(marca, local?.nomeProduto)
+    guardarNome(marca, remoto?.nomeProduto)
+    if (!escolhido || escolhido.qtdPecas == null) continue
+    if (etapa === 'costura' && !isProducaoOrigem(escolhido.origem)) continue
+    if (etapa === 'costura') marca.costurada = escolhido.qtdPecas
+    else marca.revisada = escolhido.qtdPecas
+  }
+}
+
+/**
+ * Peças lançadas por código nas listas operacionais.
+ * Não usa a planilha de corte, costura e revisão — essa continua no painel.
+ */
+async function marcasLancamentoItens(pedidoNorm: string) {
+  const marcas = new Map<string, MarcaItem>()
+  const corte = await lancamentosDoPedido(pedidoNorm)
+  const nuvemCorte = new Map<string, CorteNuvemLancamento>()
+  for (const [cod, row] of corte.nuvem) {
+    const chave = chaveProduto(cod)
+    if (!nuvemCorte.has(chave)) nuvemCorte.set(chave, row)
+  }
+  const localCorte = new Map<string, CorteNuvemLancamento>()
+  const codigoCorte = new Map<string, string>()
+  for (const [cod, row] of corte.locais) {
+    const chave = chaveProduto(cod)
+    if (!localCorte.has(chave)) localCorte.set(chave, row)
+    if (!codigoCorte.has(chave)) codigoCorte.set(chave, cod)
+  }
+  for (const cod of corte.nuvem.keys()) {
+    const chave = chaveProduto(cod)
+    if (!codigoCorte.has(chave)) codigoCorte.set(chave, cod)
+  }
+  for (const chave of new Set([...localCorte.keys(), ...nuvemCorte.keys()])) {
+    const lancamento = escolherLancamento(localCorte.get(chave), nuvemCorte.get(chave))
+    const marca = marcaDe(marcas, codigoCorte.get(chave) ?? chave)
+    guardarNome(marca, lancamento?.nomeProduto)
+    if (lancamento?.qtdReal == null) continue
+    marca.cortada = lancamento.qtdReal
+  }
+
+  await aplicarApontamento(marcas, pedidoNorm, 'costura')
+  await aplicarApontamento(marcas, pedidoNorm, 'revisao')
+  return marcas
+}
+
 export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | null> => {
   await ensureCloudDatabase()
   const pedidoNorm = resolvePedidoNorm(raw)
@@ -535,7 +672,7 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
     )
     .all(pedidoNorm) as PedidoFicha['qualidade']
 
-  const itens = hasPedidoItemTable()
+  const itensBase = hasPedidoItemTable()
     ? (db
         .prepare(
           `SELECT cod_produto as codProduto, nome_produto as nomeProduto,
@@ -546,8 +683,46 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
            WHERE pedido_norm = ?
            ORDER BY excel_row`,
         )
-        .all(pedidoNorm) as PedidoFicha['itens'])
+        .all(pedidoNorm) as Omit<
+        PedidoFicha['itens'][number],
+        'qtdCortada' | 'qtdCosturada' | 'qtdRevisada' | 'foraDoSignus'
+      >[])
     : []
+  const marcas = await marcasLancamentoItens(pedidoNorm)
+  const vistos = new Set(itensBase.map((row) => chaveProduto(row.codProduto)))
+  const itens: PedidoFicha['itens'] = itensBase.map((row) => {
+    const marca = marcas.get(chaveProduto(row.codProduto))
+    return {
+      ...row,
+      qtdCortada: marca?.cortada ?? null,
+      qtdCosturada: marca?.costurada ?? null,
+      qtdRevisada: marca?.revisada ?? null,
+      foraDoSignus: false,
+    }
+  })
+  const foraDoSignus = [...marcas.values()]
+    .filter(
+      (marca) =>
+        !vistos.has(chaveProduto(marca.codProduto)) &&
+        (marca.cortada != null || marca.costurada != null || marca.revisada != null),
+    )
+    .sort((a, b) => a.codProduto.localeCompare(b.codProduto, 'pt-BR'))
+  for (const marca of foraDoSignus) {
+    const conhecido = produtoNaBaseItens(marca.codProduto)
+    itens.push({
+      codProduto: conhecido?.codProduto ?? marca.codProduto,
+      nomeProduto: marca.nomeProduto ?? conhecido?.nomeProduto ?? null,
+      categoriaProduto: null,
+      qtdPedida: null,
+      qtdFaturada: 0,
+      valorLiquido: 0,
+      valorBruto: 0,
+      qtdCortada: marca.cortada,
+      qtdCosturada: marca.costurada,
+      qtdRevisada: marca.revisada,
+      foraDoSignus: true,
+    })
+  }
 
   const pecasCosturaProd = costura
     .filter((row) => row.origemNorm === 'Producao')

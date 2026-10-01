@@ -41,6 +41,11 @@ function formatMetrosCell(value: number | null | undefined) {
   return formatMeters(value, value >= 10 ? 0 : 1)
 }
 
+function formatQtdLancada(value: number | null) {
+  if (value == null) return '—'
+  return formatNumber(value, value % 1 ? 2 : 0)
+}
+
 export default async function PedidoFichaPage({
   params,
 }: {
@@ -237,13 +242,20 @@ export default async function PedidoFichaPage({
         {ficha.itens.length ? (
           <>
             <SectionMeta>
-              {`Itens.xlsx · ${formatInt(ficha.itens.length)} linha${ficha.itens.length === 1 ? '' : 's'} deste pedido. Qtd = pedida; valor = líquido do item.`}
+              {ficha.itens.every((row) => row.foraDoSignus)
+                ? `${formatInt(ficha.itens.length)} código${ficha.itens.length === 1 ? '' : 's'} lançado${ficha.itens.length === 1 ? '' : 's'} neste pedido. Não há linha em Itens.xlsx, então qtd pedida e valor ficam em branco. Cortado, costurado e revisado = peças lançadas.`
+                : ficha.itens.some((row) => row.foraDoSignus)
+                  ? `Itens.xlsx e códigos lançados fora dessa carga. Qtd = pedida; valor = líquido. Cortado, costurado e revisado = peças lançadas deste código.`
+                  : `Itens.xlsx · ${formatInt(ficha.itens.length)} linha${ficha.itens.length === 1 ? '' : 's'} deste pedido. Qtd = pedida; valor = líquido. Cortado, costurado e revisado = peças lançadas deste código.`}
             </SectionMeta>
             <SimpleTable
               columns={[
                 { key: 'cod', label: 'Código' },
                 { key: 'produto', label: 'Produto', wrap: true },
                 { key: 'qtd', label: 'Qtd', numeric: true },
+                { key: 'cortado', label: 'Cortado', numeric: true },
+                { key: 'costurado', label: 'Costurado', numeric: true },
+                { key: 'revisado', label: 'Revisado', numeric: true },
                 { key: 'valor', label: 'Valor', numeric: true },
               ]}
               rows={ficha.itens.map((row) => {
@@ -255,10 +267,13 @@ export default async function PedidoFichaPage({
                 return {
                   cod: row.codProduto,
                   produto: nome,
-                  qtd: formatNumber(
-                    row.qtdPedida,
-                    row.qtdPedida % 1 ? 2 : 0,
-                  ),
+                  qtd:
+                    row.qtdPedida == null
+                      ? '—'
+                      : formatNumber(row.qtdPedida, row.qtdPedida % 1 ? 2 : 0),
+                  cortado: formatQtdLancada(row.qtdCortada),
+                  costurado: formatQtdLancada(row.qtdCosturada),
+                  revisado: formatQtdLancada(row.qtdRevisada),
                   valor: valor > 0 ? formatMoney(valor) : '—',
                 }
               })}
