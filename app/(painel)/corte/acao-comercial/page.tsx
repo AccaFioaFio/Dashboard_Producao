@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { PageShell } from '@/components/page-shell'
 import { KpiCard, KpiGrid } from '@/components/kpi-card'
-import { SimpleTable } from '@/components/simple-table'
+import { AcaoSaldoLista } from '@/components/acao-saldo-lista'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { DonutChart } from '@/components/donut-chart'
 import { FilterBar } from '@/components/filter-bar'
@@ -9,7 +9,6 @@ import { CorteVoltarButton } from '@/components/corte-acao-nav'
 import { getAcaoComercial, getFilterOptions } from '@/data/dashboard'
 import { MONTH_LABELS, formatInt, formatNumber } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
-import { explainAcaoSaldo } from '@/lib/table-explain'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Ação Comercial' }
@@ -137,30 +136,12 @@ export default async function AcaoComercialPage({
       <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Saldo por produto</h2>
         <p className="text-xs text-muted-foreground">
-          Lista completa, sem recorte: código e descrição do tecido em colunas
-          separadas (quando vinham juntos no Excel, já foram partidos).
+          Cada linha junta o mesmo código e a mesma descrição. O botão + abre
+          modelo, origem (onde o corte nasce) e aproveitamento (pedido em que a
+          peça foi usada). Saldo é o que resta depois da linha, sem ficar
+          negativo. Os filtros de modelo e descrição valem só para esta lista.
         </p>
-        <SimpleTable
-          columns={[
-            { key: 'codigo', label: 'Código', nowrap: true },
-            { key: 'descricao', label: 'Descrição', nowrap: true },
-            { key: 'modelo', label: 'Modelo', nowrap: true },
-            { key: 'entrada', label: 'Cortadas', numeric: true },
-            { key: 'saida', label: 'Aproveitadas', numeric: true },
-            { key: 'saldo', label: 'Saldo', numeric: true },
-          ]}
-          rows={acao.produtos.map((row) => ({
-            codigo: row.codigo,
-            descricao: row.descricao,
-            modelo: row.modelo,
-            entrada: formatInt(row.entrada),
-            saida: formatInt(row.saida),
-            saldo: formatInt(row.saldo),
-            alert: row.saldo < 0,
-            hint: explainAcaoSaldo(row),
-          }))}
-          empty="Nenhum produto com movimento"
-        />
+        <AcaoSaldoLista produtos={acao.produtos} />
       </section>
     </PageShell>
   )

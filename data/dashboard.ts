@@ -2025,13 +2025,25 @@ export type AcaoMesRow = {
   aproveitadas: number
 }
 
-export type AcaoProdutoRow = {
-  codigo: string
-  descricao: string
+export type AcaoOrigemRow = {
   modelo: string
+  /** Pedido da TAB_ENTRADA (onde o corte nasce). Vazio na saída. */
+  origem: string
+  /** Pedido da TAB_SAIDA (onde a peça foi aproveitada). Vazio na entrada. */
+  aproveitamento: string
+  cliente: string
   entrada: number
   saida: number
   saldo: number
+}
+
+export type AcaoProdutoRow = {
+  codigo: string
+  descricao: string
+  entrada: number
+  saida: number
+  saldo: number
+  origens: AcaoOrigemRow[]
 }
 
 /** Separa código e descrição quando vêm grudados (ex.: "1107…_TECIDO…" ou "1107… - TECIDO…"). */
@@ -2116,6 +2128,8 @@ export const getAcaoComercial = cache(async (filters: DashFilters = {}) => {
     codProduto: string | null
     tecido: string | null
     modelo: string | null
+    pedido: string | null
+    cliente: string | null
     entrada: number
     saida: number
   }>(
@@ -2123,42 +2137,93 @@ export const getAcaoComercial = cache(async (filters: DashFilters = {}) => {
         a.cod_produto as codProduto,
         a.tecido,
         a.modelo,
+        a.pedido,
+        a.cliente,
         COALESCE(SUM(CASE WHEN a.tipo = 'entrada' THEN a.qtd ELSE 0 END), 0) as entrada,
         COALESCE(SUM(CASE WHEN a.tipo = 'saida' THEN a.qtd ELSE 0 END), 0) as saida
      FROM fato_aproveitamento a
-     GROUP BY a.cod_produto, a.tecido, a.modelo`,
+     GROUP BY a.cod_produto, a.tecido, a.modelo, a.pedido, a.cliente`,
     {},
   )
 
-  const byKey = new Map<string, AcaoProdutoRow>()
+  const byKey = new Map<
+    string,
+    AcaoProdutoRow & { byOrigem: Map<string, AcaoOrigemRow & { pedido: string }> }
+  >()
   for (const row of rawProdutos) {
     const { codigo, descricao } = resolveAcaoCodigoDescricao(
       row.codProduto,
       row.tecido,
     )
     const modelo = row.modelo?.replace(/\s+/g, ' ').trim() || '—'
-    const key = `${codigo}||${descricao}||${modelo}`
+    const pedido = row.pedido?.replace(/\s+/g, ' ').trim() || '—'
+    const cliente = row.cliente?.replace(/\s+/g, ' ').trim() || '—'
+    const key = `${codigo}||${descricao}`
     const current = byKey.get(key) ?? {
       codigo,
       descricao,
+      entrada: 0,
+      saida: 0,
+      saldo: 0,
+      origens: [],
+      byOrigem: new Map<string, AcaoOrigemRow & { pedido: string }>(),
+    }
+    const origemKey = `${modelo}||${pedido}||${cliente}`
+    const detalhe = current.byOrigem.get(origemKey) ?? {
       modelo,
+      pedido,
+      origem: '—',
+      aproveitamento: '—',
+      cliente,
       entrada: 0,
       saida: 0,
       saldo: 0,
     }
+    detalhe.entrada += row.entrada
+    detalhe.saida += row.saida
+    detalhe.saldo = detalhe.entrada - detalhe.saida
+    current.byOrigem.set(origemKey, detalhe)
     current.entrada += row.entrada
     current.saida += row.saida
     current.saldo = current.entrada - current.saida
     byKey.set(key, current)
   }
 
-  const produtos = [...byKey.values()].sort(
-    (a, b) =>
-      b.saldo - a.saldo ||
-      a.codigo.localeCompare(b.codigo, 'pt-BR') ||
-      a.descricao.localeCompare(b.descricao, 'pt-BR') ||
-      a.modelo.localeCompare(b.modelo, 'pt-BR'),
-  )
+  const produtos = [...byKey.values()]
+    .map((group) => {
+      const origens = [...group.byOrigem.values()]
+        .map((row) => ({
+          modelo: row.modelo,
+          origem: row.entrada > 0 ? row.pedido : '—',
+          aproveitamento: row.saida > 0 ? row.pedido : '—',
+          cliente: row.cliente,
+          entrada: row.entrada,
+          saida: row.saida,
+          saldo: row.saldo,
+        }))
+        .sort(
+          (a, b) =>
+            b.saldo - a.saldo ||
+            a.modelo.localeCompare(b.modelo, 'pt-BR') ||
+            a.origem.localeCompare(b.origem, 'pt-BR') ||
+            a.aproveitamento.localeCompare(b.aproveitamento, 'pt-BR') ||
+            a.cliente.localeCompare(b.cliente, 'pt-BR'),
+        )
+      return {
+        codigo: group.codigo,
+        descricao: group.descricao,
+        entrada: group.entrada,
+        saida: group.saida,
+        saldo: group.saldo,
+        origens,
+      }
+    })
+    .sort(
+      (a, b) =>
+        b.saldo - a.saldo ||
+        a.codigo.localeCompare(b.codigo, 'pt-BR') ||
+        a.descricao.localeCompare(b.descricao, 'pt-BR'),
+    )
 
   return {
     loaded: true,
