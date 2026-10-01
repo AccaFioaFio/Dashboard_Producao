@@ -42,12 +42,14 @@ type Lancamento = {
 function AvisoStatus({
   dataFinal,
   avisoDataFinal,
+  dataFinalConfirmada,
 }: {
   dataFinal: string
   avisoDataFinal: string | null
+  dataFinalConfirmada?: string
 }) {
   if (!dataFinal) return <span className="text-muted-foreground">—</span>
-  if (avisoDataFinal === dataFinal) {
+  if (avisoDataFinal === dataFinal || dataFinalConfirmada === dataFinal) {
     return <span className="font-medium text-emerald-700 dark:text-emerald-400">Na lista</span>
   }
   return <span className="font-medium text-amber-700 dark:text-amber-400">A salvar</span>
@@ -71,10 +73,12 @@ function lancamentoIgual(a: Lancamento, b: Lancamento) {
 function Linha({
   pedidoNorm,
   item,
+  dataFinalConfirmada,
   onOcupada,
 }: {
   pedidoNorm: string
   item: CorteProducaoItem
+  dataFinalConfirmada?: string
   onOcupada: (ocupada: boolean) => void
 }) {
   const inicial: Lancamento = {
@@ -274,7 +278,11 @@ function Linha({
           />
         </td>
         <td className="w-16 px-1.5 py-1 whitespace-nowrap">
-          <AvisoStatus dataFinal={dataFinal} avisoDataFinal={item.avisoDataFinal} />
+          <AvisoStatus
+            dataFinal={dataFinal}
+            avisoDataFinal={item.avisoDataFinal}
+            dataFinalConfirmada={dataFinalConfirmada}
+          />
         </td>
       </tr>
       {erro ? (
@@ -374,6 +382,7 @@ export function CorteProducaoLista({
   const [extras, setExtras] = useState<CorteProducaoItem[]>([])
   const [ocupadas, setOcupadas] = useState<Record<string, boolean>>({})
   const [lista, setLista] = useState<{ ok: boolean; texto: string } | null>(null)
+  const [confirmadas, setConfirmadas] = useState<Record<string, string>>({})
   const [salvando, startSalvar] = useTransition()
   const router = useRouter()
   const gravando = Object.values(ocupadas).some(Boolean)
@@ -402,7 +411,16 @@ export function CorteProducaoLista({
         ok: result.ok,
         texto: result.ok ? result.aviso : result.error,
       })
-      if (result.ok && result.salvos > 0) router.refresh()
+      if (result.ok && result.itens.length) {
+        setConfirmadas((atual) => {
+          const next = { ...atual }
+          for (const salvo of result.itens) {
+            next[chaveCodigo(salvo.codProduto)] = salvo.dataFinal
+          }
+          return next
+        })
+      }
+      if (result.ok) router.refresh()
     })
   }
 
@@ -467,6 +485,7 @@ export function CorteProducaoLista({
               key={`${item.codProduto}:${item.excelRow}`}
               pedidoNorm={pedidoNorm}
               item={item}
+              dataFinalConfirmada={confirmadas[chaveCodigo(item.codProduto)]}
               onOcupada={(ocupada) =>
                 marcarOcupada(`${item.codProduto}:${item.excelRow}`, ocupada)
               }

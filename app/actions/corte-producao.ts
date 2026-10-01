@@ -41,7 +41,12 @@ export type SalvarCorteProducaoResult =
   | { ok: false; error: string }
 
 export type SalvarListaCortadorResult =
-  | { ok: true; salvos: number; aviso: string }
+  | {
+      ok: true
+      salvos: number
+      aviso: string
+      itens: { codProduto: string; dataFinal: string }[]
+    }
   | { ok: false; error: string }
 
 /** Pausa o SMTP. A lista e o alerta continuam. Volte para `false` para reativar o e-mail. */
@@ -320,6 +325,7 @@ export async function salvarListaCortador(
     return {
       ok: true,
       salvos: 0,
+      itens: [],
       aviso:
         'Nenhum item novo para a lista. Preencha a data final do que já foi cortado e salve de novo.',
     }
@@ -347,7 +353,7 @@ export async function salvarListaCortador(
   const alertaId = `${pedidoNorm}-${Date.now()}`
   const marcar = db.prepare(
     `UPDATE corte_producao_lancamento
-     SET aviso_data_final = ?
+     SET aviso_data_final = ?, atualizado_em = ?
      WHERE pedido_norm = ? AND cod_produto = ?`,
   )
   const garantir = db.prepare(
@@ -356,7 +362,8 @@ export async function salvarListaCortador(
        responsavel, aviso_data_final, atualizado_em
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
-       aviso_data_final = excluded.aviso_data_final`,
+       aviso_data_final = excluded.aviso_data_final,
+       atualizado_em = excluded.atualizado_em`,
   )
   const criarAlerta = db.prepare(
     `INSERT INTO corte_producao_alerta (pedido_norm, cliente, enviado_em)
@@ -369,7 +376,7 @@ export async function salvarListaCortador(
   )
   const gravar = db.transaction(() => {
     for (const item of pendentes) {
-      const atualizado = marcar.run(item.dataFinal, pedidoNorm, item.codProduto)
+      const atualizado = marcar.run(item.dataFinal, enviadoEm, pedidoNorm, item.codProduto)
       if (atualizado.changes === 0) {
         garantir.run(
           pedidoNorm,
@@ -403,7 +410,13 @@ export async function salvarListaCortador(
 
   const falhasNuvem: string[] = []
   for (const item of pendentes) {
-    const marcado = await marcarAvisoNuvem(pedidoNorm, item.codProduto, item.dataFinal)
+    const marcado = await marcarAvisoNuvem(pedidoNorm, item.codProduto, item.dataFinal, {
+      qtdReal: item.qtdReal,
+      qtdVolumes: item.qtdVolumes,
+      dataInicio: item.dataInicio,
+      dataFinal: item.dataFinal,
+      responsavel: item.responsavel,
+    })
     if (!marcado.ok) falhasNuvem.push(marcado.error)
   }
   const alertaNuvem = await criarAlertaNuvem({
@@ -434,6 +447,10 @@ export async function salvarListaCortador(
   return {
     ok: true,
     salvos,
+    itens: pendentes.map((item) => ({
+      codProduto: item.codProduto,
+      dataFinal: item.dataFinal,
+    })),
     aviso: falhasNuvem.length
       ? `${base} A nuvem não gravou a lista (${falhasNuvem[0]}). Ao reabrir, pode parecer que o item não entrou.`
       : base,

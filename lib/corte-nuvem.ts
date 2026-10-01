@@ -90,13 +90,28 @@ async function baixarJson(path: string) {
   }
 }
 
+/**
+ * Cópias mais novas vencem. Se a data final é a mesma e só a mais antiga
+ * ainda tem o aviso da lista, a marca fica: um salvamento de campo pode
+ * reescrever a nuvem sem o aviso.
+ */
 export function escolherLancamento(
   local: CorteNuvemLancamento | undefined,
   nuvem: CorteNuvemLancamento | undefined,
 ) {
   if (!local) return nuvem
   if (!nuvem) return local
-  return local.atualizadoEm >= nuvem.atualizadoEm ? local : nuvem
+  const maisNovo = local.atualizadoEm >= nuvem.atualizadoEm ? local : nuvem
+  const outro = maisNovo === local ? nuvem : local
+  if (
+    maisNovo.dataFinal &&
+    maisNovo.dataFinal === outro.dataFinal &&
+    outro.avisoDataFinal === outro.dataFinal &&
+    maisNovo.avisoDataFinal !== maisNovo.dataFinal
+  ) {
+    return { ...maisNovo, avisoDataFinal: outro.avisoDataFinal }
+  }
+  return maisNovo
 }
 
 export async function lerLancamentosNuvem(pedidoNorm: string) {
@@ -144,17 +159,24 @@ export async function gravarLancamentoNuvem(
   const anterior = lancamentoDe(await baixarJson(path))
   const dataFinal = lancamento.dataFinal
   const avisoInformado = 'avisoDataFinal' in lancamento
+  let avisoDataFinal: string | null = dataFinal
+    ? avisoInformado
+      ? (lancamento.avisoDataFinal ?? null)
+      : (anterior?.avisoDataFinal ?? null)
+    : null
+  if (!avisoInformado && dataFinal && avisoDataFinal !== dataFinal) {
+    const recente = lancamentoDe(await baixarJson(path))
+    if (recente?.dataFinal === dataFinal && recente.avisoDataFinal === dataFinal) {
+      avisoDataFinal = dataFinal
+    }
+  }
   const corpo: CorteNuvemLancamento = {
     qtdReal: lancamento.qtdReal,
     qtdVolumes: lancamento.qtdVolumes,
     dataInicio: lancamento.dataInicio,
     dataFinal,
     responsavel: lancamento.responsavel,
-    avisoDataFinal: dataFinal
-      ? avisoInformado
-        ? (lancamento.avisoDataFinal ?? null)
-        : (anterior?.avisoDataFinal ?? null)
-      : null,
+    avisoDataFinal,
     atualizadoEm: new Date().toISOString(),
   }
   const { error } = await client.storage.from(CARGA_BUCKET).upload(path, JSON.stringify(corpo), {
@@ -187,11 +209,14 @@ export async function marcarAvisoNuvem(
   pedidoNorm: string,
   codProduto: string,
   dataFinal: string,
+  fallback?: Omit<CorteNuvemLancamento, 'avisoDataFinal' | 'atualizadoEm'>,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const atual = lancamentoDe(await baixarJson(caminhoItem(pedidoNorm, codProduto)))
-  if (!atual) return { ok: true }
+  const base = atual ?? fallback
+  if (!base) return { ok: true }
   return gravarLancamentoNuvem(pedidoNorm, codProduto, {
-    ...atual,
+    ...base,
+    dataFinal,
     avisoDataFinal: dataFinal,
   })
 }
