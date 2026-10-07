@@ -165,3 +165,34 @@ Sem este PC ligado (e sem o processo), o site não recebe Excel novo. Isso é es
 Este arquivo é o contrato de **como o usuário recebe o que foi contado**.
 
 Se os dois conflitarem na UX de carga, **este PRD prevalece**.
+
+---
+
+## 12. Requisitos não funcionais
+
+### RNF-11 — Egress Supabase Free (5 GB / ciclo)
+
+**Objetivo:** o projeto deve operar dentro do **plano Free do Supabase**, sem ultrapassar o **egress de 5 GB por ciclo de faturamento** (billing cycle mensal do projeto).
+
+**Contexto neste dashboard:** a carga publicada é o SQLite no Storage (~20 MB hoje). Cada download completo da carga no site (Vercel) ou no botão **Atualização de dados** conta no egress. Publicações (upload) e JSONs de operação (corte / apontamento) também contam, em volume menor.
+
+**Sem migration.** A RNF-11 não cria tabela, coluna, bucket, policy nem arquivo em `supabase/migrations`. O schema atual (`carga` + objeto único no Storage) já serve. O cumprimento é só de comportamento: quando baixar, o que manter no bucket e como acompanhar o uso.
+
+**Regras obrigatórias:**
+
+1. **Um objeto de carga vigente.** Manter um único arquivo de carga no Storage (substituir no upload). Não versionar histórico de SQLite no bucket só para consulta.
+2. **Baixar a carga só quando mudar.** Usar carimbo (etag / `updated_at` / `lidaEm`) antes do download. Se a carga local já é a vigente, **não** baixar de novo.
+3. **Leitor não dispara download em loop.** Abrir telas e navegar no painel não pode rebaixar o SQLite a cada clique. Cache / singleton por instância (já previsto em `ensureCloudDatabase`) é obrigatório; refresh forçado só no fluxo explícito de atualização.
+4. **Parse e ETL só neste PC.** O site só consome a carga pronta. Proibido reprocessar Excel na Vercel ou no navegador — isso forçaria tráfego e timeouts desnecessários.
+5. **Objetos pequenos para operação.** Lançamentos de corte/apontamento no Storage ficam em JSON por pedido/item (ou equivalente enxuto), nunca embutidos em cópias extras do SQLite.
+6. **Sem Realtime / sync contínuo** para a carga analítica. Egress de assinatura ou polling agressivo da carga não faz parte do produto.
+7. **Orçamento de tráfego.** Com carga ~20 MB, 5 GB/ciclo ≈ **~250 downloads completos/mês**. Publicação na fábrica + leitores ocasionais devem caber nisso. Se o SQLite crescer, comprimir ou particionar antes de estourar o teto — não “resolver” com plano pago sem decisão explícita.
+8. **Monitoramento.** No ciclo, acompanhar **Egress** no painel Supabase (Project Settings → Usage). Se passar de **~70% (3,5 GB)** no mês, tratar como alerta de produto: reduzir frequência de refresh forçado, revisar downloads duplicados, ou enxugar a carga.
+
+**Aceite da RNF-11:**
+
+- [ ] Download da carga no site só ocorre quando o carimbo da nuvem difere do local (ou no refresh forçado).
+- [ ] Navegação entre páginas do dashboard não multiplica download da carga na mesma instância quente.
+- [ ] Não há retenção de várias gerações de `producao.sqlite` (ou equivalente) no Storage.
+- [ ] Em uso normal da fábrica + leitores, o egress do ciclo permanece **≤ 5 GB** no plano Free.
+- [ ] Diagnóstico / config permite ver horário da última carga sem precisar baixar o SQLite de novo só para exibir o carimbo.
