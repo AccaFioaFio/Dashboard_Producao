@@ -11,6 +11,7 @@ export type AvisoApontamentoItem = {
   dataProducao: string
   responsavel: string | null
   origem?: string | null
+  observacao?: string | null
 }
 
 export type AvisoApontamentoFinalizado = {
@@ -37,6 +38,8 @@ function blocoItem(item: AvisoApontamentoItem, indice: number, total: number, et
   if (etapa === 'costura') {
     linhas.splice(2, 0, `Origem: ${item.origem?.trim() || '—'}`)
   }
+  const obs = item.observacao?.replace(/\s+/g, ' ').trim()
+  if (obs) linhas.push(`Observação: ${obs}`)
   if (total > 1) linhas.unshift(`Item ${indice + 1}`)
   return linhas
 }

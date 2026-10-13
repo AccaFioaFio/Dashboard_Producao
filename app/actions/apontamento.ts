@@ -26,6 +26,7 @@ import { isProducaoOrigem } from '@/lib/keys'
 import { EXCEL_ROW_FORA_DA_CARGA } from '@/lib/corte-producao'
 import { getApontamentoPedido } from '@/data/apontamento'
 import { pedidoDigits } from '@/lib/pedido'
+import { clipObs } from '@/lib/obs'
 import { resolverProdutoParaIncluir } from '@/lib/produto-manual'
 
 /** Mesma lista/instância do corte (`WHATSAPP_CORTE_TO`). */
@@ -40,6 +41,7 @@ export type SalvarApontamentoInput = {
   qtdPecas: string
   dataProducao: string
   responsavel: string
+  observacao?: string
   nomeProduto?: string | null
 }
 
@@ -134,6 +136,7 @@ export async function buscarProdutoApontamento(
     qtdPecas: gravado?.qtdPecas ?? null,
     dataProducao: gravado?.dataProducao ?? null,
     responsavel: gravado?.responsavel ?? null,
+    observacao: null,
     nomeProduto: gravado?.nomeProduto ?? resolvido.nomeProduto,
   })
   if (!nuvem.ok) {
@@ -189,7 +192,8 @@ export async function salvarApontamento(
   if (origem && !origemCosturaValida(origem)) {
     return { ok: false, error: 'Escolha uma origem do relatório de Costura.' }
   }
-  if (etapa === 'costura' && (qtdPecas != null || dataProducao || responsavel) && !origem) {
+  const observacao = clipObs(input.observacao, 500)
+  if (etapa === 'costura' && (qtdPecas != null || dataProducao || responsavel || observacao) && !origem) {
     return { ok: false, error: 'Escolha a origem antes de gravar o lançamento.' }
   }
 
@@ -229,14 +233,14 @@ export async function salvarApontamento(
 
   const tabela = ETAPAS_APONTAMENTO[etapa].tabela
   const db = getSqlite()
-  const vazio = qtdPecas == null && !dataProducao && !responsavel && !origem
+  const vazio = qtdPecas == null && !dataProducao && !responsavel && !origem && !observacao
 
   if (vazio) {
     if (foraDaCarga) {
       db.prepare(
         `UPDATE ${tabela}
          SET qtd_pecas = NULL, data_producao = NULL, responsavel = NULL,
-             aviso_data_producao = NULL,
+             aviso_data_producao = NULL, observacao = NULL,
              nome_produto = COALESCE(?, nome_produto), atualizado_em = ?
          WHERE pedido_norm = ? AND cod_produto = ?`,
       ).run(nomeProduto, new Date().toISOString(), pedidoNorm, codProduto)
@@ -252,6 +256,7 @@ export async function salvarApontamento(
         dataProducao: null,
         responsavel: null,
         avisoDataProducao: null,
+        observacao: null,
         nomeProduto,
       })
       syncDimPedidoApontamento(pedidoNorm)
@@ -289,13 +294,14 @@ export async function salvarApontamento(
     db.prepare(
       `INSERT INTO ${tabela} (
          pedido_norm, cod_produto, excel_row, origem, qtd_pecas, data_producao,
-         responsavel, nome_produto, atualizado_em
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         responsavel, observacao, nome_produto, atualizado_em
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
          origem = excluded.origem,
          qtd_pecas = excluded.qtd_pecas,
          data_producao = excluded.data_producao,
          responsavel = excluded.responsavel,
+         observacao = excluded.observacao,
          nome_produto = COALESCE(excluded.nome_produto, ${tabela}.nome_produto),
          atualizado_em = excluded.atualizado_em`,
     ).run(
@@ -306,6 +312,7 @@ export async function salvarApontamento(
       qtdPecas,
       dataProducao || null,
       responsavel || null,
+      observacao,
       nomeProduto,
       agora,
     )
@@ -313,12 +320,13 @@ export async function salvarApontamento(
     db.prepare(
       `INSERT INTO ${tabela} (
          pedido_norm, cod_produto, excel_row, qtd_pecas, data_producao,
-         responsavel, nome_produto, atualizado_em
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         responsavel, observacao, nome_produto, atualizado_em
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
          qtd_pecas = excluded.qtd_pecas,
          data_producao = excluded.data_producao,
          responsavel = excluded.responsavel,
+         observacao = excluded.observacao,
          nome_produto = COALESCE(excluded.nome_produto, ${tabela}.nome_produto),
          atualizado_em = excluded.atualizado_em`,
     ).run(
@@ -328,6 +336,7 @@ export async function salvarApontamento(
       qtdPecas,
       dataProducao || null,
       responsavel || null,
+      observacao,
       nomeProduto,
       agora,
     )
@@ -344,6 +353,7 @@ export async function salvarApontamento(
     qtdPecas,
     dataProducao: dataProducao || null,
     responsavel: responsavel || null,
+    observacao,
     nomeProduto,
   })
   syncDimPedidoApontamento(pedidoNorm)
@@ -385,6 +395,7 @@ function tabelasAlerta(etapa: EtapaApontamento) {
 export async function salvarListaApontamento(
   etapaInformada: string,
   pedidoInformado: string,
+  codProdutoInformado?: string,
 ): Promise<SalvarListaApontamentoResult> {
   const etapa = etapaApontamento(etapaInformada)
   if (!etapa) return { ok: false, error: 'Etapa inválida.' }
@@ -401,6 +412,8 @@ export async function salvarListaApontamento(
     return { ok: false, error: 'Pedido sem itens para a lista.' }
   }
 
+  const codFiltro = codProdutoInformado?.trim().replaceAll(' ', '').toLocaleLowerCase('pt-BR') || ''
+
   const pendentes: {
     excelRow: number
     codProduto: string
@@ -409,10 +422,15 @@ export async function salvarListaApontamento(
     qtdPecas: number | null
     dataProducao: string
     responsavel: string | null
+    observacao: string | null
   }[] = []
   const vistos = new Set<string>()
 
   for (const item of consulta.itens) {
+    if (codFiltro) {
+      const chave = item.codProduto.trim().replaceAll(' ', '').toLocaleLowerCase('pt-BR')
+      if (chave !== codFiltro) continue
+    }
     if (!item.dataProducao || item.qtdPecas == null || !item.responsavel) continue
     if (item.avisoDataProducao === item.dataProducao) continue
     if (etapa === 'costura') {
@@ -428,20 +446,22 @@ export async function salvarListaApontamento(
       qtdPecas: item.qtdPecas,
       dataProducao: item.dataProducao,
       responsavel: item.responsavel,
+      observacao: item.observacao,
     })
   }
 
   const { listaNome, alerta: tabelaAlerta, item: tabelaItem } = tabelasAlerta(etapa)
 
   if (!pendentes.length) {
+    const foco = codFiltro ? 'este item' : 'a lista'
     return {
       ok: true,
       salvos: 0,
       itens: [],
       aviso:
         etapa === 'costura'
-          ? 'Nenhum item novo para a lista. Preencha origem Produção, qtd, data e responsável e salve de novo.'
-          : 'Nenhum item novo para a lista. Preencha qtd, data e responsável e salve de novo.',
+          ? `Nenhum item novo para ${foco}. Preencha origem Produção, qtd, data e responsável e salve de novo.`
+          : `Nenhum item novo para ${foco}. Preencha qtd, data e responsável e salve de novo.`,
     }
   }
 
@@ -455,6 +475,7 @@ export async function salvarListaApontamento(
       dataProducao: item.dataProducao,
       responsavel: item.responsavel,
       origem: item.origem,
+      observacao: item.observacao,
     })),
   }
 
@@ -594,6 +615,7 @@ export async function salvarListaApontamento(
         qtdPecas: item.qtdPecas,
         dataProducao: item.dataProducao,
         responsavel: item.responsavel,
+        observacao: item.observacao,
         nomeProduto: item.nomeProduto,
       },
     )

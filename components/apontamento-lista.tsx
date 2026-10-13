@@ -31,6 +31,7 @@ export type ItemApontamentoLista = {
   dataProducao: string | null
   responsavel: string | null
   avisoDataProducao: string | null
+  observacao: string | null
 }
 
 function chaveCodigo(cod: string) {
@@ -42,6 +43,7 @@ type Lancamento = {
   qtdPecas: string
   dataProducao: string
   responsavel: string
+  observacao: string
 }
 
 function AvisoStatus({
@@ -74,7 +76,8 @@ function lancamentoIgual(a: Lancamento, b: Lancamento) {
     a.origem === b.origem &&
     a.qtdPecas.trim() === b.qtdPecas.trim() &&
     a.dataProducao === b.dataProducao &&
-    a.responsavel === b.responsavel
+    a.responsavel === b.responsavel &&
+    a.observacao.trim() === b.observacao.trim()
   )
 }
 
@@ -86,7 +89,9 @@ function Linha({
   qtdLabel,
   responsaveis,
   dataConfirmada,
+  salvandoItem,
   onOcupada,
+  onSalvarItem,
 }: {
   etapa: EtapaApontamento
   pedidoNorm: string
@@ -95,18 +100,22 @@ function Linha({
   qtdLabel: string
   responsaveis: readonly string[]
   dataConfirmada?: string
+  salvandoItem: boolean
   onOcupada: (ocupada: boolean) => void
+  onSalvarItem: () => void
 }) {
   const inicial: Lancamento = {
     origem: item.origem ?? '',
     qtdPecas: textoQtd(item.qtdPecas),
     dataProducao: item.dataProducao ?? '',
     responsavel: item.responsavel ?? '',
+    observacao: item.observacao ?? '',
   }
   const [origem, setOrigem] = useState(inicial.origem)
   const [qtdPecas, setQtdPecas] = useState(inicial.qtdPecas)
   const [dataProducao, setDataProducao] = useState(inicial.dataProducao)
   const [responsavel, setResponsavel] = useState(inicial.responsavel)
+  const [observacao, setObservacao] = useState(inicial.observacao)
   const valores = useRef(inicial)
   const gravado = useRef(inicial)
   const espera = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -116,10 +125,16 @@ function Linha({
   const [erro, setErro] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const descricao = item.nomeProduto?.replace(/\s+/g, ' ').trim() || '—'
-  const colunas = temOrigem ? 8 : 7
+  const colunas = temOrigem ? 9 : 8
+  const naLista =
+    Boolean(dataProducao) &&
+    (item.avisoDataProducao === dataProducao || dataConfirmada === dataProducao)
 
   function gravar(next: Lancamento) {
-    if (lancamentoIgual(next, gravado.current)) return
+    if (lancamentoIgual(next, gravado.current)) {
+      onOcupada(false)
+      return
+    }
     const ticket = ++geracao.current
     onOcupada(true)
     fila.current = fila.current.then(async () => {
@@ -138,12 +153,13 @@ function Linha({
           qtdPecas: atual.qtdPecas,
           dataProducao: atual.dataProducao,
           responsavel: atual.responsavel,
+          observacao: atual.observacao,
           nomeProduto: item.nomeProduto,
         })
         if (!viva.current || ticket !== geracao.current) return
         if (result.ok) gravado.current = atual
         const preenchido =
-          Boolean(atual.origem || atual.dataProducao || atual.responsavel) ||
+          Boolean(atual.origem || atual.dataProducao || atual.responsavel || atual.observacao.trim()) ||
           atual.qtdPecas.trim() !== ''
         setErro(result.ok ? null : result.error)
         setAviso(result.ok && preenchido ? 'Gravado neste pedido.' : null)
@@ -159,11 +175,23 @@ function Linha({
 
   function agendar(next: Lancamento) {
     valores.current = next
+    onOcupada(true)
     if (espera.current) clearTimeout(espera.current)
     espera.current = setTimeout(() => {
       espera.current = null
       gravar(valores.current)
     }, 300)
+  }
+
+  async function salvarNaLista() {
+    if (salvandoItem) return
+    if (espera.current) {
+      clearTimeout(espera.current)
+      espera.current = null
+    }
+    gravar(valores.current)
+    await fila.current
+    onSalvarItem()
   }
 
   useEffect(() => {
@@ -184,20 +212,23 @@ function Linha({
         qtdPecas: next.qtdPecas,
         dataProducao: next.dataProducao,
         responsavel: next.responsavel,
+        observacao: next.observacao,
         nomeProduto: item.nomeProduto,
       })
     }
   }, [etapa, item.codProduto, item.excelRow, pedidoNorm, item.nomeProduto])
 
   const campo =
-    'h-7 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 py-1 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50'
+    'h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 sm:h-7 sm:text-xs'
+  const area =
+    'min-h-16 w-full min-w-0 resize-y rounded-lg border border-input bg-transparent px-2 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 sm:min-h-12 sm:text-xs'
 
   return (
     <>
       <tr className="border-t border-border/80">
         <td
           data-label="Qtd pedida"
-          className="w-px px-1.5 py-1 text-right font-medium whitespace-nowrap tabular-nums"
+          className="w-px px-1.5 py-1.5 text-right font-medium whitespace-nowrap tabular-nums"
         >
           {item.qtdPedida == null
             ? '—'
@@ -205,19 +236,19 @@ function Linha({
         </td>
         <td
           data-label="Código"
-          className="px-1.5 py-1 font-medium whitespace-nowrap tabular-nums"
+          className="px-1.5 py-1.5 font-medium whitespace-nowrap tabular-nums"
         >
           {isCodigoGeradoSemCadastro(item.codProduto) ? '—' : item.codProduto}
         </td>
         <td
           data-label="Descrição"
           data-span="full"
-          className="min-w-[12rem] px-1.5 py-1 leading-snug break-words"
+          className="min-w-[12rem] px-1.5 py-1.5 leading-snug break-words"
         >
           {descricao}
         </td>
         {temOrigem ? (
-          <td data-label="Origem" data-span="full" className="w-44 px-1.5 py-1">
+          <td data-label="Origem" data-span="full" className="w-44 px-1.5 py-1.5">
             <select
               aria-label={`Origem de ${descricao}`}
               value={origem}
@@ -237,7 +268,7 @@ function Linha({
             </select>
           </td>
         ) : null}
-        <td data-label="Responsável" data-span="full" className="w-40 px-1.5 py-1">
+        <td data-label="Responsável" data-span="full" className="w-40 px-1.5 py-1.5">
           <select
             aria-label={`Responsável de ${descricao}`}
             value={responsavel}
@@ -256,7 +287,7 @@ function Linha({
             ))}
           </select>
         </td>
-        <td data-label={qtdLabel} className="w-28 px-1.5 py-1">
+        <td data-label={qtdLabel} className="w-28 px-1.5 py-1.5">
           <input
             aria-label={`${qtdLabel} de ${descricao}`}
             inputMode="decimal"
@@ -274,7 +305,7 @@ function Linha({
             }}
           />
         </td>
-        <td data-label="Data produção" className="w-36 px-1.5 py-1">
+        <td data-label="Data produção" className="w-36 px-1.5 py-1.5">
           <input
             aria-label={`Data produção de ${descricao}`}
             type="date"
@@ -292,23 +323,60 @@ function Linha({
             }}
           />
         </td>
-        <td data-label="Lista" className="w-20 px-1.5 py-1 whitespace-nowrap">
-          <AvisoStatus
-            dataProducao={dataProducao}
-            avisoDataProducao={item.avisoDataProducao}
-            dataConfirmada={dataConfirmada}
+        <td data-label="Observação" data-span="full" className="min-w-[12rem] px-1.5 py-1.5">
+          <textarea
+            aria-label={`Observação de ${descricao}`}
+            value={observacao}
+            rows={2}
+            maxLength={500}
+            placeholder="Opcional"
+            className={area}
+            onChange={(event) => {
+              const next = event.currentTarget.value
+              setObservacao(next)
+              agendar({ ...valores.current, observacao: next })
+            }}
+            onBlur={(event) => {
+              const next = event.currentTarget.value
+              setObservacao(next)
+              agendar({ ...valores.current, observacao: next })
+            }}
           />
+        </td>
+        <td data-label="Lista" data-span="full" className="px-1.5 py-1.5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+            <AvisoStatus
+              dataProducao={dataProducao}
+              avisoDataProducao={item.avisoDataProducao}
+              dataConfirmada={dataConfirmada}
+            />
+            <Button
+              type="button"
+              size="sm"
+              disabled={salvandoItem || naLista}
+              onClick={() => {
+                void salvarNaLista()
+              }}
+              className="h-10 w-full sm:h-8 sm:w-auto"
+            >
+              <ListChecks />
+              {salvandoItem ? 'Salvando…' : naLista ? 'Na lista' : 'Salvar na lista'}
+            </Button>
+          </div>
         </td>
       </tr>
       {erro ? (
         <tr>
-          <td colSpan={colunas} className="px-1.5 pb-1 text-[11px] text-destructive">
+          <td colSpan={colunas} className="px-1.5 pb-1 text-xs text-destructive sm:text-[11px]">
             {erro}
           </td>
         </tr>
       ) : aviso ? (
         <tr>
-          <td colSpan={colunas} className="px-1.5 pb-1 text-[11px] text-muted-foreground">
+          <td
+            colSpan={colunas}
+            className="px-1.5 pb-1 text-xs text-muted-foreground sm:text-[11px]"
+          >
             {aviso}
           </td>
         </tr>
@@ -384,6 +452,7 @@ function IncluirProduto({
         dataProducao: null,
         responsavel: null,
         avisoDataProducao: null,
+        observacao: null,
       })
     })
   }
@@ -466,6 +535,7 @@ export function ApontamentoLista({
   const [ocupadas, setOcupadas] = useState<Record<string, boolean>>({})
   const [lista, setLista] = useState<{ ok: boolean; texto: string } | null>(null)
   const [confirmadas, setConfirmadas] = useState<Record<string, string>>({})
+  const [salvandoCod, setSalvandoCod] = useState<string | null>(null)
   const [salvando, startSalvar] = useTransition()
   const router = useRouter()
   const responsaveis = etapa === 'costura' ? RESPONSAVEIS_COSTURA : RESPONSAVEIS_REVISAO
@@ -478,8 +548,8 @@ export function ApontamentoLista({
   const chaves = new Set(visiveis.map((item) => chaveCodigo(item.codProduto)))
   const dica =
     etapa === 'costura'
-      ? 'O que já entrou na lista fica neste pedido. O próximo clique leva só os itens novos com origem Produção, qtd, data e responsável (e só esses disparam WhatsApp/alerta).'
-      : 'O que já entrou na lista fica neste pedido. O próximo clique leva só os itens novos com qtd, data e responsável (e só esses disparam WhatsApp/alerta).'
+      ? 'O que já entrou na lista fica neste pedido. Em cada item, Salvar na lista leva só aquele produto (origem Produção, qtd, data e responsável). O botão do topo salva todos os novos de uma vez.'
+      : 'O que já entrou na lista fica neste pedido. Em cada item, Salvar na lista leva só aquele produto (qtd, data e responsável). O botão do topo salva todos os novos de uma vez.'
 
   function marcarOcupada(chave: string, ocupada: boolean) {
     setOcupadas((atual) => {
@@ -491,10 +561,11 @@ export function ApontamentoLista({
     })
   }
 
-  function salvarLista() {
+  function salvarLista(codProduto?: string) {
     setLista(null)
+    setSalvandoCod(codProduto ?? '')
     startSalvar(async () => {
-      const result = await salvarListaApontamento(etapa, pedidoNorm)
+      const result = await salvarListaApontamento(etapa, pedidoNorm, codProduto)
       setLista({
         ok: result.ok,
         texto: result.ok ? result.aviso : result.error,
@@ -508,6 +579,7 @@ export function ApontamentoLista({
           return next
         })
       }
+      setSalvandoCod(null)
       if (result.ok) router.refresh()
     })
   }
@@ -519,13 +591,13 @@ export function ApontamentoLista({
           type="button"
           size="sm"
           disabled={gravando || salvando}
-          onClick={salvarLista}
+          onClick={() => salvarLista()}
           className="h-10 w-full sm:h-8 sm:w-auto"
         >
           <ListChecks />
-          {salvando ? 'Salvando…' : 'Salvar na lista'}
+          {salvando && salvandoCod === '' ? 'Salvando…' : 'Salvar todos na lista'}
         </Button>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground sm:text-sm">
           {gravando ? 'Aguardando a gravação da lista.' : dica}
         </p>
       </div>
@@ -540,7 +612,7 @@ export function ApontamentoLista({
       {lista ? (
         <p
           className={cn(
-            'text-xs',
+            'text-xs sm:text-sm',
             lista.ok ? 'text-muted-foreground' : 'text-destructive',
           )}
         >
@@ -548,13 +620,13 @@ export function ApontamentoLista({
         </p>
       ) : null}
       {!visiveis.length ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground sm:text-sm">
           Informe o código (para buscar a descrição) ou só a descrição do produto.
         </p>
       ) : (
         <div className="card-surface table-surface mobile-form-table min-w-0 overflow-x-auto">
-          <table className="w-full text-left text-[10px] leading-snug">
-            <thead className="bg-muted/50 text-[9px] font-semibold tracking-wide text-muted-foreground uppercase">
+          <table className="w-full text-left text-xs leading-snug sm:text-[11px]">
+            <thead className="bg-muted/50 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase sm:text-[9px]">
               <tr>
                 <th className="w-px px-1.5 py-1 text-right whitespace-nowrap">Qtd pedida</th>
                 <th className="px-1.5 py-1 whitespace-nowrap">Código</th>
@@ -563,25 +635,34 @@ export function ApontamentoLista({
                 <th className="px-1.5 py-1">Responsável</th>
                 <th className="px-1.5 py-1">{qtdLabel}</th>
                 <th className="px-1.5 py-1">Data produção</th>
+                <th className="px-1.5 py-1">Observação</th>
                 <th className="px-1.5 py-1">Lista</th>
               </tr>
             </thead>
             <tbody>
-              {visiveis.map((item) => (
-                <Linha
-                  key={`${item.codProduto}:${item.excelRow}`}
-                  etapa={etapa}
-                  pedidoNorm={pedidoNorm}
-                  item={item}
-                  temOrigem={temOrigem}
-                  qtdLabel={qtdLabel}
-                  responsaveis={responsaveis}
-                  dataConfirmada={confirmadas[chaveCodigo(item.codProduto)]}
-                  onOcupada={(ocupada) =>
-                    marcarOcupada(`${item.codProduto}:${item.excelRow}`, ocupada)
-                  }
-                />
-              ))}
+              {visiveis.map((item) => {
+                const chave = chaveCodigo(item.codProduto)
+                return (
+                  <Linha
+                    key={`${item.codProduto}:${item.excelRow}`}
+                    etapa={etapa}
+                    pedidoNorm={pedidoNorm}
+                    item={item}
+                    temOrigem={temOrigem}
+                    qtdLabel={qtdLabel}
+                    responsaveis={responsaveis}
+                    dataConfirmada={confirmadas[chave]}
+                    salvandoItem={salvando && salvandoCod === item.codProduto}
+                    onOcupada={(ocupada) =>
+                      marcarOcupada(`${item.codProduto}:${item.excelRow}`, ocupada)
+                    }
+                    onSalvarItem={() => {
+                      if (salvando) return
+                      salvarLista(item.codProduto)
+                    }}
+                  />
+                )
+              })}
             </tbody>
           </table>
         </div>

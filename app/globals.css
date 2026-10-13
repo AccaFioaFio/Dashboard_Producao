@@ -755,6 +755,8 @@
 
   .mobile-form-table {
     overflow-x: visible;
+    font-size: 0.9375rem;
+    line-height: 1.35;
   }
 
   .mobile-form-table table,
@@ -820,18 +822,23 @@
   .mobile-form-table td[data-label]::before {
     content: attr(data-label);
     display: block;
-    margin-bottom: 0.2rem;
-    font-size: 10px;
+    margin-bottom: 0.25rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted-foreground);
   }
 
   .mobile-form-table td input,
-  .mobile-form-table td select {
-    min-height: 2.25rem;
+  .mobile-form-table td select,
+  .mobile-form-table td textarea {
+    min-height: 2.5rem;
     font-size: 16px;
+  }
+
+  .mobile-form-table td textarea {
+    min-height: 4.5rem;
   }
 
   .filter-bar .rounded-full {

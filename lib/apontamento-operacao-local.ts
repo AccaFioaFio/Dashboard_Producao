@@ -11,6 +11,7 @@ type LinhaLocal = {
   dataProducao: string | null
   responsavel: string | null
   avisoDataProducao: string | null
+  observacao: string | null
   nomeProduto: string | null
   atualizadoEm: string
 }
@@ -60,7 +61,7 @@ function ler(etapa: EtapaApontamento): LinhaLocal[] {
               excel_row as excelRow, ${origem}, qtd_pecas as qtdPecas,
               data_producao as dataProducao, responsavel,
               aviso_data_producao as avisoDataProducao,
-              nome_produto as nomeProduto,
+              observacao, nome_produto as nomeProduto,
               atualizado_em as atualizadoEm
        FROM ${tabela}`,
     )
@@ -195,14 +196,15 @@ export function mergeApontamentoOperacao(backup: ApontamentoOperacaoBackup | nul
       const upsert = db.prepare(
         `INSERT INTO ${tabela} (
            pedido_norm, cod_produto, excel_row, ${colunasOrigem}qtd_pecas, data_producao,
-           responsavel, aviso_data_producao, nome_produto, atualizado_em
-         ) VALUES (?, ?, ?, ${valoresOrigem}?, ?, ?, ?, ?, ?)
+           responsavel, aviso_data_producao, observacao, nome_produto, atualizado_em
+         ) VALUES (?, ?, ?, ${valoresOrigem}?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
            ${atualizaOrigem}
            qtd_pecas = excluded.qtd_pecas,
            data_producao = excluded.data_producao,
            responsavel = excluded.responsavel,
            aviso_data_producao = excluded.aviso_data_producao,
+           observacao = excluded.observacao,
            nome_produto = COALESCE(excluded.nome_produto, ${tabela}.nome_produto),
            atualizado_em = excluded.atualizado_em
          WHERE excluded.atualizado_em >= ${tabela}.atualizado_em`,
@@ -217,6 +219,7 @@ export function mergeApontamentoOperacao(backup: ApontamentoOperacaoBackup | nul
           row.dataProducao,
           row.responsavel,
           row.avisoDataProducao,
+          row.observacao,
           row.nomeProduto,
           row.atualizadoEm,
         ]

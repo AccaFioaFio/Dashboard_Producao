@@ -20,6 +20,7 @@ export type ItemApontamento = {
   dataProducao: string | null
   responsavel: string | null
   avisoDataProducao: string | null
+  observacao: string | null
 }
 
 export type ApontamentoConsulta = {
@@ -59,6 +60,9 @@ function maisRecente(local: Gravado | undefined, nuvem: ApontamentoNuvem | undef
   if (!merged.nomeProduto && outro?.nomeProduto) {
     merged = { ...merged, nomeProduto: outro.nomeProduto }
   }
+  if (!merged.observacao && outro?.observacao) {
+    merged = { ...merged, observacao: outro.observacao }
+  }
   // Se a cópia mais nova ainda não marcou aviso e a outra já avisou a mesma data, herda.
   if (
     outro &&
@@ -80,7 +84,8 @@ async function lancamentosDoPedido(etapa: EtapaApontamento, pedidoNorm: string) 
       `SELECT cod_produto as codProduto, excel_row as excelRow, ${origem},
               qtd_pecas as qtdPecas, data_producao as dataProducao,
               responsavel, aviso_data_producao as avisoDataProducao,
-              nome_produto as nomeProduto, atualizado_em as atualizadoEm
+              observacao, nome_produto as nomeProduto,
+              atualizado_em as atualizadoEm
        FROM ${tabela}
        WHERE pedido_norm = ?
        ORDER BY atualizado_em DESC`,
@@ -115,6 +120,7 @@ function itemDe(
     dataProducao: lancamento?.dataProducao ?? null,
     responsavel: lancamento?.responsavel ?? null,
     avisoDataProducao: lancamento?.avisoDataProducao ?? null,
+    observacao: lancamento?.observacao ?? null,
   }
 }
 

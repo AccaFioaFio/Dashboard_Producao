@@ -9,6 +9,7 @@ export type ApontamentoNuvem = {
   dataProducao: string | null
   responsavel: string | null
   avisoDataProducao: string | null
+  observacao: string | null
   nomeProduto: string | null
   atualizadoEm: string
 }
@@ -74,6 +75,7 @@ function lancamentoDe(raw: unknown, codArquivo?: string): ApontamentoNuvem | nul
     dataProducao: texto(row.dataProducao),
     responsavel: texto(row.responsavel),
     avisoDataProducao: texto(row.avisoDataProducao),
+    observacao: texto(row.observacao),
     nomeProduto: texto(row.nomeProduto),
     atualizadoEm,
   }
@@ -156,6 +158,7 @@ export async function gravarApontamentoNuvem(
     dataProducao: lancamento.dataProducao,
     responsavel: lancamento.responsavel,
     avisoDataProducao,
+    observacao: lancamento.observacao ?? null,
     nomeProduto: lancamento.nomeProduto ?? anterior?.nomeProduto ?? null,
     atualizadoEm: new Date().toISOString(),
   }
@@ -186,6 +189,7 @@ export async function marcarAvisoApontamentoNuvem(
     qtdPecas: base.qtdPecas,
     dataProducao,
     responsavel: base.responsavel,
+    observacao: base.observacao,
     nomeProduto: base.nomeProduto,
     avisoDataProducao: dataProducao,
   })

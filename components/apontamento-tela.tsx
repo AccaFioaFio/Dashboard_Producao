@@ -32,8 +32,8 @@ export async function ApontamentoTela({
   const mostrarLista = Boolean(consulta?.itens.length || consulta?.inclusaoManual)
   const descricao =
     etapa === 'costura'
-      ? 'Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código (descrição vem de Itens ou é digitada) ou só a descrição, sem código. Origem, qtd peças, data de produção e responsável gravam sozinhos. O botão Salvar na lista envia WhatsApp e o alerta na Visão Geral só para itens novos com origem Produção ainda não avisados.'
-      : 'Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código (descrição vem de Itens ou é digitada) ou só a descrição, sem código. Qtd, data de produção e responsável gravam sozinhos. O botão Salvar na lista envia WhatsApp e o alerta na Visão Geral só para itens novos ainda não avisados.'
+      ? 'Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código (descrição vem de Itens ou é digitada) ou só a descrição, sem código. Origem, qtd peças, data, responsável e observação gravam sozinhos. Em cada item, Salvar na lista envia WhatsApp e o alerta na Visão Geral só para aquele produto novo com origem Produção; o botão do topo salva todos os novos de uma vez.'
+      : 'Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código (descrição vem de Itens ou é digitada) ou só a descrição, sem código. Qtd, data, responsável e observação gravam sozinhos. Em cada item, Salvar na lista envia WhatsApp e o alerta na Visão Geral só para aquele produto novo; o botão do topo salva todos os novos de uma vez.'
 
   return (
     <PageShell
