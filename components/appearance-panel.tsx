@@ -24,7 +24,7 @@ export function AppearancePanel() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 gap-1.5 rounded-full bg-white/12 px-2.5 text-header-foreground hover:bg-white/18 hover:text-header-foreground"
+            className="h-8 shrink-0 gap-1.5 rounded-full bg-white/12 px-2.5 text-header-foreground hover:bg-white/18 hover:text-header-foreground"
           />
         }
       >

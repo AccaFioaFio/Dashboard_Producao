@@ -178,18 +178,28 @@ function Linha({
   return (
     <>
       <tr className="border-t border-border/80">
-        <td className="w-px px-1.5 py-1 text-right font-medium whitespace-nowrap tabular-nums">
+        <td
+          data-label="Qtd pedida"
+          className="w-px px-1.5 py-1 text-right font-medium whitespace-nowrap tabular-nums"
+        >
           {item.qtdPedida == null
             ? '—'
             : formatNumber(item.qtdPedida, item.qtdPedida % 1 ? 2 : 0)}
         </td>
-        <td className="px-1.5 py-1 font-medium whitespace-nowrap tabular-nums">
+        <td
+          data-label="Código"
+          className="px-1.5 py-1 font-medium whitespace-nowrap tabular-nums"
+        >
           {isCodigoGeradoSemCadastro(item.codProduto) ? '—' : item.codProduto}
         </td>
-        <td className="min-w-[12rem] px-1.5 py-1 leading-snug break-words">
+        <td
+          data-label="Descrição"
+          data-span="full"
+          className="min-w-[12rem] px-1.5 py-1 leading-snug break-words"
+        >
           {descricao}
         </td>
-        <td className="w-56 px-1.5 py-1">
+        <td data-label="Responsável" data-span="full" className="w-56 px-1.5 py-1">
           <select
             aria-label={`Responsável de ${descricao}`}
             value={responsavel}
@@ -208,7 +218,7 @@ function Linha({
             ))}
           </select>
         </td>
-        <td className="w-28 px-1.5 py-1">
+        <td data-label="Qtd Real Corte" className="w-28 px-1.5 py-1">
           <input
             aria-label={`Qtd real corte de ${descricao}`}
             inputMode="decimal"
@@ -226,7 +236,7 @@ function Linha({
             }}
           />
         </td>
-        <td className="w-28 px-1.5 py-1">
+        <td data-label="Qtd volumes" className="w-28 px-1.5 py-1">
           <input
             aria-label={`Qtd volumes de ${descricao}`}
             inputMode="decimal"
@@ -244,7 +254,7 @@ function Linha({
             }}
           />
         </td>
-        <td className="w-36 px-1.5 py-1">
+        <td data-label="Data Início" className="w-36 px-1.5 py-1">
           <input
             aria-label={`Data início corte de ${descricao}`}
             type="date"
@@ -262,7 +272,7 @@ function Linha({
             }}
           />
         </td>
-        <td className="w-36 px-1.5 py-1">
+        <td data-label="Data Final" className="w-36 px-1.5 py-1">
           <input
             aria-label={`Data final corte de ${descricao}`}
             type="date"
@@ -280,7 +290,7 @@ function Linha({
             }}
           />
         </td>
-        <td className="w-16 px-1.5 py-1 whitespace-nowrap">
+        <td data-label="Lista" className="w-16 px-1.5 py-1 whitespace-nowrap">
           <AvisoStatus
             dataFinal={dataFinal}
             avisoDataFinal={item.avisoDataFinal}
@@ -375,8 +385,11 @@ function IncluirProduto({
   }
 
   return (
-    <form onSubmit={enviar} className="flex flex-wrap items-end gap-2">
-      <label className="flex w-36 shrink-0 flex-col gap-1 text-xs font-medium text-muted-foreground">
+    <form
+      onSubmit={enviar}
+      className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end"
+    >
+      <label className="flex w-full shrink-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-36">
         Código do produto
         <Input
           value={cod}
@@ -388,9 +401,10 @@ function IncluirProduto({
           maxLength={11}
           autoComplete="off"
           disabled={pendente}
+          className="h-10 text-base sm:h-8 sm:text-sm"
         />
       </label>
-      <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground">
+      <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground sm:min-w-[16rem]">
         Descrição do produto
         <Input
           value={descricao}
@@ -402,9 +416,15 @@ function IncluirProduto({
           }
           autoComplete="off"
           disabled={pendente}
+          className="h-10 text-base sm:h-8 sm:text-sm"
         />
       </label>
-      <Button type="submit" size="sm" disabled={pendente}>
+      <Button
+        type="submit"
+        size="sm"
+        disabled={pendente}
+        className="h-10 w-full sm:h-8 sm:w-auto"
+      >
         <Plus />
         {pendente ? 'Buscando…' : pedirDescricao ? 'Cadastrar' : 'Incluir'}
       </Button>
@@ -479,12 +499,13 @@ export function CorteProducaoLista({
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Button
           type="button"
           size="sm"
           disabled={gravando || salvando}
           onClick={salvarLista}
+          className="h-10 w-full sm:h-8 sm:w-auto"
         >
           <ListChecks />
           {salvando ? 'Salvando…' : 'Salvar na lista'}
@@ -517,7 +538,7 @@ export function CorteProducaoLista({
           Informe o código (para buscar a descrição) ou só a descrição do produto.
         </p>
       ) : (
-      <div className="card-surface table-surface min-w-0 overflow-x-auto">
+      <div className="card-surface table-surface mobile-form-table min-w-0 overflow-x-auto">
       <table className={cn('w-full text-left text-[10px] leading-snug')}>
         <thead className="bg-muted/50 text-[9px] font-semibold tracking-wide text-muted-foreground uppercase">
           <tr>

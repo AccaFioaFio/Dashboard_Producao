@@ -648,6 +648,44 @@
   }
 }
 
+@keyframes sidebar-icon-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2.5px);
+  }
+}
+
+.sidebar-nav-icon {
+  display: inline-flex;
+  animation: sidebar-icon-float 2.2s ease-in-out infinite;
+}
+
+.sidebar-nav-icon svg {
+  transition: transform 200ms ease-out;
+}
+
+.group\/menu-button:hover .sidebar-nav-icon svg,
+.group\/menu-button:focus-visible .sidebar-nav-icon svg {
+  transform: scale(1.18);
+}
+
+.group\/menu-button:active .sidebar-nav-icon svg {
+  transform: scale(1.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-nav-icon {
+    animation: none;
+  }
+
+  .sidebar-nav-icon svg {
+    transition: none;
+  }
+}
+
 [data-layout='compacto'] .kpi-shine::after,
 [data-layout='compacto'] .page-shell {
   animation: none;
@@ -700,4 +738,103 @@
 .sidebar-update-btn > * {
   position: relative;
   z-index: 1;
+}
+
+/* Layout mobile: tabelas de lançamento viram cartões sem perder os campos. */
+@media (max-width: 767px) {
+  html {
+    --page-pad: 0.75rem;
+    --page-gap: 0.75rem;
+    --kpi-min-h: 4.75rem;
+    --header-h: 2.75rem;
+  }
+
+  body {
+    background-attachment: scroll;
+  }
+
+  .mobile-form-table {
+    overflow-x: visible;
+  }
+
+  .mobile-form-table table,
+  .mobile-form-table thead,
+  .mobile-form-table tbody,
+  .mobile-form-table tr,
+  .mobile-form-table th,
+  .mobile-form-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .mobile-form-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .mobile-form-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0.65rem;
+  }
+
+  .mobile-form-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.55rem 0.65rem;
+    border: 1px solid color-mix(in oklch, var(--glow) var(--card-rim, 32%), var(--border));
+    border-radius: var(--radius-lg);
+    background: color-mix(in oklch, var(--card) 92%, var(--background));
+    padding: 0.75rem;
+    box-shadow: 0 1px 0 color-mix(in oklch, white 55%, transparent);
+  }
+
+  .mobile-form-table tr:has(td[colspan]) {
+    grid-template-columns: 1fr;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    padding: 0 0.75rem 0.15rem;
+    margin-top: -0.35rem;
+  }
+
+  .mobile-form-table td {
+    min-width: 0 !important;
+    width: auto !important;
+    padding: 0 !important;
+    white-space: normal;
+  }
+
+  .mobile-form-table td[data-span='full'] {
+    grid-column: 1 / -1;
+  }
+
+  .mobile-form-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.2rem;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  .mobile-form-table td input,
+  .mobile-form-table td select {
+    min-height: 2.25rem;
+    font-size: 16px;
+  }
+
+  .filter-bar .rounded-full {
+    min-height: 2rem;
+  }
 }

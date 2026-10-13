@@ -8,13 +8,13 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <main className="flex min-h-svh items-center justify-center px-4 py-10">
+    <main className="flex min-h-svh items-center justify-center px-4 py-10 pt-[max(2.5rem,env(safe-area-inset-top))] pb-[max(2.5rem,env(safe-area-inset-bottom))]">
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center text-center">
           <img
             src="/logo-fio-a-fio.png?v=3"
             alt="Fio a Fio"
-            className="mx-auto h-24! w-auto object-contain"
+            className="mx-auto h-20! w-auto object-contain sm:h-24!"
           />
           <CardTitle className="text-center">Produção</CardTitle>
         </CardHeader>

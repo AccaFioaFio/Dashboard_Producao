@@ -10,7 +10,7 @@ export function PedidoSearch() {
 
   return (
     <form
-      className="hidden min-w-0 sm:block"
+      className="min-w-0 flex-1 sm:flex-none"
       onSubmit={(event) => {
         event.preventDefault()
         const form = event.currentTarget
@@ -27,7 +27,8 @@ export function PedidoSearch() {
         <Input
           name="pedido"
           placeholder="Nº pedido"
-          className="h-8 w-36 border-white/15 bg-white/12 pl-7 text-header-foreground placeholder:text-header-foreground/50 md:w-44"
+          inputMode="numeric"
+          className="h-8 w-full min-w-0 border-white/15 bg-white/12 pl-7 text-header-foreground placeholder:text-header-foreground/50 sm:w-36 md:w-44"
         />
       </label>
     </form>

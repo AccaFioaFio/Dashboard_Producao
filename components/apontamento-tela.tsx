@@ -41,8 +41,11 @@ export async function ApontamentoTela({
       description={descricao}
       actions={<ApontamentoVoltarButton etapa={etapa} />}
     >
-      <form action={config.href} className="card-surface flex flex-wrap items-end gap-2 p-3">
-        <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground">
+      <form
+        action={config.href}
+        className="card-surface flex flex-col gap-2 p-3 sm:flex-row sm:flex-wrap sm:items-end"
+      >
+        <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground sm:min-w-[16rem]">
           Número do pedido
           <Input
             name="pedido"
@@ -50,9 +53,10 @@ export async function ApontamentoTela({
             placeholder="Ex.: 17226"
             autoComplete="off"
             inputMode="numeric"
+            className="h-10 text-base sm:h-8 sm:text-sm"
           />
         </label>
-        <Button type="submit">
+        <Button type="submit" className="h-10 w-full sm:h-8 sm:w-auto">
           <Search />
           Pesquisar
         </Button>

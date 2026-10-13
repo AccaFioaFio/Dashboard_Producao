@@ -23,15 +23,17 @@ export default async function PainelLayout({
   }
 
   return (
-    <SidebarProvider>
+    <SidebarProvider className="h-svh max-h-svh overflow-hidden">
       <AppSidebar
         acessos={session.acessos}
         login={session.login}
         lastUpdate={<UltimaAtualizacaoSlot />}
       />
-      <SidebarInset className="relative overflow-hidden">
+      <SidebarInset className="relative min-h-0 min-w-0 overflow-hidden">
         <AppHeader acessos={session.acessos} stamp={<CargaStamp />} />
-        <div className="relative z-0 flex flex-1 flex-col">{children}</div>
+        <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[env(safe-area-inset-bottom)]">
+          {children}
+        </div>
       </SidebarInset>
     </SidebarProvider>
   )

@@ -9,8 +9,12 @@ export function CorteAcaoButton({ filters }: { filters: DashFilters }) {
   const query = filtersToSearch(filters).toString()
   const href = query ? `/corte/acao-comercial?${query}` : '/corte/acao-comercial'
   return (
-    <span className="action-glow">
-      <Button nativeButton={false} className="action-glow-face" render={<Link href={href} />}>
+    <span className="action-glow w-full sm:w-auto">
+      <Button
+        nativeButton={false}
+        className="action-glow-face h-10 w-full sm:h-8 sm:w-auto"
+        render={<Link href={href} />}
+      >
         <Handshake />
         Ação Comercial
       </Button>
@@ -20,8 +24,12 @@ export function CorteAcaoButton({ filters }: { filters: DashFilters }) {
 
 export function CorteProducaoButton() {
   return (
-    <span className="action-glow">
-      <Button nativeButton={false} className="action-glow-face" render={<Link href="/corte/producao" />}>
+    <span className="action-glow w-full sm:w-auto">
+      <Button
+        nativeButton={false}
+        className="action-glow-face h-10 w-full sm:h-8 sm:w-auto"
+        render={<Link href="/corte/producao" />}
+      >
         <Scissors />
         Corte Produção
       </Button>
@@ -33,8 +41,12 @@ export function CorteVoltarButton({ filters }: { filters: DashFilters }) {
   const query = filtersToSearch(filters).toString()
   const href = query ? `/corte?${query}` : '/corte'
   return (
-    <span className="action-glow">
-      <Button nativeButton={false} className="action-glow-face" render={<Link href={href} />}>
+    <span className="action-glow w-full sm:w-auto">
+      <Button
+        nativeButton={false}
+        className="action-glow-face h-10 w-full sm:h-8 sm:w-auto"
+        render={<Link href={href} />}
+      >
         <ArrowLeft />
         Voltar ao Corte
       </Button>

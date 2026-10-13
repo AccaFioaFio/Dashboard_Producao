@@ -7,10 +7,10 @@ import type { EtapaApontamento } from '@/lib/apontamento'
 
 export function CosturaProducaoButton() {
   return (
-    <span className="action-glow">
+    <span className="action-glow w-full sm:w-auto">
       <Button
         nativeButton={false}
-        className="action-glow-face"
+        className="action-glow-face h-10 w-full sm:h-8 sm:w-auto"
         render={<Link href="/costuras/producao" />}
       >
         <Shirt />
@@ -22,10 +22,10 @@ export function CosturaProducaoButton() {
 
 export function RevisaoLancamentoButton() {
   return (
-    <span className="action-glow">
+    <span className="action-glow w-full sm:w-auto">
       <Button
         nativeButton={false}
-        className="action-glow-face"
+        className="action-glow-face h-10 w-full sm:h-8 sm:w-auto"
         render={<Link href="/revisao/lancamento" />}
       >
         <ClipboardCheck />
@@ -39,8 +39,12 @@ export function ApontamentoVoltarButton({ etapa }: { etapa: EtapaApontamento }) 
   const href = etapa === 'costura' ? '/costuras' : '/revisao'
   const label = etapa === 'costura' ? 'Voltar à Costura' : 'Voltar à Revisão'
   return (
-    <span className="action-glow">
-      <Button nativeButton={false} className="action-glow-face" render={<Link href={href} />}>
+    <span className="action-glow w-full sm:w-auto">
+      <Button
+        nativeButton={false}
+        className="action-glow-face h-10 w-full sm:h-8 sm:w-auto"
+        render={<Link href={href} />}
+      >
         <ArrowLeft />
         {label}
       </Button>

@@ -100,7 +100,7 @@ export function FilterBar({
       </div>
 
       {fields.includes('mes') ? (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="-mx-0.5 flex gap-1.5 overflow-x-auto px-0.5 pb-0.5 sm:flex-wrap sm:overflow-visible">
           {options.meses.map((mes) => {
             const selected = values.mes === mes
             return (
@@ -109,7 +109,7 @@ export function FilterBar({
                 type="button"
                 onClick={() => setField('mes', selected ? undefined : mes)}
                 className={cn(
-                  'rounded-full border px-2.5 py-1 text-xs font-medium transition',
+                  'shrink-0 rounded-full border px-2.5 py-1.5 text-xs font-medium transition sm:py-1',
                   selected
                     ? 'border-primary bg-primary text-primary-foreground shadow-[0_0_16px_-6px_var(--primary)]'
                     : 'border-border/80 bg-background/50 text-muted-foreground hover:border-primary/50 hover:text-foreground',

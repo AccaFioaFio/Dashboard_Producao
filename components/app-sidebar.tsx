@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LogOut } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useEffect, type ComponentProps, type ReactNode } from 'react'
 import { logout } from '@/app/actions/auth'
 import {
   Sidebar,
@@ -16,10 +16,30 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from '@/components/ui/sidebar'
 import { AtualizarDadosButton } from '@/components/atualizar-dados-button'
 import { canAtualizar, canSeeNav, homePath } from '@/lib/auth/access'
 import { findNavItem, navigation } from '@/lib/navigation'
+
+function NavLink({
+  href,
+  children,
+  ...props
+}: ComponentProps<typeof Link>) {
+  const { isMobile, setOpenMobile } = useSidebar()
+  return (
+    <Link
+      href={href}
+      onClick={() => {
+        if (isMobile) setOpenMobile(false)
+      }}
+      {...props}
+    >
+      {children}
+    </Link>
+  )
+}
 
 export function AppSidebar({
   acessos,
@@ -31,20 +51,25 @@ export function AppSidebar({
   lastUpdate?: ReactNode
 }) {
   const pathname = usePathname()
+  const { isMobile, setOpenMobile } = useSidebar()
   const activeHref = findNavItem(pathname)?.href
   const items = navigation.filter((item) => canSeeNav(item.href, acessos))
   const home = homePath(acessos)
 
+  useEffect(() => {
+    if (isMobile) setOpenMobile(false)
+  }, [pathname, isMobile, setOpenMobile])
+
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b border-sidebar-border/80 px-2 py-1.5">
+      <SidebarHeader className="border-b border-sidebar-border/80 px-2 py-1.5 pt-[max(0.375rem,env(safe-area-inset-top))]">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
               tooltip="Fio a Fio"
               className="h-auto min-h-10 justify-center overflow-visible py-1.5 hover:bg-transparent group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-1!"
-              render={<Link href={home} />}
+              render={<NavLink href={home} />}
             >
               <img
                 src="/logo-fio-a-fio.png?v=3"
@@ -60,15 +85,20 @@ export function AppSidebar({
         <SidebarGroup className="px-2 py-2">
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
-              {items.map((item) => (
+              {items.map((item, index) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     isActive={activeHref === item.href}
                     tooltip={item.title}
-                    className="h-9 rounded-lg px-2.5 text-[13px] font-medium"
-                    render={<Link href={item.href} />}
+                    className="h-10 rounded-lg px-2.5 text-[13px] font-medium transition-colors md:h-9"
+                    render={<NavLink href={item.href} />}
                   >
-                    <item.icon />
+                    <span
+                      className="sidebar-nav-icon"
+                      style={{ animationDelay: `${index * 140}ms` }}
+                    >
+                      <item.icon />
+                    </span>
                     <span>{item.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

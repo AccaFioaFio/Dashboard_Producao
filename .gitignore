@@ -19,3 +19,7 @@ node_modules
 # data/producao.sqlite entra no Git: o clique atualiza o arquivo; o site lê dele, sem Blob.
 data/*.sqlite-*
 data/cache/
+.vercel
+.env*
+tools/evolution/cloudflared.exe
+tools/evolution/qr-corte.png

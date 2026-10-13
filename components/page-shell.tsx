@@ -19,7 +19,7 @@ export function PageShell({
       style={{ gap: 'var(--page-gap)', padding: 'var(--page-pad)' }}
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div className="flex flex-col gap-0.5">
+        <div className="flex min-w-0 flex-col gap-0.5">
           <p className="text-[10px] font-semibold tracking-[0.2em] text-primary uppercase">
             Produção · 2026
           </p>
@@ -31,7 +31,9 @@ export function PageShell({
           </p>
         </div>
         {actions ? (
-          <div className="flex shrink-0 items-center gap-2">{actions}</div>
+          <div className="flex w-full min-w-0 shrink-0 flex-wrap items-center gap-2 md:w-auto md:justify-end">
+            {actions}
+          </div>
         ) : null}
       </div>
       {children}

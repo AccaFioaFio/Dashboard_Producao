@@ -20,7 +20,7 @@ export function LoginForm() {
           autoCapitalize="none"
           spellCheck={false}
           required
-          className="h-9"
+          className="h-11 text-base"
         />
       </label>
       <label className="flex flex-col gap-1.5 text-sm font-medium">
@@ -30,7 +30,7 @@ export function LoginForm() {
           type="password"
           autoComplete="current-password"
           required
-          className="h-9"
+          className="h-11 text-base"
         />
       </label>
       {state.error ? (
@@ -38,7 +38,7 @@ export function LoginForm() {
           {state.error}
         </p>
       ) : null}
-      <Button type="submit" className="mt-1 h-9" disabled={pending}>
+      <Button type="submit" className="mt-1 h-11 text-base" disabled={pending}>
         {pending ? 'Entrando…' : 'Entrar'}
       </Button>
     </form>
