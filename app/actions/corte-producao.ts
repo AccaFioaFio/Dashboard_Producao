@@ -23,6 +23,7 @@ import {
   marcarAvisoNuvem,
 } from '@/lib/corte-nuvem'
 import { enviarAvisoCorteFinalizado } from '@/lib/mail/corte-finalizado'
+import { enviarAvisoCorteWhatsApp } from '@/lib/whatsapp/corte-finalizado'
 import { gravarDatasCorteNaPlanilha } from '@/lib/corte-planilha-datas'
 
 export type SalvarCorteProducaoInput = {
@@ -52,6 +53,9 @@ export type SalvarListaCortadorResult =
 
 /** Pausa o SMTP. A lista e o alerta continuam. Volte para `false` para reativar o e-mail. */
 const ENVIO_EMAIL_CORTE_PAUSADO = true
+
+/** Pausa o WhatsApp (Evolution API). Volte para `false` após configurar as env vars. */
+const ENVIO_WHATSAPP_CORTE_PAUSADO = false
 
 const DATA = /^\d{4}-\d{2}-\d{2}$/
 
@@ -406,19 +410,34 @@ export async function salvarListaCortador(
     }
   }
 
+  const avisoCorte = {
+    pedidoNorm,
+    cliente: consulta.cliente,
+    itens: pendentes,
+  }
+
   if (!ENVIO_EMAIL_CORTE_PAUSADO) {
     try {
-      await enviarAvisoCorteFinalizado({
-        pedidoNorm,
-        cliente: consulta.cliente,
-        itens: pendentes,
-      })
+      await enviarAvisoCorteFinalizado(avisoCorte)
     } catch (error) {
       const detalhe = error instanceof Error ? error.message : String(error)
       console.error('aviso de corte finalizado não enviado', pedidoNorm, detalhe)
       return {
         ok: false,
         error: `O e-mail não saiu (${detalhe.slice(0, 140)}). Os itens continuam pendentes.`,
+      }
+    }
+  }
+
+  if (!ENVIO_WHATSAPP_CORTE_PAUSADO) {
+    try {
+      await enviarAvisoCorteWhatsApp(avisoCorte)
+    } catch (error) {
+      const detalhe = error instanceof Error ? error.message : String(error)
+      console.error('aviso de corte WhatsApp não enviado', pedidoNorm, detalhe)
+      return {
+        ok: false,
+        error: `O WhatsApp não saiu (${detalhe.slice(0, 140)}). Os itens continuam pendentes.`,
       }
     }
   }

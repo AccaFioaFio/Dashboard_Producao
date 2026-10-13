@@ -71,12 +71,10 @@ function blocoItem(item: AvisoCorteItem, indice: number, total: number) {
   return linhas
 }
 
-export async function enviarAvisoCorteFinalizado(aviso: AvisoCorteFinalizado) {
+export function montarTextoAvisoCorte(aviso: AvisoCorteFinalizado) {
   if (!aviso.itens.length) {
     throw new Error('Nenhum item com corte finalizado para avisar.')
   }
-
-  const smtp = transporte()
   const varios = aviso.itens.length > 1
   const linhas = [
     varios
@@ -91,11 +89,15 @@ export async function enviarAvisoCorteFinalizado(aviso: AvisoCorteFinalizado) {
       '',
     ]),
   ]
+  return linhas.join('\n').trimEnd()
+}
 
+export async function enviarAvisoCorteFinalizado(aviso: AvisoCorteFinalizado) {
+  const smtp = transporte()
   await smtp.mail.sendMail({
     from: `"Corte Produção" <${smtp.user}>`,
     to: destinatarios(),
     subject: `Corte finalizado — pedido ${aviso.pedidoNorm}`,
-    text: linhas.join('\n').trimEnd(),
+    text: montarTextoAvisoCorte(aviso),
   })
 }

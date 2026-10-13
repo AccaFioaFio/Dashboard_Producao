@@ -35,7 +35,7 @@ export default async function CorteProducaoPage({
   return (
     <PageShell
       title="Corte Produção"
-      description="Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código: a descrição vem de Itens quando o código existe, e é digitada quando o código é novo. Qtd real, qtd volumes, datas e responsável gravam sozinhos. Quando há data de início e data final gravadas, a linha em produção da planilha recebe a primeira data de início e a última data final. O botão grava a lista do cortador e o alerta na Visão Geral. O e-mail está pausado."
+      description="Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código: a descrição vem de Itens quando o código existe, e é digitada quando o código é novo. Qtd real, qtd volumes, datas e responsável gravam sozinhos. Quando há data de início e data final gravadas, a linha em produção da planilha recebe a primeira data de início e a última data final. O botão grava a lista do cortador e o alerta na Visão Geral só para itens novos com data final ainda não avisados. O e-mail está pausado; o WhatsApp está ativo."
       actions={<CorteVoltarButton filters={parseFilters({})} />}
     >
       <form

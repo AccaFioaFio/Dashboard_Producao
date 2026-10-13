@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Guia — Alerta de Corte por WhatsApp</title>
+  <style>
+    @page { margin: 18mm 16mm; size: A4; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: #1a1f24;
+      line-height: 1.45;
+      font-size: 11pt;
+      margin: 0;
+    }
+    h1 {
+      font-size: 22pt;
+      margin: 0 0 6px;
+      color: #0f3d2e;
+      border-bottom: 3px solid #1f7a57;
+      padding-bottom: 8px;
+    }
+    .subtitle {
+      color: #4a5560;
+      margin: 0 0 22px;
+      font-size: 11pt;
+    }
+    h2 {
+      font-size: 14pt;
+      color: #0f3d2e;
+      margin: 22px 0 8px;
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 12pt;
+      color: #1f4d3a;
+      margin: 14px 0 6px;
+      page-break-after: avoid;
+    }
+    p { margin: 0 0 8px; }
+    ul, ol { margin: 0 0 10px; padding-left: 22px; }
+    li { margin-bottom: 4px; }
+    .box {
+      background: #f3f7f5;
+      border-left: 4px solid #1f7a57;
+      padding: 10px 12px;
+      margin: 10px 0 14px;
+      page-break-inside: avoid;
+    }
+    .warn {
+      background: #fff8ef;
+      border-left-color: #c47a12;
+    }
+    .code {
+      font-family: Consolas, "Courier New", monospace;
+      background: #eef2f0;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 10pt;
+    }
+    pre {
+      font-family: Consolas, "Courier New", monospace;
+      background: #1a1f24;
+      color: #e8eee9;
+      padding: 12px 14px;
+      border-radius: 6px;
+      font-size: 9.5pt;
+      white-space: pre-wrap;
+      page-break-inside: avoid;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 14px;
+      font-size: 10.5pt;
+      page-break-inside: avoid;
+    }
+    th, td {
+      border: 1px solid #c5d0ca;
+      padding: 7px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #e7f2ec; color: #0f3d2e; }
+    .flow {
+      font-family: Consolas, "Courier New", monospace;
+      background: #f7faf8;
+      border: 1px solid #c5d0ca;
+      padding: 12px;
+      margin: 10px 0 14px;
+      white-space: pre-wrap;
+      page-break-inside: avoid;
+    }
+    .footer {
+      margin-top: 28px;
+      padding-top: 10px;
+      border-top: 1px solid #c5d0ca;
+      color: #5a6570;
+      font-size: 9.5pt;
+    }
+    .keep { page-break-inside: avoid; }
+  </style>
+</head>
+<body>
+
+  <h1>Alerta de Corte por WhatsApp</h1>
+  <p class="subtitle">
+    Guia de conceitos e operação — Dashboard de Produção Fio a Fio<br />
+    Atualizado em 13/10/2026
+  </p>
+
+  <h2>1. O que foi criado</h2>
+  <p>
+    Quando um produto tem o <strong>corte finalizado</strong> no dashboard
+    (data final preenchida e aviso confirmado), o sistema pode avisar a equipe
+    de duas formas:
+  </p>
+  <ul>
+    <li><strong>E-mail</strong> — já existia (pode estar pausado).</li>
+    <li><strong>WhatsApp</strong> — canal novo, ativo para 2 números.</li>
+  </ul>
+  <p>
+    O painel (“Lista do cortador” / Visão Geral) continua igual: o WhatsApp
+    é só uma notificação extra, no mesmo momento do aviso.
+  </p>
+
+  <h2>2. Visão geral do fluxo</h2>
+  <div class="flow">Usuário finaliza corte no Dashboard
+        │
+        ▼
+Dashboard (Next.js) monta a mensagem
+        │
+        ├──► grava alerta no banco / nuvem (painel)
+        ├──► e-mail (se ativo)
+        └──► WhatsApp via Evolution API
+                    │
+                    ▼
+           Número remetente (conectado)
+                    │
+                    ▼
+     Destinatários (ex.: 5511… e 5511…)
+  </div>
+
+  <h2>3. Conceitos principais</h2>
+
+  <div class="keep">
+    <h3>3.1 Dashboard</h3>
+    <p>
+      Sistema web da fábrica onde se lança produção e corte. Ao salvar a
+      <strong>data final</strong> e enviar para a lista do cortador, dispara o alerta.
+    </p>
+  </div>
+
+  <div class="keep">
+    <h3>3.2 Remetente × destinatário</h3>
+    <table>
+      <tr>
+        <th>Papel</th>
+        <th>O que é</th>
+        <th>Neste projeto</th>
+      </tr>
+      <tr>
+        <td><strong>Remetente</strong></td>
+        <td>Número WhatsApp de onde a mensagem sai</td>
+        <td>Celular conectado na Evolution (instância <span class="code">corte</span>)</td>
+      </tr>
+      <tr>
+        <td><strong>Destinatário</strong></td>
+        <td>Quem recebe o alerta</td>
+        <td>Dois números configurados no <span class="code">.env.local</span></td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="keep">
+    <h3>3.3 Docker Desktop</h3>
+    <p>
+      Programa que roda “caixas” (containers) no Windows. A Evolution API
+      e o banco PostgreSQL ficam dentro dessas caixas. Sem o Docker
+      <strong>Running</strong>, o WhatsApp automático não envia.
+    </p>
+    <ul>
+      <li>Precisa de virtualização ligada na BIOS (Intel VT-x).</li>
+      <li>Configurado para iniciar com o Windows (<span class="code">AutoStart</span>).</li>
+      <li>O PC precisa estar ligado e logado.</li>
+    </ul>
+  </div>
+
+  <div class="keep">
+    <h3>3.4 Evolution API</h3>
+    <p>
+      Servidor intermediário que fala com o WhatsApp (via protocolo não oficial
+      Baileys, parecido com WhatsApp Web). O dashboard não manda mensagem
+      direto para a Meta: ele chama a Evolution em
+      <span class="code">http://localhost:8080</span>.
+    </p>
+    <ul>
+      <li><strong>Instância</strong> <span class="code">corte</span> — sessão WhatsApp usada para enviar.</li>
+      <li><strong>API Key</strong> — senha da API: <span class="code">fioafio-corte-local</span>.</li>
+      <li><strong>Manager</strong> — painel visual: <span class="code">http://localhost:8080/manager</span>.</li>
+    </ul>
+  </div>
+
+  <div class="keep">
+    <h3>3.5 QR Code / aparelho conectado</h3>
+    <p>
+      Para a Evolution usar um número, esse WhatsApp precisa estar vinculado
+      como “aparelho conectado” (igual WhatsApp Web). Lê-se um QR no celular.
+      Se desconectar, é preciso ler um QR novo.
+    </p>
+  </div>
+
+  <h2>4. Exemplo da mensagem</h2>
+  <p>Formato real do aviso (mesma estrutura do e-mail):</p>
+  <pre>O corte deste item foi finalizado. A costura pode seguir.
+
+Pedido: 123456
+Cliente: Exemplo Confecções Ltda
+
+Produto: CAMISETA BASIC PRETA P
+Código: 78901234
+Quantidade real: 120
+Início: 10/10/2026
+Data final: 13/10/2026
+Responsável: João</pre>
+  <p>
+    Com vários produtos no mesmo aviso, a primeira linha indica a quantidade
+    de itens e cada produto aparece numerado (Item 1, Item 2…).
+  </p>
+
+  <h2>5. Destinatários atuais</h2>
+  <table>
+    <tr><th>#</th><th>Número</th></tr>
+    <tr><td>1</td><td>55 11 98629-0100</td></tr>
+    <tr><td>2</td><td>55 11 98268-1980</td></tr>
+  </table>
+  <p>
+    Configurados em <span class="code">WHATSAPP_CORTE_TO</span> no arquivo
+    <span class="code">.env.local</span> do projeto.
+  </p>
+
+  <h2>6. Onde ficam os arquivos</h2>
+  <table>
+    <tr>
+      <th>Caminho</th>
+      <th>Função</th>
+    </tr>
+    <tr>
+      <td><span class="code">tools/evolution/</span></td>
+      <td>Docker Compose, .env da Evolution, scripts</td>
+    </tr>
+    <tr>
+      <td><span class="code">tools/evolution/docker-compose.yml</span></td>
+      <td>Sobe Evolution + PostgreSQL</td>
+    </tr>
+    <tr>
+      <td><span class="code">tools/evolution/setup.ps1</span></td>
+      <td>Sobe API e gera QR</td>
+    </tr>
+    <tr>
+      <td><span class="code">tools/evolution/ensure-online.ps1</span></td>
+      <td>Ao logar no Windows, garante Docker + Evolution online</td>
+    </tr>
+    <tr>
+      <td><span class="code">lib/whatsapp/corte-finalizado.ts</span></td>
+      <td>Código que envia o WhatsApp</td>
+    </tr>
+    <tr>
+      <td><span class="code">app/actions/corte-producao.ts</span></td>
+      <td>Gatilho do aviso (flag <span class="code">ENVIO_WHATSAPP_CORTE_PAUSADO</span>)</td>
+    </tr>
+    <tr>
+      <td><span class="code">.env.local</span></td>
+      <td>URL, instância, API key e destinatários</td>
+    </tr>
+  </table>
+
+  <h2>7. Variáveis de ambiente (WhatsApp)</h2>
+  <pre>WHATSAPP_EVOLUTION_URL=http://localhost:8080
+WHATSAPP_EVOLUTION_INSTANCE=corte
+WHATSAPP_EVOLUTION_APIKEY=fioafio-corte-local
+WHATSAPP_CORTE_TO=5511986290100,5511982681980</pre>
+
+  <h2>8. Como reconectar se o celular desconectar</h2>
+  <ol>
+    <li>Abra <span class="code">http://localhost:8080/manager</span></li>
+    <li>Login: Server URL <span class="code">http://localhost:8080</span> e API Key <span class="code">fioafio-corte-local</span></li>
+    <li>Instância <strong>corte</strong> → se estiver Disconnected → <strong>Get QR Code</strong></li>
+    <li>No celular: WhatsApp → Aparelhos conectados → Conectar → ler o QR</li>
+    <li>Quando status ficar Connected / open, os envios voltam</li>
+  </ol>
+  <div class="box warn">
+    <strong>Se o manager não abrir:</strong> confira se o Docker Desktop está
+    Running e, no PowerShell:
+    <pre style="margin:8px 0 0;background:#2a2118;">cd "c:\Projetos Cursor\Dashboard_Producao\tools\evolution"
+docker compose up -d
+.\setup.ps1</pre>
+  </div>
+
+  <h2>9. Manter tudo online</h2>
+  <ul>
+    <li>Docker Desktop com início automático no login.</li>
+    <li>Atalho em Inicializar do Windows: <strong>Evolution Corte Docker</strong>.</li>
+    <li>Containers com política <span class="code">unless-stopped</span> (reiniciam sozinhos).</li>
+    <li>PC ligado e usuário logado; hibernar/desligar interrompe o envio.</li>
+  </ul>
+
+  <h2>10. Pausar ou reativar o WhatsApp</h2>
+  <p>
+    No arquivo <span class="code">app/actions/corte-producao.ts</span>:
+  </p>
+  <ul>
+    <li><span class="code">ENVIO_WHATSAPP_CORTE_PAUSADO = false</span> → envia</li>
+    <li><span class="code">ENVIO_WHATSAPP_CORTE_PAUSADO = true</span> → não envia (painel continua)</li>
+  </ul>
+  <p>
+    O e-mail tem flag parecida:
+    <span class="code">ENVIO_EMAIL_CORTE_PAUSADO</span>.
+  </p>
+
+  <h2>11. Cuidados importantes</h2>
+  <ul>
+    <li>Uso interno (Baileys): não é a API oficial da Meta; evite spam.</li>
+    <li>Não desconecte o aparelho vinculado no WhatsApp sem necessidade.</li>
+    <li>Evite usar o mesmo número em vários WhatsApp Web ao mesmo tempo.</li>
+    <li>Reinicie o servidor Next.js após mudar o <span class="code">.env.local</span>.</li>
+    <li>Ideal no futuro: chip/WhatsApp só para avisos (não o celular pessoal).</li>
+  </ul>
+
+  <h2>12. Checklist rápido de problemas</h2>
+  <table>
+    <tr>
+      <th>Sintoma</th>
+      <th>O que verificar</th>
+    </tr>
+    <tr>
+      <td>Mensagem não sai</td>
+      <td>Docker Running? Evolution em localhost:8080? Instância open? Flag pausada?</td>
+    </tr>
+    <tr>
+      <td>“Não é possível conectar o aparelho”</td>
+      <td>Gerar QR novo; desconectar aparelhos antigos; tentar de novo</td>
+    </tr>
+    <tr>
+      <td>Manager não abre</td>
+      <td><span class="code">docker compose up -d</span> na pasta tools/evolution</td>
+    </tr>
+    <tr>
+      <td>Só um número recebe</td>
+      <td>Conferir <span class="code">WHATSAPP_CORTE_TO</span> e se o número está no WhatsApp</td>
+    </tr>
+  </table>
+
+  <div class="footer">
+    Documento interno — Dashboard de Produção / Alerta de corte por WhatsApp.<br />
+    Pasta técnica: <span class="code">tools/evolution/</span>
+  </div>
+
+</body>
+</html>
