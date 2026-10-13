@@ -7,6 +7,10 @@ import {
 import { buildSnapshotIncremental } from '@/lib/etl/incremental'
 import { replaceSnapshot } from '@/lib/etl/load'
 import { copySources } from '@/lib/etl/snapshot'
+import {
+  somarPecasCosturaProducao,
+  somarPecasRevisao,
+} from '@/lib/apontamento-fatos'
 import type {
   FunilKpis,
   HeaderKpis,
@@ -71,9 +75,16 @@ export async function applySnapshotPayload(
     header,
   })
 
+  // KPIs ao vivo: planilha + lançamentos do dash (corte segue só planilha).
+  const headerComLancamentos: HeaderKpis = {
+    ...header,
+    pecasCosturaProd: somarPecasCosturaProducao(),
+    pecasRevisao: somarPecasRevisao(),
+  }
+
   return {
     ok: true,
-    header,
+    header: headerComLancamentos,
     funil,
     serie,
     corteLastWrite: payload.corteLastWrite,

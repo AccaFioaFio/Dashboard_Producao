@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react'
-import { Plus } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ListChecks, Plus } from 'lucide-react'
 import {
   buscarProdutoApontamento,
   salvarApontamento,
+  salvarListaApontamento,
 } from '@/app/actions/apontamento'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,6 +18,7 @@ import {
 } from '@/lib/apontamento'
 import { EXCEL_ROW_FORA_DA_CARGA } from '@/lib/corte-producao'
 import { formatNumber } from '@/lib/format'
+import { isCodigoGeradoSemCadastro } from '@/lib/produto-codigo-manual'
 import { cn } from '@/lib/utils'
 
 export type ItemApontamentoLista = {
@@ -27,6 +30,7 @@ export type ItemApontamentoLista = {
   qtdPecas: number | null
   dataProducao: string | null
   responsavel: string | null
+  avisoDataProducao: string | null
 }
 
 function chaveCodigo(cod: string) {
@@ -38,6 +42,26 @@ type Lancamento = {
   qtdPecas: string
   dataProducao: string
   responsavel: string
+}
+
+function AvisoStatus({
+  dataProducao,
+  avisoDataProducao,
+  dataConfirmada,
+}: {
+  dataProducao: string
+  avisoDataProducao: string | null
+  dataConfirmada?: string
+}) {
+  if (!dataProducao) return <span className="text-muted-foreground">—</span>
+  if (avisoDataProducao === dataProducao || dataConfirmada === dataProducao) {
+    return (
+      <span className="font-medium text-emerald-700 dark:text-emerald-400">Na lista</span>
+    )
+  }
+  return (
+    <span className="font-medium text-amber-700 dark:text-amber-400">A salvar</span>
+  )
 }
 
 function textoQtd(value: number | null) {
@@ -61,6 +85,8 @@ function Linha({
   temOrigem,
   qtdLabel,
   responsaveis,
+  dataConfirmada,
+  onOcupada,
 }: {
   etapa: EtapaApontamento
   pedidoNorm: string
@@ -68,6 +94,8 @@ function Linha({
   temOrigem: boolean
   qtdLabel: string
   responsaveis: readonly string[]
+  dataConfirmada?: string
+  onOcupada: (ocupada: boolean) => void
 }) {
   const inicial: Lancamento = {
     origem: item.origem ?? '',
@@ -88,14 +116,18 @@ function Linha({
   const [erro, setErro] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const descricao = item.nomeProduto?.replace(/\s+/g, ' ').trim() || '—'
-  const colunas = temOrigem ? 7 : 6
+  const colunas = temOrigem ? 8 : 7
 
   function gravar(next: Lancamento) {
     if (lancamentoIgual(next, gravado.current)) return
     const ticket = ++geracao.current
+    onOcupada(true)
     fila.current = fila.current.then(async () => {
       const atual = valores.current
-      if (ticket !== geracao.current || lancamentoIgual(atual, gravado.current)) return
+      if (ticket !== geracao.current || lancamentoIgual(atual, gravado.current)) {
+        if (ticket === geracao.current) onOcupada(false)
+        return
+      }
       try {
         const result = await salvarApontamento({
           etapa,
@@ -119,6 +151,8 @@ function Linha({
         if (viva.current && ticket === geracao.current) {
           setErro('Não foi possível gravar agora.')
         }
+      } finally {
+        if (viva.current && ticket === geracao.current) onOcupada(false)
       }
     })
   }
@@ -153,7 +187,7 @@ function Linha({
         nomeProduto: item.nomeProduto,
       })
     }
-  }, [etapa, item.codProduto, item.excelRow, pedidoNorm])
+  }, [etapa, item.codProduto, item.excelRow, pedidoNorm, item.nomeProduto])
 
   const campo =
     'h-7 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 py-1 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50'
@@ -167,7 +201,7 @@ function Linha({
             : formatNumber(item.qtdPedida, item.qtdPedida % 1 ? 2 : 0)}
         </td>
         <td className="px-1.5 py-1 font-medium whitespace-nowrap tabular-nums">
-          {item.codProduto}
+          {isCodigoGeradoSemCadastro(item.codProduto) ? '—' : item.codProduto}
         </td>
         <td className="min-w-[12rem] px-1.5 py-1 leading-snug break-words">{descricao}</td>
         {temOrigem ? (
@@ -246,6 +280,13 @@ function Linha({
             }}
           />
         </td>
+        <td className="w-20 px-1.5 py-1 whitespace-nowrap">
+          <AvisoStatus
+            dataProducao={dataProducao}
+            avisoDataProducao={item.avisoDataProducao}
+            dataConfirmada={dataConfirmada}
+          />
+        </td>
       </tr>
       {erro ? (
         <tr>
@@ -283,12 +324,13 @@ function IncluirProduto({
 
   function enviar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const texto = cod.trim()
-    if (!texto) {
-      setErro('Informe o código do produto.')
+    const textoCod = cod.trim()
+    const textoDesc = descricao.trim()
+    if (!textoCod && !textoDesc) {
+      setErro('Informe o código ou a descrição do produto.')
       return
     }
-    if (pedirDescricao && !descricao.trim()) {
+    if (pedirDescricao && !textoDesc) {
       setErro('Informe a descrição do produto.')
       return
     }
@@ -297,8 +339,8 @@ function IncluirProduto({
       const result = await buscarProdutoApontamento(
         etapa,
         pedidoNorm,
-        texto,
-        pedirDescricao ? descricao : '',
+        textoCod,
+        textoDesc,
       )
       if (!result.ok) {
         setErro(result.error)
@@ -310,7 +352,11 @@ function IncluirProduto({
         return
       }
       if (existentes.has(chaveCodigo(result.codProduto))) {
-        setErro('Este código já está na lista.')
+        setErro(
+          isCodigoGeradoSemCadastro(result.codProduto)
+            ? 'Esta descrição já está na lista.'
+            : 'Este código já está na lista.',
+        )
         return
       }
       setCod('')
@@ -325,6 +371,7 @@ function IncluirProduto({
         qtdPecas: null,
         dataProducao: null,
         responsavel: null,
+        avisoDataProducao: null,
       })
     })
   }
@@ -339,24 +386,26 @@ function IncluirProduto({
             setCod(event.currentTarget.value)
             setPedirDescricao(false)
           }}
-          placeholder="0101056050"
+          placeholder="Opcional"
           maxLength={11}
           autoComplete="off"
           disabled={pendente}
         />
       </label>
-      {pedirDescricao ? (
-        <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground">
-          Descrição do produto
-          <Input
-            value={descricao}
-            onChange={(event) => setDescricao(event.currentTarget.value)}
-            placeholder="Este código não está em Itens"
-            autoComplete="off"
-            disabled={pendente}
-          />
-        </label>
-      ) : null}
+      <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground">
+        Descrição do produto
+        <Input
+          value={descricao}
+          onChange={(event) => setDescricao(event.currentTarget.value)}
+          placeholder={
+            pedirDescricao
+              ? 'Este código não está em Itens'
+              : 'Obrigatória se não houver código'
+          }
+          autoComplete="off"
+          disabled={pendente}
+        />
+      </label>
       <Button type="submit" size="sm" disabled={pendente}>
         <Plus />
         {pendente ? 'Buscando…' : pedirDescricao ? 'Cadastrar' : 'Incluir'}
@@ -365,6 +414,11 @@ function IncluirProduto({
       {pedirDescricao && !erro ? (
         <p className="w-full text-xs text-muted-foreground">
           Código novo. Informe a descrição para cadastrar o produto neste pedido.
+        </p>
+      ) : !pedirDescricao && !erro ? (
+        <p className="w-full text-xs text-muted-foreground">
+          Com código, a descrição vem da base de Itens quando existir. Sem código, digite só a
+          descrição.
         </p>
       ) : null}
     </form>
@@ -387,16 +441,71 @@ export function ApontamentoLista({
   qtdLabel: string
 }) {
   const [extras, setExtras] = useState<ItemApontamentoLista[]>([])
+  const [ocupadas, setOcupadas] = useState<Record<string, boolean>>({})
+  const [lista, setLista] = useState<{ ok: boolean; texto: string } | null>(null)
+  const [confirmadas, setConfirmadas] = useState<Record<string, string>>({})
+  const [salvando, startSalvar] = useTransition()
+  const router = useRouter()
   const responsaveis = etapa === 'costura' ? RESPONSAVEIS_COSTURA : RESPONSAVEIS_REVISAO
+  const gravando = Object.values(ocupadas).some(Boolean)
   const chavesServidor = new Set(itens.map((item) => chaveCodigo(item.codProduto)))
   const visiveis = [
     ...itens,
     ...extras.filter((item) => !chavesServidor.has(chaveCodigo(item.codProduto))),
   ]
   const chaves = new Set(visiveis.map((item) => chaveCodigo(item.codProduto)))
+  const dica =
+    etapa === 'costura'
+      ? 'O que já entrou na lista fica neste pedido. O próximo clique leva só os itens novos com origem Produção, qtd, data e responsável (e só esses disparam WhatsApp/alerta).'
+      : 'O que já entrou na lista fica neste pedido. O próximo clique leva só os itens novos com qtd, data e responsável (e só esses disparam WhatsApp/alerta).'
+
+  function marcarOcupada(chave: string, ocupada: boolean) {
+    setOcupadas((atual) => {
+      if (Boolean(atual[chave]) === ocupada) return atual
+      const next = { ...atual }
+      if (ocupada) next[chave] = true
+      else delete next[chave]
+      return next
+    })
+  }
+
+  function salvarLista() {
+    setLista(null)
+    startSalvar(async () => {
+      const result = await salvarListaApontamento(etapa, pedidoNorm)
+      setLista({
+        ok: result.ok,
+        texto: result.ok ? result.aviso : result.error,
+      })
+      if (result.ok && result.itens.length) {
+        setConfirmadas((atual) => {
+          const next = { ...atual }
+          for (const salvo of result.itens) {
+            next[chaveCodigo(salvo.codProduto)] = salvo.dataProducao
+          }
+          return next
+        })
+      }
+      if (result.ok) router.refresh()
+    })
+  }
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={gravando || salvando}
+          onClick={salvarLista}
+        >
+          <ListChecks />
+          {salvando ? 'Salvando…' : 'Salvar na lista'}
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          {gravando ? 'Aguardando a gravação da lista.' : dica}
+        </p>
+      </div>
       {permitirInclusao ? (
         <IncluirProduto
           etapa={etapa}
@@ -405,9 +514,19 @@ export function ApontamentoLista({
           onIncluir={(item) => setExtras((atual) => [...atual, item])}
         />
       ) : null}
+      {lista ? (
+        <p
+          className={cn(
+            'text-xs',
+            lista.ok ? 'text-muted-foreground' : 'text-destructive',
+          )}
+        >
+          {lista.texto}
+        </p>
+      ) : null}
       {!visiveis.length ? (
         <p className="text-xs text-muted-foreground">
-          Informe o código do produto para trazer a descrição da base de itens.
+          Informe o código (para buscar a descrição) ou só a descrição do produto.
         </p>
       ) : (
         <div className="card-surface table-surface min-w-0 overflow-x-auto">
@@ -421,6 +540,7 @@ export function ApontamentoLista({
                 <th className="px-1.5 py-1">Responsável</th>
                 <th className="px-1.5 py-1">{qtdLabel}</th>
                 <th className="px-1.5 py-1">Data produção</th>
+                <th className="px-1.5 py-1">Lista</th>
               </tr>
             </thead>
             <tbody>
@@ -433,6 +553,10 @@ export function ApontamentoLista({
                   temOrigem={temOrigem}
                   qtdLabel={qtdLabel}
                   responsaveis={responsaveis}
+                  dataConfirmada={confirmadas[chaveCodigo(item.codProduto)]}
+                  onOcupada={(ocupada) =>
+                    marcarOcupada(`${item.codProduto}:${item.excelRow}`, ocupada)
+                  }
                 />
               ))}
             </tbody>

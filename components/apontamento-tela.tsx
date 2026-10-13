@@ -32,8 +32,8 @@ export async function ApontamentoTela({
   const mostrarLista = Boolean(consulta?.itens.length || consulta?.inclusaoManual)
   const descricao =
     etapa === 'costura'
-      ? 'Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código: a descrição vem de Itens quando o código existe, e é digitada quando o código é novo. Origem, qtd peças, data de produção e responsável gravam sozinhos neste pedido.'
-      : 'Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código: a descrição vem de Itens quando o código existe, e é digitada quando o código é novo. Qtd, data de produção e responsável gravam sozinhos neste pedido.'
+      ? 'Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código (descrição vem de Itens ou é digitada) ou só a descrição, sem código. Origem, qtd peças, data de produção e responsável gravam sozinhos. O botão Salvar na lista envia WhatsApp e o alerta na Visão Geral só para itens novos com origem Produção ainda não avisados.'
+      : 'Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código (descrição vem de Itens ou é digitada) ou só a descrição, sem código. Qtd, data de produção e responsável gravam sozinhos. O botão Salvar na lista envia WhatsApp e o alerta na Visão Geral só para itens novos ainda não avisados.'
 
   return (
     <PageShell
@@ -127,7 +127,7 @@ export async function ApontamentoTela({
             <h2 className="text-sm font-medium">Itens do pedido</h2>
             <p className="text-xs text-muted-foreground">
               {consulta.inclusaoManual
-                ? 'Informe o código do produto. Se ele já existe em Itens, a descrição entra do cadastro. Se não existe, digite a descrição. A quantidade pedida fica em branco.'
+                ? 'Informe o código do produto (a descrição vem do cadastro quando existir) ou só a descrição, sem código. A quantidade pedida fica em branco.'
                 : `Itens.xlsx · ${formatInt(consulta.itens.length)} produto${consulta.itens.length === 1 ? '' : 's'}. A qtd pedida é fixa. O que já foi preenchido continua neste pedido.`}
             </p>
             <ApontamentoLista

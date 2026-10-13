@@ -362,6 +362,7 @@ export const costuraLancamento = sqliteTable(
     qtdPecas: real('qtd_pecas'),
     dataProducao: text('data_producao'),
     responsavel: text('responsavel'),
+    avisoDataProducao: text('aviso_data_producao'),
     nomeProduto: text('nome_produto'),
     atualizadoEm: text('atualizado_em').notNull(),
   },
@@ -382,6 +383,7 @@ export const revisaoLancamento = sqliteTable(
     qtdPecas: real('qtd_pecas'),
     dataProducao: text('data_producao'),
     responsavel: text('responsavel'),
+    avisoDataProducao: text('aviso_data_producao'),
     nomeProduto: text('nome_produto'),
     atualizadoEm: text('atualizado_em').notNull(),
   },
@@ -391,6 +393,63 @@ export const revisaoLancamento = sqliteTable(
     }),
     index('idx_revisao_lancamento_pedido').on(table.pedidoNorm),
   ],
+)
+
+export const costuraProducaoAlerta = sqliteTable(
+  'costura_producao_alerta',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    pedidoNorm: text('pedido_norm').notNull(),
+    cliente: text('cliente'),
+    enviadoEm: text('enviado_em').notNull(),
+    vistoEm: text('visto_em'),
+  },
+  (table) => [index('idx_costura_alerta_aberto').on(table.vistoEm, table.enviadoEm)],
+)
+
+export const costuraProducaoAlertaItem = sqliteTable(
+  'costura_producao_alerta_item',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    alertaId: integer('alerta_id')
+      .notNull()
+      .references(() => costuraProducaoAlerta.id),
+    codProduto: text('cod_produto').notNull(),
+    nomeProduto: text('nome_produto'),
+    qtdPecas: real('qtd_pecas'),
+    dataProducao: text('data_producao').notNull(),
+    responsavel: text('responsavel'),
+    origem: text('origem'),
+  },
+  (table) => [index('idx_costura_alerta_item').on(table.alertaId)],
+)
+
+export const revisaoAlerta = sqliteTable(
+  'revisao_alerta',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    pedidoNorm: text('pedido_norm').notNull(),
+    cliente: text('cliente'),
+    enviadoEm: text('enviado_em').notNull(),
+    vistoEm: text('visto_em'),
+  },
+  (table) => [index('idx_revisao_alerta_aberto').on(table.vistoEm, table.enviadoEm)],
+)
+
+export const revisaoAlertaItem = sqliteTable(
+  'revisao_alerta_item',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    alertaId: integer('alerta_id')
+      .notNull()
+      .references(() => revisaoAlerta.id),
+    codProduto: text('cod_produto').notNull(),
+    nomeProduto: text('nome_produto'),
+    qtdPecas: real('qtd_pecas'),
+    dataProducao: text('data_producao').notNull(),
+    responsavel: text('responsavel'),
+  },
+  (table) => [index('idx_revisao_alerta_item').on(table.alertaId)],
 )
 
 export const corteProducaoAviso = sqliteTable('corte_producao_aviso', {

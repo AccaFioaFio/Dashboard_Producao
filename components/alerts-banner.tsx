@@ -21,6 +21,8 @@ export function AlertsBanner({
   ultimaRevisao,
   ultimoEnvio,
   cortesAvisados = 0,
+  costurasAvisadas = 0,
+  revisoesAvisadas = 0,
 }: {
   wipPedidos: number
   wipPecas: number
@@ -31,6 +33,8 @@ export function AlertsBanner({
   ultimaRevisao: string | null
   ultimoEnvio: string | null
   cortesAvisados?: number
+  costurasAvisadas?: number
+  revisoesAvisadas?: number
 }) {
   const items: AlertItem[] = []
   if (wipPedidos) {
@@ -62,6 +66,22 @@ export function AlertsBanner({
       key: 'corte-avisado',
       text: `Lista do cortador: ${formatInt(cortesAvisados)} produto${cortesAvisados === 1 ? '' : 's'}`,
       href: '/#cortes-avisados',
+      tone: 'lag',
+    })
+  }
+  if (costurasAvisadas) {
+    items.push({
+      key: 'costura-avisada',
+      text: `Lista de costura: ${formatInt(costurasAvisadas)} produto${costurasAvisadas === 1 ? '' : 's'}`,
+      href: '/#costuras-avisadas',
+      tone: 'lag',
+    })
+  }
+  if (revisoesAvisadas) {
+    items.push({
+      key: 'revisao-avisada',
+      text: `Lista de revisão: ${formatInt(revisoesAvisadas)} produto${revisoesAvisadas === 1 ? '' : 's'}`,
+      href: '/#revisoes-avisadas',
       tone: 'lag',
     })
   }

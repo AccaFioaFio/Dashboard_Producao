@@ -14,6 +14,11 @@ import { sqlPendentesOficina } from '@/lib/oficinas-qty'
 import { TIPO_TECIDO_LABEL } from '@/lib/format'
 import { sqlAlmoxPrincipais } from '@/lib/almox-principais'
 import { sqlCategoriaFilter } from '@/lib/tecido-categoria'
+import {
+  sqlCosturaProducaoUnion,
+  sqlCosturaUnion,
+  sqlRevisaoUnion,
+} from '@/lib/apontamento-fatos'
 
 export type CargaInfo = {
   id: number
@@ -297,7 +302,9 @@ export const getFilterOptions = cache(async (): Promise<FilterOptions> => {
        FROM (
          SELECT data FROM fato_corte_pedido
          UNION SELECT data_producao FROM fato_costura
+         UNION SELECT data_producao FROM costura_lancamento WHERE data_producao IS NOT NULL
          UNION SELECT data_producao FROM fato_revisao
+         UNION SELECT data_producao FROM revisao_lancamento WHERE data_producao IS NOT NULL
          UNION SELECT data_envio FROM fato_oficinas
          ${aproveitamentoUnion}
        )
@@ -392,13 +399,13 @@ export const getHeaderKpis = cache(async (): Promise<HeaderKpis | null> => {
     (db.prepare('SELECT COUNT(*) as v FROM fato_corte_linha WHERE is_header = 1').get() as { v: number }).v
   const pecasCosturaProd = (
     db
-      .prepare(
-        "SELECT COALESCE(SUM(qtd_pecas), 0) as v FROM fato_costura WHERE origem_norm = 'Producao'",
-      )
+      .prepare(`SELECT COALESCE(SUM(qtd_pecas), 0) as v FROM ${sqlCosturaProducaoUnion('c')}`)
       .get() as { v: number }
   ).v
   const pecasRevisao = (
-    db.prepare('SELECT COALESCE(SUM(qtd_pecas), 0) as v FROM fato_revisao').get() as { v: number }
+    db
+      .prepare(`SELECT COALESCE(SUM(qtd_pecas), 0) as v FROM ${sqlRevisaoUnion('r')}`)
+      .get() as { v: number }
   ).v
   const wipPedidos = (
     db
@@ -527,13 +534,17 @@ export const getSerieMensal = cache(async (): Promise<SerieMensal[]> => {
   const costura = db
     .prepare(
       `SELECT CAST(substr(data_producao, 6, 2) as INTEGER) as mes, COALESCE(SUM(qtd_pecas), 0) as pecas
-       FROM fato_costura WHERE origem_norm = 'Producao' GROUP BY mes`,
+       FROM ${sqlCosturaProducaoUnion('c')}
+       WHERE data_producao IS NOT NULL
+       GROUP BY mes`,
     )
     .all() as { mes: number; pecas: number }[]
   const revisao = db
     .prepare(
       `SELECT CAST(substr(data_producao, 6, 2) as INTEGER) as mes, COALESCE(SUM(qtd_pecas), 0) as pecas
-       FROM fato_revisao GROUP BY mes`,
+       FROM ${sqlRevisaoUnion('r')}
+       WHERE data_producao IS NOT NULL
+       GROUP BY mes`,
     )
     .all() as { mes: number; pecas: number }[]
 
@@ -553,7 +564,9 @@ export const getAlertas = cache(async () => {
   await ensureCloudDatabase()
   const db = sqlite()
   const ultimaRevisao = (
-    db.prepare('SELECT MAX(data_producao) as v FROM fato_revisao').get() as { v: string | null }
+    db
+      .prepare(`SELECT MAX(data_producao) as v FROM ${sqlRevisaoUnion('r')}`)
+      .get() as { v: string | null }
   ).v
   const ultimoEnvio = (
     db.prepare('SELECT MAX(data_envio) as v FROM fato_oficinas').get() as { v: string | null }
@@ -561,15 +574,15 @@ export const getAlertas = cache(async () => {
   const costuraHoje = (
     db
       .prepare(
-        `SELECT COALESCE(SUM(qtd_pecas), 0) as v FROM fato_costura
-         WHERE origem_norm = 'Producao' AND data_producao = date('now', 'localtime')`,
+        `SELECT COALESCE(SUM(qtd_pecas), 0) as v FROM ${sqlCosturaProducaoUnion('c')}
+         WHERE data_producao = date('now', 'localtime')`,
       )
       .get() as { v: number }
   ).v
   const revisaoHoje = (
     db
       .prepare(
-        `SELECT COALESCE(SUM(qtd_pecas), 0) as v FROM fato_revisao
+        `SELECT COALESCE(SUM(qtd_pecas), 0) as v FROM ${sqlRevisaoUnion('r')}
          WHERE data_producao = date('now', 'localtime')`,
       )
       .get() as { v: number }
@@ -1673,13 +1686,14 @@ export const getCosturas = cache(async (filters: DashFilters = {}) => {
   }>(
     `SELECT c.origem, c.origem_norm as origemNorm, COUNT(*) as lancamentos,
             COALESCE(SUM(c.qtd_pecas), 0) as pecas, COUNT(DISTINCT c.pedido_norm) as pedidos
-     FROM fato_costura c WHERE ${where} GROUP BY c.origem_norm ORDER BY pecas DESC`,
+     FROM ${sqlCosturaUnion('c')} WHERE ${where}
+     GROUP BY c.origem_norm ORDER BY pecas DESC`,
     params,
   )
   const porResponsavel = runAll<NamedTotal>(
     `SELECT COALESCE(c.responsavel, '(sem)') as nome, COALESCE(SUM(c.qtd_pecas), 0) as pecas,
             COUNT(DISTINCT c.pedido_norm) as pedidos
-     FROM fato_costura c WHERE ${where} AND c.origem_norm = 'Producao'
+     FROM ${sqlCosturaProducaoUnion('c')} WHERE ${where}
      GROUP BY c.responsavel ORDER BY pecas DESC`,
     params,
   )
@@ -1694,15 +1708,15 @@ export const getCosturas = cache(async (filters: DashFilters = {}) => {
   }>(
     `SELECT c.pedido_norm as pedido, c.qtd_pecas as pecas, c.responsavel, c.produto, c.origem,
             ${observacaoExpr()}
-     FROM fato_costura c
+     FROM ${sqlCosturaProducaoUnion('c')}
      LEFT JOIN fato_corte_pedido p ON p.pedido_norm = c.pedido_norm
-     WHERE ${where} AND c.data_producao = @hoje AND c.origem_norm = 'Producao'
+     WHERE ${where} AND c.data_producao = @hoje
      ORDER BY c.excel_row DESC`,
     { ...params, hoje },
   )
   const producao = runGet<{ pecas: number; pedidos: number }>(
     `SELECT COALESCE(SUM(c.qtd_pecas), 0) as pecas, COUNT(DISTINCT c.pedido_norm) as pedidos
-     FROM fato_costura c WHERE ${where} AND c.origem_norm = 'Producao'`,
+     FROM ${sqlCosturaProducaoUnion('c')} WHERE ${where}`,
     params,
   )
   return { mix, porResponsavel, doDia, hoje, producao }
@@ -1722,7 +1736,8 @@ export const getRevisao = cache(async (filters: DashFilters = {}) => {
   const porResponsavel = runAll<NamedTotal>(
     `SELECT COALESCE(r.responsavel, '(sem)') as nome, COALESCE(SUM(r.qtd_pecas), 0) as pecas,
             COUNT(DISTINCT r.pedido_norm) as pedidos
-     FROM fato_revisao r WHERE ${where} GROUP BY r.responsavel ORDER BY pecas DESC`,
+     FROM ${sqlRevisaoUnion('r')} WHERE ${where}
+     GROUP BY r.responsavel ORDER BY pecas DESC`,
     params,
   )
   const hoje = todayIso()
@@ -1735,14 +1750,14 @@ export const getRevisao = cache(async (filters: DashFilters = {}) => {
   }>(
     `SELECT r.pedido_norm as pedido, r.qtd_pecas as pecas, r.responsavel, r.produto,
             ${observacaoExpr()}
-     FROM fato_revisao r
+     FROM ${sqlRevisaoUnion('r')}
      LEFT JOIN fato_corte_pedido p ON p.pedido_norm = r.pedido_norm
      WHERE ${where} AND r.data_producao = @hoje ORDER BY r.excel_row DESC`,
     { ...params, hoje },
   )
   const resumo = runGet<{ pecas: number; pedidos: number }>(
     `SELECT COALESCE(SUM(r.qtd_pecas), 0) as pecas, COUNT(DISTINCT r.pedido_norm) as pedidos
-     FROM fato_revisao r WHERE ${where}`,
+     FROM ${sqlRevisaoUnion('r')} WHERE ${where}`,
     params,
   )
   return { porResponsavel, doDia, hoje, resumo }
@@ -2008,7 +2023,7 @@ export const getTempoProducao = cache(async (filters: DashFilters = {}) => {
             MAX(r.data_producao) as dataRevisaoUltima,
             COALESCE(SUM(r.qtd_pecas), 0) as pecasRevisao
      FROM fato_corte_pedido p
-     LEFT JOIN fato_revisao r ON r.pedido_norm = p.pedido_norm
+     LEFT JOIN ${sqlRevisaoUnion('r')} ON r.pedido_norm = p.pedido_norm
      WHERE ${where}
      GROUP BY p.pedido_norm`,
     filter.params,

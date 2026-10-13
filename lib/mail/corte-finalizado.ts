@@ -2,6 +2,7 @@ import 'server-only'
 
 import nodemailer from 'nodemailer'
 import { formatDate, formatNumber } from '@/lib/format'
+import { isCodigoGeradoSemCadastro } from '@/lib/produto-codigo-manual'
 
 const DESTINOS = [
   'operacional4@fioafio.com.br',
@@ -61,7 +62,7 @@ function blocoItem(item: AvisoCorteItem, indice: number, total: number) {
   const produto = item.nomeProduto?.replace(/\s+/g, ' ').trim() || '—'
   const linhas = [
     `Produto: ${produto}`,
-    `Código: ${item.codProduto}`,
+    `Código: ${isCodigoGeradoSemCadastro(item.codProduto) ? '—' : item.codProduto}`,
     `Quantidade real: ${quantidade(item.qtdReal)}`,
     `Início: ${formatDate(item.dataInicio)}`,
     `Data final: ${formatDate(item.dataFinal)}`,

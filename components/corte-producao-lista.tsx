@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EXCEL_ROW_FORA_DA_CARGA, OPCOES_RESPONSAVEL_CORTE } from '@/lib/corte-producao'
 import { formatNumber } from '@/lib/format'
+import { isCodigoGeradoSemCadastro } from '@/lib/produto-codigo-manual'
 import { cn } from '@/lib/utils'
 
 export type CorteProducaoItem = {
@@ -183,7 +184,7 @@ function Linha({
             : formatNumber(item.qtdPedida, item.qtdPedida % 1 ? 2 : 0)}
         </td>
         <td className="px-1.5 py-1 font-medium whitespace-nowrap tabular-nums">
-          {item.codProduto}
+          {isCodigoGeradoSemCadastro(item.codProduto) ? '—' : item.codProduto}
         </td>
         <td className="min-w-[12rem] px-1.5 py-1 leading-snug break-words">
           {descricao}
@@ -321,12 +322,13 @@ function IncluirProduto({
 
   function enviar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const texto = cod.trim()
-    if (!texto) {
-      setErro('Informe o código do produto.')
+    const textoCod = cod.trim()
+    const textoDesc = descricao.trim()
+    if (!textoCod && !textoDesc) {
+      setErro('Informe o código ou a descrição do produto.')
       return
     }
-    if (pedirDescricao && !descricao.trim()) {
+    if (pedirDescricao && !textoDesc) {
       setErro('Informe a descrição do produto.')
       return
     }
@@ -334,8 +336,8 @@ function IncluirProduto({
     start(async () => {
       const result = await buscarProdutoParaLancamento(
         pedidoNorm,
-        texto,
-        pedirDescricao ? descricao : '',
+        textoCod,
+        textoDesc,
       )
       if (!result.ok) {
         setErro(result.error)
@@ -347,7 +349,11 @@ function IncluirProduto({
         return
       }
       if (existentes.has(chaveCodigo(result.codProduto))) {
-        setErro('Este código já está na lista.')
+        setErro(
+          isCodigoGeradoSemCadastro(result.codProduto)
+            ? 'Esta descrição já está na lista.'
+            : 'Este código já está na lista.',
+        )
         return
       }
       setCod('')
@@ -378,24 +384,26 @@ function IncluirProduto({
             setCod(event.currentTarget.value)
             setPedirDescricao(false)
           }}
-          placeholder="0101056050"
+          placeholder="Opcional"
           maxLength={11}
           autoComplete="off"
           disabled={pendente}
         />
       </label>
-      {pedirDescricao ? (
-        <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground">
-          Descrição do produto
-          <Input
-            value={descricao}
-            onChange={(event) => setDescricao(event.currentTarget.value)}
-            placeholder="Este código não está em Itens"
-            autoComplete="off"
-            disabled={pendente}
-          />
-        </label>
-      ) : null}
+      <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground">
+        Descrição do produto
+        <Input
+          value={descricao}
+          onChange={(event) => setDescricao(event.currentTarget.value)}
+          placeholder={
+            pedirDescricao
+              ? 'Este código não está em Itens'
+              : 'Obrigatória se não houver código'
+          }
+          autoComplete="off"
+          disabled={pendente}
+        />
+      </label>
       <Button type="submit" size="sm" disabled={pendente}>
         <Plus />
         {pendente ? 'Buscando…' : pedirDescricao ? 'Cadastrar' : 'Incluir'}
@@ -404,6 +412,11 @@ function IncluirProduto({
       {pedirDescricao && !erro ? (
         <p className="w-full text-xs text-muted-foreground">
           Código novo. Informe a descrição para cadastrar o produto neste pedido.
+        </p>
+      ) : !pedirDescricao && !erro ? (
+        <p className="w-full text-xs text-muted-foreground">
+          Com código, a descrição vem da base de Itens quando existir. Sem código, digite só a
+          descrição.
         </p>
       ) : null}
     </form>
@@ -501,7 +514,7 @@ export function CorteProducaoLista({
       ) : null}
       {!visiveis.length ? (
         <p className="text-xs text-muted-foreground">
-          Informe o código do produto para trazer a descrição da base de itens.
+          Informe o código (para buscar a descrição) ou só a descrição do produto.
         </p>
       ) : (
       <div className="card-surface table-surface min-w-0 overflow-x-auto">

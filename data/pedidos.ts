@@ -18,6 +18,11 @@ import { ocPecasExpr } from '@/lib/corte-oc'
 import { sqlPendentesOficina } from '@/lib/oficinas-qty'
 import { pedidoDigits, parsePedidoParam } from '@/lib/pedido'
 import { sqlAlmoxPrincipais } from '@/lib/almox-principais'
+import {
+  sqlCosturaProducaoUnion,
+  sqlCosturaUnion,
+  sqlRevisaoUnion,
+} from '@/lib/apontamento-fatos'
 
 export type PedidoListaRow = {
   pedidoNorm: string
@@ -256,11 +261,12 @@ function hasPedidoItemTable() {
 
 function sliceDateExpr(fatia: FunilSlice) {
   if (fatia === 'costuraSemCorte') {
-    return `(SELECT MIN(c.data_producao) FROM fato_costura c
-      WHERE c.pedido_norm = d.pedido_norm AND c.origem_norm = 'Producao')`
+    return `(SELECT MIN(c.data_producao) FROM ${sqlCosturaProducaoUnion('c')}
+      WHERE c.pedido_norm = d.pedido_norm)`
   }
   if (fatia === 'revisaoSemCorte') {
-    return `(SELECT MIN(r.data_producao) FROM fato_revisao r WHERE r.pedido_norm = d.pedido_norm)`
+    return `(SELECT MIN(r.data_producao) FROM ${sqlRevisaoUnion('r')}
+      WHERE r.pedido_norm = d.pedido_norm)`
   }
   if (fatia === 'oficinas' || fatia === 'oficinasOrfas') {
     return `(SELECT MIN(o.data_envio) FROM fato_oficinas o WHERE o.pedido_norm = d.pedido_norm)`
@@ -325,11 +331,11 @@ export const getPedidosLista = cache(async (filters: DashFilters = {}) => {
   const joinsLaterais = `
        LEFT JOIN (
          SELECT pedido_norm, SUM(qtd_pecas) as pecas
-         FROM fato_costura WHERE origem_norm = 'Producao' GROUP BY pedido_norm
+         FROM ${sqlCosturaProducaoUnion('c')} GROUP BY pedido_norm
        ) cs ON cs.pedido_norm = d.pedido_norm
        LEFT JOIN (
          SELECT pedido_norm, SUM(qtd_pecas) as pecas
-         FROM fato_revisao GROUP BY pedido_norm
+         FROM ${sqlRevisaoUnion('r')} GROUP BY pedido_norm
        ) rv ON rv.pedido_norm = d.pedido_norm
        LEFT JOIN (
          SELECT pedido_norm, SUM(${sqlPendentesOficina()}) as pendentes
@@ -634,14 +640,18 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
     .prepare(
       `SELECT data_producao as dataProducao, origem, origem_norm as origemNorm,
               qtd_pecas as pecas, responsavel, produto
-       FROM fato_costura WHERE pedido_norm = ? ORDER BY data_producao, excel_row`,
+       FROM ${sqlCosturaUnion('c')}
+       WHERE c.pedido_norm = ?
+       ORDER BY c.data_producao, c.excel_row`,
     )
     .all(pedidoNorm) as PedidoFicha['costura']
 
   const revisao = db
     .prepare(
       `SELECT data_producao as dataProducao, qtd_pecas as pecas, responsavel, produto
-       FROM fato_revisao WHERE pedido_norm = ? ORDER BY data_producao, excel_row`,
+       FROM ${sqlRevisaoUnion('r')}
+       WHERE r.pedido_norm = ?
+       ORDER BY r.data_producao, r.excel_row`,
     )
     .all(pedidoNorm) as PedidoFicha['revisao']
 
@@ -837,15 +847,15 @@ export const getSerieDiaria = cache(async (dias = 30): Promise<SerieDiariaRow[]>
   const costura = db
     .prepare(
       `SELECT data_producao as data, COALESCE(SUM(qtd_pecas), 0) as pecas
-       FROM fato_costura
-       WHERE origem_norm = 'Producao' AND data_producao >= @inicio AND data_producao <= @hoje
+       FROM ${sqlCosturaProducaoUnion('c')}
+       WHERE data_producao >= @inicio AND data_producao <= @hoje
        GROUP BY data_producao`,
     )
     .all({ inicio, hoje }) as { data: string; pecas: number }[]
   const revisao = db
     .prepare(
       `SELECT data_producao as data, COALESCE(SUM(qtd_pecas), 0) as pecas
-       FROM fato_revisao
+       FROM ${sqlRevisaoUnion('r')}
        WHERE data_producao >= @inicio AND data_producao <= @hoje
        GROUP BY data_producao`,
     )

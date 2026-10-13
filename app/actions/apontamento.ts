@@ -13,13 +13,23 @@ import {
   responsavelApontamentoValido,
   type EtapaApontamento,
 } from '@/lib/apontamento'
+import { syncDimPedidoApontamento } from '@/lib/apontamento-fatos'
 import {
   apagarApontamentoNuvem,
+  criarAlertaApontamentoNuvem,
   gravarApontamentoNuvem,
+  marcarAlertaApontamentoNuvemVisto,
+  marcarAvisoApontamentoNuvem,
 } from '@/lib/apontamento-nuvem'
+import { enviarAvisoApontamentoWhatsApp } from '@/lib/whatsapp/apontamento-finalizado'
+import { isProducaoOrigem } from '@/lib/keys'
 import { EXCEL_ROW_FORA_DA_CARGA } from '@/lib/corte-producao'
+import { getApontamentoPedido } from '@/data/apontamento'
 import { pedidoDigits } from '@/lib/pedido'
 import { resolverProdutoParaIncluir } from '@/lib/produto-manual'
+
+/** Mesma lista/instância do corte (`WHATSAPP_CORTE_TO`). */
+const ENVIO_WHATSAPP_APONTAMENTO_PAUSADO = false
 
 export type SalvarApontamentoInput = {
   etapa: EtapaApontamento
@@ -132,7 +142,10 @@ export async function buscarProdutoApontamento(
       error: `Incluiu nesta tela. A nuvem não atualizou (${nuvem.error}).`,
     }
   }
+  if (pedido) syncDimPedidoApontamento(pedido)
   revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
+  revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
+  revalidatePath('/')
   return resolvido
 }
 
@@ -223,6 +236,7 @@ export async function salvarApontamento(
       db.prepare(
         `UPDATE ${tabela}
          SET qtd_pecas = NULL, data_producao = NULL, responsavel = NULL,
+             aviso_data_producao = NULL,
              nome_produto = COALESCE(?, nome_produto), atualizado_em = ?
          WHERE pedido_norm = ? AND cod_produto = ?`,
       ).run(nomeProduto, new Date().toISOString(), pedidoNorm, codProduto)
@@ -237,9 +251,13 @@ export async function salvarApontamento(
         qtdPecas: null,
         dataProducao: null,
         responsavel: null,
+        avisoDataProducao: null,
         nomeProduto,
       })
+      syncDimPedidoApontamento(pedidoNorm)
       revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
+      revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
+      revalidatePath('/')
       if (!nuvem.ok) {
         return {
           ok: false,
@@ -253,7 +271,10 @@ export async function salvarApontamento(
       codProduto,
     )
     const apagado = await apagarApontamentoNuvem(etapa, pedidoNorm, codProduto)
+    syncDimPedidoApontamento(pedidoNorm)
     revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
+    revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
+    revalidatePath('/')
     if (!apagado.ok) {
       return {
         ok: false,
@@ -325,7 +346,10 @@ export async function salvarApontamento(
     responsavel: responsavel || null,
     nomeProduto,
   })
+  syncDimPedidoApontamento(pedidoNorm)
   revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
+  revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
+  revalidatePath('/')
   if (!nuvem.ok) {
     return {
       ok: false,
@@ -333,4 +357,311 @@ export async function salvarApontamento(
     }
   }
   return { ok: true }
+}
+
+export type SalvarListaApontamentoResult =
+  | {
+      ok: true
+      salvos: number
+      itens: { codProduto: string; dataProducao: string }[]
+      aviso: string
+    }
+  | { ok: false; error: string }
+
+function tabelasAlerta(etapa: EtapaApontamento) {
+  return etapa === 'costura'
+    ? {
+        alerta: 'costura_producao_alerta',
+        item: 'costura_producao_alerta_item',
+        listaNome: 'lista de costura produção',
+      }
+    : {
+        alerta: 'revisao_alerta',
+        item: 'revisao_alerta_item',
+        listaNome: 'lista de revisão',
+      }
+}
+
+export async function salvarListaApontamento(
+  etapaInformada: string,
+  pedidoInformado: string,
+): Promise<SalvarListaApontamentoResult> {
+  const etapa = etapaApontamento(etapaInformada)
+  if (!etapa) return { ok: false, error: 'Etapa inválida.' }
+
+  const session = await readSession()
+  if (!session || !canAccessPath(ETAPAS_APONTAMENTO[etapa].acesso, session.acessos)) {
+    return { ok: false, error: semPermissao(etapa) }
+  }
+
+  await ensureCloudDatabase()
+  const consulta = await getApontamentoPedido(etapa, pedidoInformado)
+  const pedidoNorm = consulta.pedidoNorm
+  if (!consulta.loaded || !pedidoNorm || !consulta.itens.length) {
+    return { ok: false, error: 'Pedido sem itens para a lista.' }
+  }
+
+  const pendentes: {
+    excelRow: number
+    codProduto: string
+    nomeProduto: string | null
+    origem: string | null
+    qtdPecas: number | null
+    dataProducao: string
+    responsavel: string | null
+  }[] = []
+  const vistos = new Set<string>()
+
+  for (const item of consulta.itens) {
+    if (!item.dataProducao || item.qtdPecas == null || !item.responsavel) continue
+    if (item.avisoDataProducao === item.dataProducao) continue
+    if (etapa === 'costura') {
+      if (!isProducaoOrigem(item.origem)) continue
+    }
+    if (vistos.has(item.codProduto)) continue
+    vistos.add(item.codProduto)
+    pendentes.push({
+      excelRow: item.excelRow,
+      codProduto: item.codProduto,
+      nomeProduto: item.nomeProduto,
+      origem: item.origem,
+      qtdPecas: item.qtdPecas,
+      dataProducao: item.dataProducao,
+      responsavel: item.responsavel,
+    })
+  }
+
+  const { listaNome, alerta: tabelaAlerta, item: tabelaItem } = tabelasAlerta(etapa)
+
+  if (!pendentes.length) {
+    return {
+      ok: true,
+      salvos: 0,
+      itens: [],
+      aviso:
+        etapa === 'costura'
+          ? 'Nenhum item novo para a lista. Preencha origem Produção, qtd, data e responsável e salve de novo.'
+          : 'Nenhum item novo para a lista. Preencha qtd, data e responsável e salve de novo.',
+    }
+  }
+
+  const avisoPayload = {
+    pedidoNorm,
+    cliente: consulta.cliente,
+    itens: pendentes.map((item) => ({
+      codProduto: item.codProduto,
+      nomeProduto: item.nomeProduto,
+      qtdPecas: item.qtdPecas,
+      dataProducao: item.dataProducao,
+      responsavel: item.responsavel,
+      origem: item.origem,
+    })),
+  }
+
+  if (!ENVIO_WHATSAPP_APONTAMENTO_PAUSADO) {
+    try {
+      await enviarAvisoApontamentoWhatsApp({ ...avisoPayload, etapa })
+    } catch (error) {
+      const detalhe = error instanceof Error ? error.message : String(error)
+      console.error('aviso de apontamento WhatsApp não enviado', etapa, pedidoNorm, detalhe)
+      return {
+        ok: false,
+        error: `O WhatsApp não saiu (${detalhe.slice(0, 140)}). Os itens continuam pendentes.`,
+      }
+    }
+  }
+
+  const db = getSqlite()
+  const enviadoEm = new Date().toISOString()
+  const alertaId = `${etapa}-${pedidoNorm}-${Date.now()}`
+  const tabela = ETAPAS_APONTAMENTO[etapa].tabela
+  const marcar = db.prepare(
+    `UPDATE ${tabela}
+     SET aviso_data_producao = ?, atualizado_em = ?
+     WHERE pedido_norm = ? AND cod_produto = ?`,
+  )
+  const garantir =
+    etapa === 'costura'
+      ? db.prepare(
+          `INSERT INTO ${tabela} (
+             pedido_norm, cod_produto, excel_row, origem, qtd_pecas, data_producao,
+             responsavel, aviso_data_producao, nome_produto, atualizado_em
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
+             aviso_data_producao = excluded.aviso_data_producao,
+             atualizado_em = excluded.atualizado_em`,
+        )
+      : db.prepare(
+          `INSERT INTO ${tabela} (
+             pedido_norm, cod_produto, excel_row, qtd_pecas, data_producao,
+             responsavel, aviso_data_producao, nome_produto, atualizado_em
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
+             aviso_data_producao = excluded.aviso_data_producao,
+             atualizado_em = excluded.atualizado_em`,
+        )
+  const criarAlerta = db.prepare(
+    `INSERT INTO ${tabelaAlerta} (pedido_norm, cliente, enviado_em)
+     VALUES (?, ?, ?)`,
+  )
+  const criarItem =
+    etapa === 'costura'
+      ? db.prepare(
+          `INSERT INTO ${tabelaItem} (
+             alerta_id, cod_produto, nome_produto, qtd_pecas, data_producao, responsavel, origem
+           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+      : db.prepare(
+          `INSERT INTO ${tabelaItem} (
+             alerta_id, cod_produto, nome_produto, qtd_pecas, data_producao, responsavel
+           ) VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+
+  const gravar = db.transaction(() => {
+    for (const item of pendentes) {
+      const atualizado = marcar.run(
+        item.dataProducao,
+        enviadoEm,
+        pedidoNorm,
+        item.codProduto,
+      )
+      if (atualizado.changes === 0) {
+        if (etapa === 'costura') {
+          garantir.run(
+            pedidoNorm,
+            item.codProduto,
+            item.excelRow,
+            item.origem,
+            item.qtdPecas,
+            item.dataProducao,
+            item.responsavel,
+            item.dataProducao,
+            item.nomeProduto,
+            enviadoEm,
+          )
+        } else {
+          garantir.run(
+            pedidoNorm,
+            item.codProduto,
+            item.excelRow,
+            item.qtdPecas,
+            item.dataProducao,
+            item.responsavel,
+            item.dataProducao,
+            item.nomeProduto,
+            enviadoEm,
+          )
+        }
+      }
+    }
+    const alerta = criarAlerta.run(pedidoNorm, consulta.cliente, enviadoEm)
+    const alertaLocal = Number(alerta.lastInsertRowid)
+    for (const item of pendentes) {
+      if (etapa === 'costura') {
+        criarItem.run(
+          alertaLocal,
+          item.codProduto,
+          item.nomeProduto,
+          item.qtdPecas,
+          item.dataProducao,
+          item.responsavel,
+          item.origem,
+        )
+      } else {
+        criarItem.run(
+          alertaLocal,
+          item.codProduto,
+          item.nomeProduto,
+          item.qtdPecas,
+          item.dataProducao,
+          item.responsavel,
+        )
+      }
+    }
+  })
+  gravar()
+
+  const falhasNuvem: string[] = []
+  for (const item of pendentes) {
+    const marcado = await marcarAvisoApontamentoNuvem(
+      etapa,
+      pedidoNorm,
+      item.codProduto,
+      item.dataProducao,
+      {
+        codProduto: item.codProduto,
+        origem: item.origem,
+        qtdPecas: item.qtdPecas,
+        dataProducao: item.dataProducao,
+        responsavel: item.responsavel,
+        nomeProduto: item.nomeProduto,
+      },
+    )
+    if (!marcado.ok) falhasNuvem.push(marcado.error)
+  }
+  const alertaNuvem = await criarAlertaApontamentoNuvem(etapa, {
+    id: alertaId,
+    pedidoNorm,
+    cliente: consulta.cliente,
+    enviadoEm,
+    vistoEm: null,
+    itens: avisoPayload.itens,
+  })
+  if (!alertaNuvem.ok) falhasNuvem.push(alertaNuvem.error)
+
+  revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
+  revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
+  revalidatePath('/')
+
+  const salvos = pendentes.length
+  const base =
+    salvos === 1
+      ? `1 item entrou na ${listaNome}. O alerta ficou na Visão Geral.`
+      : `${salvos} itens entraram na ${listaNome}. O alerta ficou na Visão Geral.`
+  return {
+    ok: true,
+    salvos,
+    itens: pendentes.map((item) => ({
+      codProduto: item.codProduto,
+      dataProducao: item.dataProducao,
+    })),
+    aviso: falhasNuvem.length
+      ? `${base} A nuvem não gravou a lista (${falhasNuvem[0]}). Ao reabrir, pode parecer que o item não entrou.`
+      : base,
+  }
+}
+
+export async function marcarAlertaApontamentoVisto(
+  etapaInformada: string,
+  alertaId: string,
+) {
+  const etapa = etapaApontamento(etapaInformada)
+  if (!etapa) return { ok: false as const, error: 'Etapa inválida.' }
+
+  const session = await readSession()
+  if (!session || !canAccessPath('/', session.acessos)) {
+    return { ok: false as const, error: 'Sem permissão para marcar o alerta como visto.' }
+  }
+  const id = alertaId.trim()
+  if (!id || id.length > 80) {
+    return { ok: false as const, error: 'Alerta inválido.' }
+  }
+  await ensureCloudDatabase()
+  const vistoEm = new Date().toISOString()
+  const { alerta: tabelaAlerta } = tabelasAlerta(etapa)
+  if (/^\d+$/.test(id)) {
+    getSqlite()
+      .prepare(
+        `UPDATE ${tabelaAlerta}
+         SET visto_em = ?
+         WHERE id = ? AND visto_em IS NULL`,
+      )
+      .run(vistoEm, Number(id))
+  }
+  const nuvem = await marcarAlertaApontamentoNuvemVisto(etapa, id)
+  if (!nuvem.ok) {
+    return { ok: false as const, error: nuvem.error ?? 'Não marcou o alerta na nuvem.' }
+  }
+  revalidatePath('/')
+  return { ok: true as const }
 }

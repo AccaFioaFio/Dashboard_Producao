@@ -382,9 +382,9 @@ export function explainFunilRow(label: string, funil: FunilKpis) {
   const n = formatInt
   const map: Record<string, string> = {
     'Corte 2026': `${n(funil.corte)} pedidos distintos no Corte 2026 (não é contagem de linha; * herda o cabeçalho).`,
-    'Com Costura Produção': `${n(funil.comCostura)} pedidos do Corte com lançamento Origem = Produção na Costura.`,
+    'Com Costura Produção': `${n(funil.comCostura)} pedidos do Corte com Costura Produção (planilha + lançamento no dash).`,
     'Sem Costura Produção': `${n(funil.semCostura)} cortados sem Costura Produção. Parte foi para oficina (${n(funil.oficinasNoCorte)} também no Corte).`,
-    'Com Revisão': `${n(funil.comRevisao)} pedidos do Corte 2026 com Data Produção na Revisão.`,
+    'Com Revisão': `${n(funil.comRevisao)} pedidos do Corte 2026 com revisão (planilha + lançamento no dash).`,
     'Sem Revisão': `${n(funil.semRevisao)} pedidos do Corte 2026 ainda sem Revisão.`,
     'Costura sem Corte': `${n(funil.costuraSemCorte)} pedidos com Costura Produção 2026 e ausentes no Corte 2026.`,
     'Revisão sem Corte': `${n(funil.revisaoSemCorte)} pedidos revisados em 2026 que foram cortados em outro ano. Não é falha de soma.`,

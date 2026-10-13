@@ -1,6 +1,11 @@
 import { getSqlite } from '@/db'
 import { yearOf } from '@/lib/dates'
 import { isAlmoxPrincipal } from '@/lib/almox-principais'
+import {
+  somarPecasCosturaProducao,
+  somarPecasRevisao,
+  syncDimPedidoApontamento,
+} from '@/lib/apontamento-fatos'
 import type { HeaderKpis, Snapshot } from '@/lib/etl/types'
 
 function chunk<T>(rows: T[], size = 400) {
@@ -373,6 +378,12 @@ export function replaceSnapshot(
     `)
     for (const row of snapshot.qualidade) insertQualidade.run(row)
 
+    // Lançamentos da tela sobrevivem ao DELETE dos fatos; marca o funil
+    // e soma planilha + dash nos totais gravados na carga.
+    syncDimPedidoApontamento()
+    const pecasCosturaProd = somarPecasCosturaProducao()
+    const pecasRevisao = somarPecasRevisao()
+
     sqlite
       .prepare(
         `INSERT INTO carga (
@@ -402,8 +413,8 @@ export function replaceSnapshot(
         meta.parceirosLastWrite,
         meta.header.pecasCortadas,
         meta.header.pedidosCorte,
-        meta.header.pecasCosturaProd,
-        meta.header.pecasRevisao,
+        pecasCosturaProd,
+        pecasRevisao,
         meta.header.wipPedidos,
         meta.header.wipPecas,
         meta.header.tecidoPedidos,

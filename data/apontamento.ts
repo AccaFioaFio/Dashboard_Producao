@@ -19,6 +19,7 @@ export type ItemApontamento = {
   qtdPecas: number | null
   dataProducao: string | null
   responsavel: string | null
+  avisoDataProducao: string | null
 }
 
 export type ApontamentoConsulta = {
@@ -54,10 +55,20 @@ function maisRecente(local: Gravado | undefined, nuvem: ApontamentoNuvem | undef
         ? local
         : { ...nuvem, excelRow: local.excelRow }
   const outro = base === local ? nuvem : local
-  if (!base.nomeProduto && outro?.nomeProduto) {
-    return { ...base, nomeProduto: outro.nomeProduto }
+  let merged = base
+  if (!merged.nomeProduto && outro?.nomeProduto) {
+    merged = { ...merged, nomeProduto: outro.nomeProduto }
   }
-  return base
+  // Se a cópia mais nova ainda não marcou aviso e a outra já avisou a mesma data, herda.
+  if (
+    outro &&
+    merged.dataProducao &&
+    outro.avisoDataProducao === merged.dataProducao &&
+    merged.avisoDataProducao !== merged.dataProducao
+  ) {
+    merged = { ...merged, avisoDataProducao: outro.avisoDataProducao }
+  }
+  return merged
 }
 
 async function lancamentosDoPedido(etapa: EtapaApontamento, pedidoNorm: string) {
@@ -68,7 +79,8 @@ async function lancamentosDoPedido(etapa: EtapaApontamento, pedidoNorm: string) 
     .prepare(
       `SELECT cod_produto as codProduto, excel_row as excelRow, ${origem},
               qtd_pecas as qtdPecas, data_producao as dataProducao,
-              responsavel, nome_produto as nomeProduto, atualizado_em as atualizadoEm
+              responsavel, aviso_data_producao as avisoDataProducao,
+              nome_produto as nomeProduto, atualizado_em as atualizadoEm
        FROM ${tabela}
        WHERE pedido_norm = ?
        ORDER BY atualizado_em DESC`,
@@ -102,6 +114,7 @@ function itemDe(
     qtdPecas: lancamento?.qtdPecas ?? null,
     dataProducao: lancamento?.dataProducao ?? null,
     responsavel: lancamento?.responsavel ?? null,
+    avisoDataProducao: lancamento?.avisoDataProducao ?? null,
   }
 }
 

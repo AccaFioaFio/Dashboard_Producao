@@ -4,10 +4,12 @@ import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { FunnelCard } from '@/components/funnel-card'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { AlertaCorteLista } from '@/components/alerta-corte-lista'
+import { AlertaApontamentoListas } from '@/components/alerta-apontamento-lista'
 import { AlertsBanner } from '@/components/alerts-banner'
 import { SectionPlaceholder } from '@/components/section-placeholder'
 import { LayoutDashboard } from 'lucide-react'
 import { getAlertasCorteAbertos } from '@/data/corte-alertas'
+import { getAlertasApontamentoAbertos } from '@/data/apontamento-alertas'
 import {
   getAlertas,
   getFunil,
@@ -24,15 +26,17 @@ export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Visão Geral' }
 
 export default async function Page() {
-  const [header, funil, serie, diaria, alertas, carga, cortesAvisados] = await Promise.all([
-    getHeaderKpis(),
-    getFunil(),
-    getSerieMensal(),
-    getSerieDiaria(30),
-    getAlertas(),
-    getLatestCarga(),
-    getAlertasCorteAbertos(),
-  ])
+  const [header, funil, serie, diaria, alertas, carga, cortesAvisados, apontamentosAvisados] =
+    await Promise.all([
+      getHeaderKpis(),
+      getFunil(),
+      getSerieMensal(),
+      getSerieDiaria(30),
+      getAlertas(),
+      getLatestCarga(),
+      getAlertasCorteAbertos(),
+      getAlertasApontamentoAbertos(),
+    ])
 
   if (!header || !funil) {
     return (
@@ -67,8 +71,20 @@ export default async function Page() {
         ultimaRevisao={alertas.ultimaRevisao}
         ultimoEnvio={alertas.ultimoEnvio}
         cortesAvisados={cortesAvisados.reduce((sum, alerta) => sum + alerta.itens.length, 0)}
+        costurasAvisadas={apontamentosAvisados.costura.reduce(
+          (sum, alerta) => sum + alerta.itens.length,
+          0,
+        )}
+        revisoesAvisadas={apontamentosAvisados.revisao.reduce(
+          (sum, alerta) => sum + alerta.itens.length,
+          0,
+        )}
       />
       <AlertaCorteLista alertas={cortesAvisados} />
+      <AlertaApontamentoListas
+        costura={apontamentosAvisados.costura}
+        revisao={apontamentosAvisados.revisao}
+      />
 
       <KpiGrid>
         <KpiCard

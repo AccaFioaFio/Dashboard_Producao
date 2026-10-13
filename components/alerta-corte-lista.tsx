@@ -7,6 +7,7 @@ import { marcarAlertaCorteVisto } from '@/app/actions/corte-producao'
 import type { AlertaCorte } from '@/data/corte-alertas'
 import { Button } from '@/components/ui/button'
 import { formatDate, formatDateTime, formatNumber } from '@/lib/format'
+import { isCodigoGeradoSemCadastro } from '@/lib/produto-codigo-manual'
 
 function quantidade(value: number | null) {
   if (value == null) return '—'
@@ -74,7 +75,11 @@ export function AlertaCorteLista({ alertas }: { alertas: AlertaCorte[] }) {
                 const nome = item.nomeProduto?.replace(/\s+/g, ' ').trim() || '—'
                 return (
                   <li key={`${alerta.id}:${item.codProduto}`} className="leading-snug">
-                    <span className="font-medium tabular-nums">{item.codProduto}</span>
+                    <span className="font-medium tabular-nums">
+                      {isCodigoGeradoSemCadastro(item.codProduto)
+                        ? '—'
+                        : item.codProduto}
+                    </span>
                     {' · '}
                     {nome}
                     {' · '}

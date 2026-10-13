@@ -35,7 +35,7 @@ export default async function CorteProducaoPage({
   return (
     <PageShell
       title="Corte Produção"
-      description="Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código: a descrição vem de Itens quando o código existe, e é digitada quando o código é novo. Qtd real, qtd volumes, datas e responsável gravam sozinhos. Quando há data de início e data final gravadas, a linha em produção da planilha recebe a primeira data de início e a última data final. O botão grava a lista do cortador e o alerta na Visão Geral só para itens novos com data final ainda não avisados. O e-mail está pausado; o WhatsApp está ativo."
+      description="Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código (descrição vem de Itens ou é digitada) ou só a descrição, sem código. Qtd real, qtd volumes, datas e responsável gravam sozinhos. Quando há data de início e data final gravadas, a linha em produção da planilha recebe a primeira data de início e a última data final. O botão grava a lista do cortador e o alerta na Visão Geral só para itens novos com data final ainda não avisados. O e-mail está pausado; o WhatsApp está ativo."
       actions={<CorteVoltarButton filters={parseFilters({})} />}
     >
       <form
@@ -124,7 +124,7 @@ export default async function CorteProducaoPage({
             <h2 className="text-sm font-medium">Itens do pedido</h2>
             <p className="text-xs text-muted-foreground">
               {consulta.inclusaoManual
-                ? 'Informe o código do produto. Se ele já existe em Itens, a descrição entra do cadastro. Se não existe, digite a descrição. A quantidade pedida fica em branco.'
+                ? 'Informe o código do produto (a descrição vem do cadastro quando existir) ou só a descrição, sem código. A quantidade pedida fica em branco.'
                 : `Itens.xlsx · ${formatInt(consulta.itens.length)} produto${consulta.itens.length === 1 ? '' : 's'}. A qtd pedida é fixa. O que já foi preenchido e o que já entrou na lista continuam neste pedido.`}
             </p>
             <CorteProducaoLista
