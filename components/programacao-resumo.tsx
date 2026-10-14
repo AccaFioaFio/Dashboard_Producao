@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Minus, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,6 +35,14 @@ function toIso(date: Date) {
   return date.toISOString().slice(0, 10)
 }
 
+function hojeIso() {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 /** Segunda a domingo (ISO). */
 function inicioSemana(iso: string) {
   const date = parseUtc(iso)
@@ -57,6 +65,39 @@ function chaveMes(iso: string) {
 function fimMes(anoMes: string) {
   const [ano, mes] = anoMes.split('-').map(Number)
   return toIso(new Date(Date.UTC(ano, mes, 0)))
+}
+
+function valoresNoModo(modo: ModoPeriodo, datas: string[]) {
+  if (modo === 'dia') return datas
+  if (modo === 'semana') {
+    return [...new Set(datas.map(inicioSemana))].sort((a, b) => a.localeCompare(b))
+  }
+  return [...new Set(datas.map(chaveMes))].sort((a, b) => a.localeCompare(b))
+}
+
+/** Converte a referência atual (ou hoje) para a chave do modo destino. */
+function preferenciaNoModo(modo: ModoPeriodo, atual: string) {
+  const base =
+    atual && /^\d{4}-\d{2}/.test(atual)
+      ? atual.length === 7
+        ? `${atual}-01`
+        : atual.slice(0, 10)
+      : hojeIso()
+  if (modo === 'dia') return base
+  if (modo === 'semana') return inicioSemana(base)
+  return chaveMes(base)
+}
+
+/** Escolhe a opção com programação mais próxima da preferência. */
+function escolherPadrao(opcoes: string[], preferida: string) {
+  if (opcoes.length === 0) return ''
+  if (preferida && opcoes.includes(preferida)) return preferida
+  if (preferida) {
+    const futura = opcoes.find((opcao) => opcao >= preferida)
+    if (futura) return futura
+    return opcoes[opcoes.length - 1] ?? ''
+  }
+  return opcoes[0] ?? ''
 }
 
 function formatQtd(value: number | null) {
@@ -152,29 +193,34 @@ export function ProgramacaoResumo({
   }, [banco.linhas])
 
   const opcoesChips = useMemo(() => {
+    const valores = valoresNoModo(modo, datasDisponiveis)
     if (modo === 'dia') {
-      return datasDisponiveis.map((data) => ({
+      return valores.map((data) => ({
         value: data,
         label: formatDate(data),
       }))
     }
     if (modo === 'semana') {
-      const semanas = new Set(datasDisponiveis.map(inicioSemana))
-      return [...semanas]
-        .sort((a, b) => a.localeCompare(b))
-        .map((inicio) => ({
-          value: inicio,
-          label: rotuloSemana(inicio),
-        }))
-    }
-    const meses = new Set(datasDisponiveis.map(chaveMes))
-    return [...meses]
-      .sort((a, b) => a.localeCompare(b))
-      .map((mes) => ({
-        value: mes,
-        label: rotuloMes(mes),
+      return valores.map((inicio) => ({
+        value: inicio,
+        label: rotuloSemana(inicio),
       }))
+    }
+    return valores.map((mes) => ({
+      value: mes,
+      label: rotuloMes(mes),
+    }))
   }, [datasDisponiveis, modo])
+
+  useEffect(() => {
+    if (referencia) return
+    if (opcoesChips.length === 0) return
+    const padrao = escolherPadrao(
+      opcoesChips.map((opcao) => opcao.value),
+      preferenciaNoModo(modo, hojeIso()),
+    )
+    if (padrao) setReferencia(padrao)
+  }, [modo, opcoesChips, referencia])
 
   const linhasFiltradas = useMemo(() => {
     if (!referencia) return []
@@ -203,8 +249,13 @@ export function ProgramacaoResumo({
   )
 
   function trocarModo(next: ModoPeriodo) {
+    const valores = valoresNoModo(next, datasDisponiveis)
+    const padrao = escolherPadrao(
+      valores,
+      preferenciaNoModo(next, referencia || hojeIso()),
+    )
     setModo(next)
-    setReferencia('')
+    setReferencia(padrao)
     setAbertos(new Set())
   }
 
@@ -299,19 +350,26 @@ export function ProgramacaoResumo({
           </label>
         ) : null}
         {modo === 'semana' ? (
-          <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-44">
-            Dia da semana
-            <Input
-              type="date"
-              value={referencia}
-              onChange={(event) =>
-                selecionar(
-                  event.target.value ? inicioSemana(event.target.value) : '',
-                )
-              }
-              className="h-9 sm:h-8"
-            />
-          </label>
+          <div className="flex min-w-0 flex-col gap-1 sm:w-auto">
+            <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-44">
+              Semana
+              <Input
+                type="date"
+                value={referencia}
+                onChange={(event) =>
+                  selecionar(
+                    event.target.value ? inicioSemana(event.target.value) : '',
+                  )
+                }
+                className="h-9 sm:h-8"
+              />
+            </label>
+            {referencia ? (
+              <p className="text-xs font-medium text-foreground tabular-nums">
+                {rotuloSemana(inicioSemana(referencia))}
+              </p>
+            ) : null}
+          </div>
         ) : null}
         {modo === 'mes' ? (
           <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-44">
