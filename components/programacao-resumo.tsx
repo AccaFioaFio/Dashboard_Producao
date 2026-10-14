@@ -67,15 +67,18 @@ function fimMes(anoMes: string) {
   return toIso(new Date(Date.UTC(ano, mes, 0)))
 }
 
-function valoresNoModo(modo: ModoPeriodo, datas: string[]) {
-  if (modo === 'dia') return datas
-  if (modo === 'semana') {
-    return [...new Set(datas.map(inicioSemana))].sort((a, b) => a.localeCompare(b))
-  }
+function valoresMes(datas: string[]) {
   return [...new Set(datas.map(chaveMes))].sort((a, b) => a.localeCompare(b))
 }
 
-/** Converte a referência atual (ou hoje) para a chave do modo destino. */
+function diasNaSemana(datas: string[], diaRef: string) {
+  if (!diaRef) return []
+  const inicio = inicioSemana(diaRef)
+  const fim = fimSemana(diaRef)
+  return datas.filter((dia) => dia >= inicio && dia <= fim)
+}
+
+/** Preferência (dia ou mês) a partir da referência atual / hoje. */
 function preferenciaNoModo(modo: ModoPeriodo, atual: string) {
   const base =
     atual && /^\d{4}-\d{2}/.test(atual)
@@ -83,9 +86,8 @@ function preferenciaNoModo(modo: ModoPeriodo, atual: string) {
         ? `${atual}-01`
         : atual.slice(0, 10)
       : hojeIso()
-  if (modo === 'dia') return base
-  if (modo === 'semana') return inicioSemana(base)
-  return chaveMes(base)
+  if (modo === 'mes') return chaveMes(base)
+  return base
 }
 
 /** Escolhe a opção com programação mais próxima da preferência. */
@@ -98,6 +100,17 @@ function escolherPadrao(opcoes: string[], preferida: string) {
     return opcoes[opcoes.length - 1] ?? ''
   }
   return opcoes[0] ?? ''
+}
+
+/** Ao entrar em Semana, escolhe um dia com programação na semana mais próxima. */
+function escolherDiaSemana(datas: string[], preferida: string) {
+  if (datas.length === 0) return ''
+  const alvo = preferida || hojeIso()
+  const naSemana = diasNaSemana(datas, alvo)
+  if (naSemana.length > 0) {
+    return escolherPadrao(naSemana, alvo)
+  }
+  return escolherPadrao(datas, alvo)
 }
 
 function formatQtd(value: number | null) {
@@ -193,47 +206,44 @@ export function ProgramacaoResumo({
   }, [banco.linhas])
 
   const opcoesChips = useMemo(() => {
-    const valores = valoresNoModo(modo, datasDisponiveis)
     if (modo === 'dia') {
-      return valores.map((data) => ({
+      return datasDisponiveis.map((data) => ({
         value: data,
         label: formatDate(data),
       }))
     }
     if (modo === 'semana') {
-      return valores.map((inicio) => ({
-        value: inicio,
-        label: rotuloSemana(inicio),
+      // Chips = dias com programação dentro da semana da data selecionada
+      return diasNaSemana(datasDisponiveis, referencia).map((data) => ({
+        value: data,
+        label: formatDate(data),
       }))
     }
-    return valores.map((mes) => ({
+    return valoresMes(datasDisponiveis).map((mes) => ({
       value: mes,
       label: rotuloMes(mes),
     }))
-  }, [datasDisponiveis, modo])
+  }, [datasDisponiveis, modo, referencia])
 
   useEffect(() => {
     if (referencia) return
-    if (opcoesChips.length === 0) return
-    const padrao = escolherPadrao(
-      opcoesChips.map((opcao) => opcao.value),
-      preferenciaNoModo(modo, hojeIso()),
-    )
+    if (datasDisponiveis.length === 0) return
+    const preferida = preferenciaNoModo(modo, hojeIso())
+    const padrao =
+      modo === 'mes'
+        ? escolherPadrao(valoresMes(datasDisponiveis), preferida)
+        : modo === 'semana'
+          ? escolherDiaSemana(datasDisponiveis, preferida)
+          : escolherPadrao(datasDisponiveis, preferida)
     if (padrao) setReferencia(padrao)
-  }, [modo, opcoesChips, referencia])
+  }, [modo, datasDisponiveis, referencia])
 
   const linhasFiltradas = useMemo(() => {
     if (!referencia) return []
-    if (modo === 'dia') {
+    if (modo === 'dia' || modo === 'semana') {
+      // Semana: filtra pelo dia escolhido nos chips (igual ao Dia)
       return banco.linhas.filter((row) =>
         periodosSobrepoem(row.dataInicio, row.dataFim, referencia, referencia),
-      )
-    }
-    if (modo === 'semana') {
-      const inicio = inicioSemana(referencia)
-      const fim = fimSemana(referencia)
-      return banco.linhas.filter((row) =>
-        periodosSobrepoem(row.dataInicio, row.dataFim, inicio, fim),
       )
     }
     const inicio = `${referencia}-01`
@@ -249,11 +259,13 @@ export function ProgramacaoResumo({
   )
 
   function trocarModo(next: ModoPeriodo) {
-    const valores = valoresNoModo(next, datasDisponiveis)
-    const padrao = escolherPadrao(
-      valores,
-      preferenciaNoModo(next, referencia || hojeIso()),
-    )
+    const preferida = preferenciaNoModo(next, referencia || hojeIso())
+    const padrao =
+      next === 'mes'
+        ? escolherPadrao(valoresMes(datasDisponiveis), preferida)
+        : next === 'semana'
+          ? escolherDiaSemana(datasDisponiveis, preferida)
+          : escolherPadrao(datasDisponiveis, preferida)
     setModo(next)
     setReferencia(padrao)
     setAbertos(new Set())
@@ -261,6 +273,19 @@ export function ProgramacaoResumo({
 
   function selecionar(value: string) {
     setReferencia(value)
+    setAbertos(new Set())
+  }
+
+  function selecionarDataSemana(value: string) {
+    if (!value) {
+      setReferencia('')
+      setAbertos(new Set())
+      return
+    }
+    const dias = diasNaSemana(datasDisponiveis, value)
+    const dia =
+      dias.includes(value) ? value : escolherPadrao(dias, value) || value
+    setReferencia(dia)
     setAbertos(new Set())
   }
 
@@ -299,11 +324,11 @@ export function ProgramacaoResumo({
   const periodoLabel =
     !referencia
       ? null
-      : modo === 'dia'
-        ? formatDate(referencia)
-        : modo === 'semana'
-          ? rotuloSemana(inicioSemana(referencia))
-          : rotuloMes(referencia)
+      : modo === 'mes'
+        ? rotuloMes(referencia)
+        : formatDate(referencia)
+
+  const temProgramacaoSalva = datasDisponiveis.length > 0
 
   return (
     <section className="card-surface flex flex-col gap-3 p-3 print:hidden">
@@ -350,23 +375,19 @@ export function ProgramacaoResumo({
           </label>
         ) : null}
         {modo === 'semana' ? (
-          <div className="flex min-w-0 flex-col gap-1 sm:w-auto">
+          <div className="flex min-w-0 flex-col gap-1">
             <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-44">
-              Semana
+              Data
               <Input
                 type="date"
                 value={referencia}
-                onChange={(event) =>
-                  selecionar(
-                    event.target.value ? inicioSemana(event.target.value) : '',
-                  )
-                }
+                onChange={(event) => selecionarDataSemana(event.target.value)}
                 className="h-9 sm:h-8"
               />
             </label>
             {referencia ? (
-              <p className="text-xs font-medium text-foreground tabular-nums">
-                {rotuloSemana(inicioSemana(referencia))}
+              <p className="text-xs text-muted-foreground tabular-nums">
+                Semana {rotuloSemana(inicioSemana(referencia))}
               </p>
             ) : null}
           </div>
@@ -384,10 +405,17 @@ export function ProgramacaoResumo({
         ) : null}
       </div>
 
-      {opcoesChips.length > 0 ? (
+      {!temProgramacaoSalva ? (
+        <p className="text-xs text-muted-foreground">
+          Nenhuma data programada ainda.
+        </p>
+      ) : opcoesChips.length > 0 ? (
         <div className="flex flex-col gap-1.5">
           <p className="text-xs font-medium text-muted-foreground">
             Com programação
+            {modo === 'semana' && referencia
+              ? ` · ${rotuloSemana(inicioSemana(referencia))}`
+              : ''}
           </p>
           <ul className="flex flex-wrap gap-1.5">
             {opcoesChips.map((opcao) => {
@@ -398,11 +426,10 @@ export function ProgramacaoResumo({
                     type="button"
                     onClick={() => selecionar(opcao.value)}
                     className={cn(
-                      'rounded-md border px-2.5 py-1 text-sm transition-colors',
+                      'rounded-md border px-2.5 py-1 font-mono text-sm tabular-nums transition-colors',
                       ativo
                         ? 'border-foreground bg-foreground text-background'
                         : 'border-border/80 bg-muted/30 hover:bg-muted/50',
-                      modo === 'dia' && 'font-mono tabular-nums',
                     )}
                   >
                     {opcao.label}
@@ -412,9 +439,14 @@ export function ProgramacaoResumo({
             })}
           </ul>
         </div>
+      ) : modo === 'semana' && referencia ? (
+        <p className="text-xs text-muted-foreground">
+          Nenhum dia com programação em {rotuloSemana(inicioSemana(referencia))}.
+          Escolha outra data para mudar de semana.
+        </p>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Nenhuma data programada ainda.
+          Selecione um período para ver as datas com programação.
         </p>
       )}
 
