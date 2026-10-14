@@ -381,16 +381,16 @@ export function ProgramacaoResumo({
                 return (
                   <li
                     key={pedido.key}
-                    className="overflow-hidden rounded-lg border border-border/80"
+                    className="rounded-lg border border-border/80"
                   >
-                    <div className="flex items-stretch gap-0">
+                    <div className="flex items-stretch gap-0 overflow-hidden rounded-t-lg">
                       <button
                         type="button"
                         onClick={() => togglePedido(pedido.key)}
-                        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left hover:bg-muted/40"
+                        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left hover:bg-muted/40 md:py-2"
                         aria-expanded={aberto}
                       >
-                        <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background md:size-6">
                           {aberto ? (
                             <Minus className="size-3.5" />
                           ) : (
@@ -420,7 +420,7 @@ export function ProgramacaoResumo({
                           type="button"
                           variant="ghost"
                           size="icon-xs"
-                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          className="size-9 text-destructive hover:bg-destructive/10 hover:text-destructive md:size-6"
                           onClick={() => excluirPedido(pedido)}
                           title="Excluir pedido da programação"
                           aria-label={`Excluir pedido ${pedido.pedido}`}
@@ -431,59 +431,81 @@ export function ProgramacaoResumo({
                     </div>
                     {aberto ? (
                       <div className="border-t border-border/70 bg-muted/15">
-                        <table className="w-full text-left text-sm">
-                          <thead>
-                            <tr className="text-xs text-muted-foreground uppercase">
-                              <th className="px-3 py-1.5 font-semibold tracking-wide">
-                                Produto
-                              </th>
-                              <th className="w-24 px-3 py-1.5 font-semibold tracking-wide">
-                                Qtd ped.
-                              </th>
-                              <th className="w-24 px-3 py-1.5 font-semibold tracking-wide">
-                                Qtd prod.
-                              </th>
-                              <th className="w-40 px-3 py-1.5 font-semibold tracking-wide">
-                                Período
-                              </th>
-                              <th className="w-12 px-1.5 py-1.5 font-semibold tracking-wide">
-                                <span className="sr-only">Excluir</span>
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {pedido.linhas.map((linha) => (
-                              <tr
-                                key={linha.key}
-                                className="border-t border-border/60"
-                              >
-                                <td className="px-3 py-1.5">{linha.nome}</td>
-                                <td className="px-3 py-1.5 font-mono tabular-nums text-muted-foreground">
-                                  {formatQtd(linha.qtdPedido)}
-                                </td>
-                                <td className="px-3 py-1.5 font-mono tabular-nums">
-                                  {formatQtdProducao(linha.quantidadeProducao)}
-                                </td>
-                                <td className="px-3 py-1.5 font-mono tabular-nums">
-                                  {formatPeriodo(linha.dataInicio, linha.dataFim)}
-                                </td>
-                                <td className="px-1.5 py-1.5">
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-xs"
-                                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                    onClick={() => excluirItem(linha)}
-                                    title="Excluir item"
-                                    aria-label={`Excluir item ${linha.nome}`}
-                                  >
-                                    <Trash2 />
-                                  </Button>
-                                </td>
+                        <div className="table-surface mobile-form-table min-w-0 overflow-x-auto">
+                          <table className="w-full text-left text-sm">
+                            <thead>
+                              <tr className="text-xs text-muted-foreground uppercase">
+                                <th className="px-3 py-1.5 font-semibold tracking-wide">
+                                  Produto
+                                </th>
+                                <th className="w-24 px-3 py-1.5 font-semibold tracking-wide">
+                                  Qtd ped.
+                                </th>
+                                <th className="w-24 px-3 py-1.5 font-semibold tracking-wide">
+                                  Qtd prod.
+                                </th>
+                                <th className="w-40 px-3 py-1.5 font-semibold tracking-wide">
+                                  Período
+                                </th>
+                                <th className="w-12 px-1.5 py-1.5 font-semibold tracking-wide">
+                                  <span className="sr-only">Excluir</span>
+                                </th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody>
+                              {pedido.linhas.map((linha) => (
+                                <tr
+                                  key={linha.key}
+                                  className="border-t border-border/60"
+                                >
+                                  <td
+                                    data-label="Produto"
+                                    data-span="full"
+                                    className="px-3 py-1.5 break-words"
+                                  >
+                                    {linha.nome}
+                                  </td>
+                                  <td
+                                    data-label="Qtd ped."
+                                    className="px-3 py-1.5 font-mono tabular-nums text-muted-foreground"
+                                  >
+                                    {formatQtd(linha.qtdPedido)}
+                                  </td>
+                                  <td
+                                    data-label="Qtd prod."
+                                    className="px-3 py-1.5 font-mono tabular-nums"
+                                  >
+                                    {formatQtdProducao(linha.quantidadeProducao)}
+                                  </td>
+                                  <td
+                                    data-label="Período"
+                                    data-span="full"
+                                    className="px-3 py-1.5 font-mono tabular-nums"
+                                  >
+                                    {formatPeriodo(linha.dataInicio, linha.dataFim)}
+                                  </td>
+                                  <td
+                                    data-label="Excluir"
+                                    data-span="full"
+                                    className="px-1.5 py-1.5"
+                                  >
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-xs"
+                                      className="size-9 text-destructive hover:bg-destructive/10 hover:text-destructive md:size-6"
+                                      onClick={() => excluirItem(linha)}
+                                      title="Excluir item"
+                                      aria-label={`Excluir item ${linha.nome}`}
+                                    >
+                                      <Trash2 />
+                                    </Button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     ) : null}
                   </li>

@@ -375,18 +375,24 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
 
   return (
     <div className="flex flex-col gap-3 print:gap-4">
-      <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
+      <div className="flex flex-col gap-2 print:hidden sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
         <Button
           type="button"
           variant="outline"
           onClick={excluirPedidoSalvo}
           disabled={!pedido.trim() || pending}
-          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          className="h-10 w-full text-destructive hover:bg-destructive/10 hover:text-destructive sm:h-8 sm:w-auto"
         >
           <Trash2 />
           Excluir pedido
         </Button>
-        <Button type="button" variant="outline" onClick={salvar} disabled={!podeSalvar}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={salvar}
+          disabled={!podeSalvar}
+          className="h-10 w-full sm:h-8 sm:w-auto"
+        >
           <Save />
           Salvar
         </Button>
@@ -395,6 +401,7 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
           variant="outline"
           onClick={imprimir}
           disabled={!podeImprimir}
+          className="h-10 w-full sm:h-8 sm:w-auto"
         >
           <Printer />
           Imprimir
@@ -581,8 +588,8 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
               </div>
             </div>
 
-            <div className="table-surface min-w-0 overflow-x-auto rounded-lg border border-border/80">
-              <table className="w-full min-w-[56rem] text-left text-sm">
+            <div className="card-surface table-surface mobile-form-table min-w-0 overflow-x-auto rounded-lg border border-border/80">
+              <table className="w-full md:min-w-[56rem] text-left text-sm">
                 <thead className="bg-foreground text-background">
                   <tr>
                     <th className="px-3 py-2 text-xs font-semibold tracking-wide uppercase">
@@ -627,20 +634,25 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
                       anterior &&
                         periodoValido(anterior.dataInicio, anterior.dataFim),
                     )
+                    const campoLinha =
+                      'h-10 border-input bg-background text-base md:h-9 md:border-transparent md:bg-transparent md:text-sm print:border-0 print:bg-transparent print:px-0'
                     return (
                       <tr key={item.id} className="border-t border-border/70">
-                        <td className="px-2 py-1.5">
+                        <td data-label="Item" data-span="full" className="px-2 py-1.5">
                           <Input
                             value={item.nome}
                             onChange={(event) =>
                               atualizarItem(item.id, { nome: event.target.value })
                             }
                             placeholder={manual ? 'Nome do produto' : undefined}
-                            className="h-9 border-transparent bg-transparent print:border-0 print:px-0"
+                            className={campoLinha}
                             aria-label="Item"
                           />
                         </td>
-                        <td className="px-2 py-1.5">
+                        <td
+                          data-label={manual ? 'Qtd ref.' : 'Qtd pedido'}
+                          className="px-2 py-1.5"
+                        >
                           {podeEditarQtdRef ? (
                             <Input
                               value={
@@ -659,7 +671,7 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
                               }}
                               inputMode="decimal"
                               placeholder="—"
-                              className="h-9 border-transparent bg-transparent tabular-nums print:border-0 print:px-0"
+                              className={cn(campoLinha, 'tabular-nums')}
                               aria-label="Quantidade de referência"
                             />
                           ) : (
@@ -668,7 +680,7 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
                             </span>
                           )}
                         </td>
-                        <td className="px-2 py-1.5">
+                        <td data-label="Qtd produção" className="px-2 py-1.5">
                           <Input
                             value={item.quantidadeProducao}
                             onChange={(event) =>
@@ -686,11 +698,11 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
                             data-prog-index={index}
                             inputMode="decimal"
                             placeholder="0"
-                            className="h-9 border-transparent bg-transparent tabular-nums print:border-0 print:px-0"
+                            className={cn(campoLinha, 'tabular-nums')}
                             aria-label="Quantidade na produção"
                           />
                         </td>
-                        <td className="px-2 py-1.5">
+                        <td data-label="Data inicial" className="px-2 py-1.5">
                           <Input
                             type="date"
                             value={item.dataInicio}
@@ -714,11 +726,11 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
                             }}
                             data-prog-field="dataInicio"
                             data-prog-index={index}
-                            className="h-9 border-transparent bg-transparent print:border-0 print:px-0"
+                            className={campoLinha}
                             aria-label="Data inicial na produção"
                           />
                         </td>
-                        <td className="px-2 py-1.5">
+                        <td data-label="Data final" className="px-2 py-1.5">
                           <Input
                             type="date"
                             value={item.dataFim}
@@ -735,12 +747,16 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
                             }}
                             data-prog-field="dataFim"
                             data-prog-index={index}
-                            className="h-9 border-transparent bg-transparent print:border-0 print:px-0"
+                            className={campoLinha}
                             aria-label="Data final na produção"
                           />
                         </td>
-                        <td className="px-1.5 py-1.5 print:hidden">
-                          <div className="flex items-center gap-0.5">
+                        <td
+                          data-label="Atalhos"
+                          data-span="full"
+                          className="px-1.5 py-1.5 print:hidden"
+                        >
+                          <div className="flex flex-wrap items-center gap-1">
                             <Button
                               type="button"
                               variant="ghost"
@@ -751,6 +767,7 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
                               }
                               title="Qtd = pedido"
                               aria-label="Usar quantidade do pedido nesta linha"
+                              className="size-9 md:size-6"
                             >
                               <Equal />
                             </Button>
@@ -762,6 +779,7 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
                               onClick={() => copiarPeriodoDeCima(index)}
                               title="Copiar período de cima"
                               aria-label="Copiar período da linha de cima"
+                              className="size-9 md:size-6"
                             >
                               <ArrowDownToLine />
                             </Button>
@@ -769,7 +787,7 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
                               type="button"
                               variant="ghost"
                               size="icon-xs"
-                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              className="size-9 text-destructive hover:bg-destructive/10 hover:text-destructive md:size-6"
                               onClick={() => removerItemDaLista(item.id)}
                               title="Remover item da lista"
                               aria-label={`Remover item ${item.nome}`}

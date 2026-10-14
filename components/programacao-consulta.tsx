@@ -145,8 +145,8 @@ function PedidoBloco({
           {pedido.cliente?.trim() || 'Sem nome fantasia'}
         </span>
       </div>
-      <div className="table-surface min-w-0 overflow-x-auto">
-        <table className="w-full min-w-[36rem] text-left text-sm">
+      <div className="table-surface mobile-form-table min-w-0 overflow-x-auto">
+        <table className="w-full md:min-w-[36rem] text-left text-sm">
           <thead>
             <tr className="text-xs text-muted-foreground uppercase">
               <th className="px-3 py-2 font-semibold tracking-wide">Item</th>
@@ -158,14 +158,26 @@ function PedidoBloco({
           <tbody>
             {pedido.linhas.map((linha) => (
               <tr key={linha.key} className="border-t border-border/70">
-                <td className="px-3 py-2">{linha.nome}</td>
-                <td className="px-3 py-2 font-mono tabular-nums text-muted-foreground">
+                <td data-label="Item" data-span="full" className="px-3 py-2 break-words">
+                  {linha.nome}
+                </td>
+                <td
+                  data-label="Qtd pedido"
+                  className="px-3 py-2 font-mono tabular-nums text-muted-foreground"
+                >
                   {formatQtd(linha.qtdPedido)}
                 </td>
-                <td className="px-3 py-2 font-mono tabular-nums">
+                <td
+                  data-label="Qtd produção"
+                  className="px-3 py-2 font-mono tabular-nums"
+                >
                   {formatQtdProducao(linha.quantidadeProducao)}
                 </td>
-                <td className="px-3 py-2 font-mono tabular-nums">
+                <td
+                  data-label="Período"
+                  data-span="full"
+                  className="px-3 py-2 font-mono tabular-nums"
+                >
                   {linha.dataInicio === linha.dataFim
                     ? formatDate(linha.dataInicio)
                     : `${formatDate(linha.dataInicio)} – ${formatDate(linha.dataFim)}`}
