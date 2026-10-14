@@ -259,12 +259,14 @@ export async function refreshFromSupabaseCarga(): Promise<
   try {
     const backup = captureCorteOperacao()
     const backupApontamento = captureApontamentoOperacao()
+    const backupProgramacao = captureProgramacaoOperacao()
     resetSqlite()
     writeFileSync(DB_PATH, downloaded.bytes)
     localEtag = String(downloaded.bytes.length)
     getSqlite()
     mergeCorteOperacao(backup)
     mergeApontamentoOperacao(backupApontamento)
+    mergeProgramacaoOperacao(backupProgramacao)
     await ensureApontamentosNuvemNoSqlite({ force: true })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

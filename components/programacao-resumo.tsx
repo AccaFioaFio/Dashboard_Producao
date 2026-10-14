@@ -242,10 +242,16 @@ export function ProgramacaoResumo({
 
   const linhasFiltradas = useMemo(() => {
     if (!referencia) return []
-    if (modo === 'dia' || modo === 'semana') {
-      // Semana: filtra pelo dia escolhido nos chips (igual ao Dia)
+    if (modo === 'dia') {
       return banco.linhas.filter((row) =>
         periodosSobrepoem(row.dataInicio, row.dataFim, referencia, referencia),
+      )
+    }
+    if (modo === 'semana') {
+      const inicio = inicioSemana(referencia)
+      const fim = fimSemana(referencia)
+      return banco.linhas.filter((row) =>
+        periodosSobrepoem(row.dataInicio, row.dataFim, inicio, fim),
       )
     }
     const inicio = `${referencia}-01`
@@ -339,7 +345,9 @@ export function ProgramacaoResumo({
       ? null
       : modo === 'mes'
         ? rotuloMes(referencia)
-        : formatDate(referencia)
+        : modo === 'semana'
+          ? rotuloSemana(inicioSemana(referencia))
+          : formatDate(referencia)
 
   const temProgramacaoSalva = datasDisponiveis.length > 0
 
