@@ -11,13 +11,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   ORIGENS_COSTURA,
   RESPONSAVEIS_COSTURA,
   RESPONSAVEIS_REVISAO,
@@ -28,8 +21,6 @@ import { EXCEL_ROW_FORA_DA_CARGA } from '@/lib/corte-producao'
 import { formatNumber } from '@/lib/format'
 import { isCodigoGeradoSemCadastro } from '@/lib/produto-codigo-manual'
 import { cn } from '@/lib/utils'
-
-const SELECT_VAZIO = '__none__'
 
 export type ItemApontamentoLista = {
   codProduto: string
@@ -99,41 +90,28 @@ function CampoSelect({
   value,
   items,
   onChange,
+  className,
 }: {
   label: string
   value: string
   items: readonly string[]
   onChange: (value: string) => void
+  className?: string
 }) {
   return (
-    <Select
-      value={value || SELECT_VAZIO}
-      onValueChange={(next) => {
-        onChange(!next || next === SELECT_VAZIO ? '' : String(next))
-      }}
+    <select
+      aria-label={label}
+      value={value}
+      className={className}
+      onChange={(event) => onChange(event.currentTarget.value)}
     >
-      <SelectTrigger
-        size="sm"
-        aria-label={label}
-        className="h-8 w-full min-w-0 sm:h-7 sm:text-xs"
-      >
-        <SelectValue>
-          {(selected) => (
-            <span className="truncate">
-              {selected == null || selected === SELECT_VAZIO ? '—' : String(selected)}
-            </span>
-          )}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent align="start" alignItemWithTrigger={false} className="max-h-72">
-        <SelectItem value={SELECT_VAZIO}>—</SelectItem>
-        {items.map((nome) => (
-          <SelectItem key={nome} value={nome}>
-            {nome}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+      <option value="">—</option>
+      {items.map((nome) => (
+        <option key={nome} value={nome}>
+          {nome}
+        </option>
+      ))}
+    </select>
   )
 }
 
@@ -287,9 +265,9 @@ function Linha({
   }, [etapa, item.codProduto, item.excelRow, pedidoNorm, item.nomeProduto])
 
   const campo =
-    'h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 sm:h-7 sm:text-xs'
+    'h-8 w-full min-w-0 rounded-lg border border-input bg-background px-2 py-1 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 sm:h-7 sm:text-xs dark:bg-input/40'
   const area =
-    'min-h-16 w-full min-w-0 resize-y rounded-lg border border-input bg-transparent px-2 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 sm:min-h-12 sm:text-xs'
+    'min-h-16 w-full min-w-0 resize-y rounded-lg border border-input bg-background px-2 py-1.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 sm:min-h-12 sm:text-xs dark:bg-input/40'
 
   return (
     <>
@@ -321,6 +299,7 @@ function Linha({
               label={`Origem de ${descricao}`}
               value={origem}
               items={ORIGENS_COSTURA}
+              className={campo}
               onChange={(next) => {
                 const proximaOficina = origemCosturaConserto(next) ? oficina : ''
                 setOrigem(next)
@@ -337,6 +316,7 @@ function Linha({
                 label={`Oficina de ${descricao}`}
                 value={oficina}
                 items={oficinas}
+                className={campo}
                 onChange={(next) => {
                   setOficina(next)
                   agendar({ ...valores.current, oficina: next })
@@ -352,6 +332,7 @@ function Linha({
             label={`Responsável de ${descricao}`}
             value={responsavel}
             items={responsaveis}
+            className={campo}
             onChange={(next) => {
               setResponsavel(next)
               agendar({ ...valores.current, responsavel: next })
