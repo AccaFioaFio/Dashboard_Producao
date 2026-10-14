@@ -13,6 +13,7 @@ const PREFIXES = [
   '/top-clientes',
   '/vendas',
   '/pedidos',
+  '/programacao',
   '/inconsistencias',
   '/configuracoes',
 ]

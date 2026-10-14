@@ -13,6 +13,7 @@ import {
 import { MONTH_LABELS, formatDate, formatInt, formatProduto } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
 import { RevisaoLancamentoButton } from '@/components/apontamento-nav'
+import { VerProgramacaoButton } from '@/components/programacao-nav'
 import {
   explainLancamentoDia,
   explainMesVolume,
@@ -40,7 +41,12 @@ export default async function RevisaoPage({
     <PageShell
       title="Revisão"
       description="Sem linha de total da tabela e sem Qtd igual ao número do pedido."
-      actions={<RevisaoLancamentoButton />}
+      actions={
+        <>
+          <VerProgramacaoButton area="revisao" />
+          <RevisaoLancamentoButton />
+        </>
+      }
     >
       <FilterBar
         pathname="/revisao"

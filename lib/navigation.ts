@@ -1,4 +1,5 @@
 import {
+  CalendarRange,
   ClipboardCheck,
   Factory,
   Handshake,
@@ -28,6 +29,12 @@ export const navigation: NavItem[] = [
     href: '/',
     icon: LayoutDashboard,
     description: 'KPIs 2026, funil de pedido e alertas de WIP.',
+  },
+  {
+    title: 'Programação de Produção',
+    href: '/programacao',
+    icon: CalendarRange,
+    description: 'Montar programação e consultar por dia, semana ou mês.',
   },
   {
     title: 'Ação Comercial',

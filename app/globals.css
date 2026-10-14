@@ -845,3 +845,31 @@
     min-height: 2rem;
   }
 }
+
+@media print {
+  body {
+    background: white !important;
+  }
+
+  [data-slot='sidebar'],
+  [data-slot='sidebar-gap'],
+  [data-slot='sidebar-container'],
+  [data-slot='sidebar-rail'],
+  header,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  [data-slot='sidebar-inset'],
+  .page-shell {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
+  }
+
+  [data-programacao-print] {
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+}

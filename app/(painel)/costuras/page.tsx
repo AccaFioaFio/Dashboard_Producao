@@ -13,6 +13,7 @@ import {
 import { MONTH_LABELS, formatDate, formatInt, formatProduto } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
 import { CosturaProducaoButton } from '@/components/apontamento-nav'
+import { VerProgramacaoButton } from '@/components/programacao-nav'
 import {
   explainCosturaOrigem,
   explainLancamentoDia,
@@ -44,7 +45,12 @@ export default async function CosturasPage({
     <PageShell
       title="Costuras"
       description="Funil usa só Origem = Produção. Etiqueta, festonê e conserto ficam no mix de serviço."
-      actions={<CosturaProducaoButton />}
+      actions={
+        <>
+          <VerProgramacaoButton area="costuras" />
+          <CosturaProducaoButton />
+        </>
+      }
     >
       <FilterBar
         pathname="/costuras"

@@ -17,6 +17,7 @@ import {
 import { parseFilters } from '@/lib/filters'
 import { PedidoQueue } from '@/components/pedido-queue'
 import { CorteAcaoButton, CorteProducaoButton } from '@/components/corte-acao-nav'
+import { VerProgramacaoButton } from '@/components/programacao-nav'
 import {
   explainAguardandoTecido,
   explainCorteWip,
@@ -46,6 +47,7 @@ export default async function CortePage({
       description="Volume em peça e pedido. Agosto explode linha de tecido: não use contagem de linha. Consumo e baixa de tecido ficam na aba Tecidos."
       actions={
         <>
+          <VerProgramacaoButton area="corte" />
           <CorteProducaoButton />
           <CorteAcaoButton filters={filters} />
         </>
