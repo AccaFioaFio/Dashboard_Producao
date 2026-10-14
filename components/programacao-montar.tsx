@@ -375,13 +375,15 @@ export function ProgramacaoMontar({
         pedidoNorm: pedidoNorm ?? null,
         cliente: clienteSalvo,
       })
-      setErro(null)
       onSalvou?.(result.banco)
       limparParaProximoPedido(
-        removidos > 0
-          ? `Programação salva. ${removidos} item${removidos === 1 ? '' : 's'} sem qtd produção saiu da lista. Informe o próximo pedido.`
-          : undefined,
+        result.aviso
+          ? result.aviso
+          : removidos > 0
+            ? `Programação salva. ${removidos} item${removidos === 1 ? '' : 's'} sem qtd produção saiu da lista. Informe o próximo pedido.`
+            : undefined,
       )
+      if (result.aviso) setErro(result.aviso)
     })
   }
 

@@ -8,6 +8,11 @@ import {
   type LinhaProgramacao,
   type ProgramacaoBanco,
 } from '@/lib/programacao'
+import {
+  ensureProgramacaoNuvemNoSqlite,
+  publicarPedidoProgramacaoNuvem,
+  removerPedidoProgramacaoNuvem,
+} from '@/lib/programacao-sync'
 
 type RowDb = {
   key: string
@@ -55,8 +60,7 @@ function tabelaExiste() {
   )
 }
 
-export async function listarProgramacao(): Promise<ProgramacaoBanco> {
-  await ensureCloudDatabase()
+function lerBancoLocal(): ProgramacaoBanco {
   if (!tabelaExiste()) return { version: 2, linhas: [] }
   const rows = getSqlite()
     .prepare(
@@ -69,6 +73,12 @@ export async function listarProgramacao(): Promise<ProgramacaoBanco> {
     )
     .all() as RowDb[]
   return { version: 2, linhas: rows.map(rowToLinha) }
+}
+
+export async function listarProgramacao(): Promise<ProgramacaoBanco> {
+  await ensureCloudDatabase()
+  await ensureProgramacaoNuvemNoSqlite()
+  return lerBancoLocal()
 }
 
 function upsertLinhaStmt() {
@@ -109,12 +119,58 @@ function runUpsert(stmt: ReturnType<typeof upsertLinhaStmt>, row: LinhaProgramac
   )
 }
 
+function linhasDoPedido(
+  pedido: string,
+  pedidoNorm: string | null,
+): LinhaProgramacao[] {
+  const chave = chavePedido(pedido, pedidoNorm)
+  const rows = getSqlite()
+    .prepare(
+      `SELECT key, pedido, pedido_norm as pedidoNorm, cliente,
+              item_id as itemId, cod_produto as codProduto, nome,
+              qtd_pedido as qtdPedido, quantidade_producao as quantidadeProducao,
+              data_inicio as dataInicio, data_fim as dataFim, saved_at as savedAt
+       FROM programacao_linha
+       WHERE TRIM(COALESCE(pedido_norm, pedido)) = ?
+       ORDER BY data_inicio, nome`,
+    )
+    .all(chave) as RowDb[]
+  return rows.map(rowToLinha)
+}
+
+async function publicarPedidoLocal(
+  pedido: string,
+  pedidoNorm: string | null,
+  cliente: string | null,
+) {
+  const linhas = linhasDoPedido(pedido, pedidoNorm)
+  if (linhas.length === 0) {
+    return removerPedidoProgramacaoNuvem(pedido, pedidoNorm)
+  }
+  const savedAt = linhas.reduce(
+    (max, row) => (row.savedAt > max ? row.savedAt : max),
+    linhas[0]!.savedAt,
+  )
+  return publicarPedidoProgramacaoNuvem({
+    pedido,
+    pedidoNorm,
+    cliente: cliente ?? linhas[0]?.cliente ?? null,
+    linhas,
+    savedAt,
+  })
+}
+
 export async function substituirPedidoProgramacao(input: {
   pedido: string
   pedidoNorm: string | null
   cliente: string | null
   itens: ItemProgramacao[]
-}): Promise<{ banco: ProgramacaoBanco; gravados: number; removidosAnteriores: number }> {
+}): Promise<{
+  banco: ProgramacaoBanco
+  gravados: number
+  removidosAnteriores: number
+  nuvemError?: string
+}> {
   await ensureCloudDatabase()
   const chave = chavePedido(input.pedido, input.pedidoNorm)
   const savedAt = new Date().toISOString()
@@ -156,17 +212,24 @@ export async function substituirPedidoProgramacao(input: {
   })
   gravar()
 
+  const nuvem = await publicarPedidoLocal(
+    input.pedido,
+    input.pedidoNorm,
+    input.cliente,
+  )
+
   return {
-    banco: await listarProgramacao(),
+    banco: lerBancoLocal(),
     gravados: novas.length,
     removidosAnteriores: countAnteriores.n,
+    nuvemError: nuvem.ok ? undefined : nuvem.error,
   }
 }
 
 export async function excluirPedidoProgramacao(
   pedido: string,
   pedidoNorm: string | null,
-): Promise<{ banco: ProgramacaoBanco; removidos: number }> {
+): Promise<{ banco: ProgramacaoBanco; removidos: number; nuvemError?: string }> {
   await ensureCloudDatabase()
   const chave = chavePedido(pedido, pedidoNorm)
   const result = getSqlite()
@@ -175,21 +238,33 @@ export async function excluirPedidoProgramacao(
        WHERE TRIM(COALESCE(pedido_norm, pedido)) = ?`,
     )
     .run(chave)
+  const nuvem = await removerPedidoProgramacaoNuvem(pedido, pedidoNorm)
   return {
-    banco: await listarProgramacao(),
+    banco: lerBancoLocal(),
     removidos: result.changes,
+    nuvemError: nuvem.ok ? undefined : nuvem.error,
   }
 }
 
 export async function excluirLinhasProgramacao(
   keys: string[],
-): Promise<{ banco: ProgramacaoBanco; removidos: number }> {
+): Promise<{ banco: ProgramacaoBanco; removidos: number; nuvemError?: string }> {
   await ensureCloudDatabase()
   const unicas = [...new Set(keys.map((k) => k.trim()).filter(Boolean))]
   if (unicas.length === 0) {
-    return { banco: await listarProgramacao(), removidos: 0 }
+    return { banco: lerBancoLocal(), removidos: 0 }
   }
+
   const db = getSqlite()
+  const pedidoInfo = db
+    .prepare(
+      `SELECT pedido, pedido_norm as pedidoNorm, cliente
+       FROM programacao_linha WHERE key = ? LIMIT 1`,
+    )
+    .get(unicas[0]!) as
+    | { pedido: string; pedidoNorm: string | null; cliente: string | null }
+    | undefined
+
   const del = db.prepare(`DELETE FROM programacao_linha WHERE key = ?`)
   const gravar = db.transaction(() => {
     let removidos = 0
@@ -199,13 +274,24 @@ export async function excluirLinhasProgramacao(
     return removidos
   })
   const removidos = gravar()
-  return { banco: await listarProgramacao(), removidos }
+
+  let nuvemError: string | undefined
+  if (pedidoInfo) {
+    const nuvem = await publicarPedidoLocal(
+      pedidoInfo.pedido,
+      pedidoInfo.pedidoNorm,
+      pedidoInfo.cliente,
+    )
+    if (!nuvem.ok) nuvemError = nuvem.error
+  }
+
+  return { banco: lerBancoLocal(), removidos, nuvemError }
 }
 
 /** Importa linhas (ex.: migração do localStorage). Não apaga o que já existe com outra key. */
 export async function importarLinhasProgramacao(
   linhas: LinhaProgramacao[],
-): Promise<{ banco: ProgramacaoBanco; gravados: number }> {
+): Promise<{ banco: ProgramacaoBanco; gravados: number; nuvemError?: string }> {
   await ensureCloudDatabase()
   const validas = linhas.filter(
     (row) =>
@@ -216,7 +302,7 @@ export async function importarLinhasProgramacao(
       periodoValido(row.dataInicio, row.dataFim),
   )
   if (validas.length === 0) {
-    return { banco: await listarProgramacao(), gravados: 0 }
+    return { banco: lerBancoLocal(), gravados: 0 }
   }
   const upsert = upsertLinhaStmt()
   const gravar = getSqlite().transaction(() => {
@@ -228,5 +314,25 @@ export async function importarLinhasProgramacao(
     }
   })
   gravar()
-  return { banco: await listarProgramacao(), gravados: validas.length }
+
+  // Publica cada pedido importado na nuvem.
+  const porPedido = new Map<string, LinhaProgramacao[]>()
+  for (const row of validas) {
+    const chave = chavePedido(row.pedido, row.pedidoNorm)
+    const lista = porPedido.get(chave) ?? []
+    lista.push(row)
+    porPedido.set(chave, lista)
+  }
+  let nuvemError: string | undefined
+  for (const [, rows] of porPedido) {
+    const head = rows[0]!
+    const nuvem = await publicarPedidoLocal(
+      head.pedido,
+      head.pedidoNorm,
+      head.cliente,
+    )
+    if (!nuvem.ok && !nuvemError) nuvemError = nuvem.error
+  }
+
+  return { banco: lerBancoLocal(), gravados: validas.length, nuvemError }
 }

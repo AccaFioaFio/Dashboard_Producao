@@ -12,6 +12,7 @@ import {
   captureProgramacaoOperacao,
   mergeProgramacaoOperacao,
 } from '@/lib/programacao-operacao-local'
+import { ensureProgramacaoNuvemNoSqlite } from '@/lib/programacao-sync'
 import {
   createAdminClient,
   createAnonClient,
@@ -54,6 +55,7 @@ export async function ensureCloudDatabase(options?: { force?: boolean }) {
     await inFlight
   }
   await ensureApontamentosNuvemNoSqlite({ force: options?.force })
+  await ensureProgramacaoNuvemNoSqlite({ force: options?.force })
 }
 
 async function restoreDatabase(force: boolean) {
@@ -268,6 +270,7 @@ export async function refreshFromSupabaseCarga(): Promise<
     mergeApontamentoOperacao(backupApontamento)
     mergeProgramacaoOperacao(backupProgramacao)
     await ensureApontamentosNuvemNoSqlite({ force: true })
+    await ensureProgramacaoNuvemNoSqlite({ force: true })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return { ok: false, error: `Baixou o Storage, mas falhou gravar o SQLite. ${message}` }

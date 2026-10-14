@@ -111,7 +111,7 @@ export async function buscarProgramacaoPedido(
 }
 
 export type ProgramacaoResult =
-  | { ok: true; banco: ProgramacaoBanco }
+  | { ok: true; banco: ProgramacaoBanco; aviso?: string }
   | { ok: false; error: string }
 
 export async function carregarProgramacao(): Promise<ProgramacaoResult> {
@@ -143,13 +143,20 @@ export async function salvarPedidoProgramacao(input: {
   }
 
   try {
-    const { banco, gravados } = await substituirPedidoProgramacao({
+    const { banco, gravados, nuvemError } = await substituirPedidoProgramacao({
       pedido,
       pedidoNorm: input.pedidoNorm,
       cliente: input.cliente?.trim() ? input.cliente.trim() : null,
       itens: prontos,
     })
-    return { ok: true, banco, gravados }
+    return {
+      ok: true,
+      banco,
+      gravados,
+      aviso: nuvemError
+        ? `Salvou neste computador, mas a nuvem não atualizou (${nuvemError}). No celular a programação pode não aparecer.`
+        : undefined,
+    }
   } catch {
     return { ok: false, error: 'Não foi possível salvar a programação.' }
   }
@@ -166,8 +173,18 @@ export async function excluirPedidoProgramacaoAction(
   if (!informado) return { ok: false, error: 'Informe o número do pedido.' }
 
   try {
-    const { banco, removidos } = await excluirPedidoDb(informado, pedidoNorm)
-    return { ok: true, banco, removidos }
+    const { banco, removidos, nuvemError } = await excluirPedidoDb(
+      informado,
+      pedidoNorm,
+    )
+    return {
+      ok: true,
+      banco,
+      removidos,
+      aviso: nuvemError
+        ? `Excluiu neste computador, mas a nuvem não atualizou (${nuvemError}).`
+        : undefined,
+    }
   } catch {
     return { ok: false, error: 'Não foi possível excluir o pedido.' }
   }
@@ -183,8 +200,17 @@ export async function excluirItemProgramacao(
   if (!chave) return { ok: false, error: 'Item inválido.' }
 
   try {
-    const { banco, removidos } = await excluirLinhasProgramacao([chave])
-    return { ok: true, banco, removidos }
+    const { banco, removidos, nuvemError } = await excluirLinhasProgramacao([
+      chave,
+    ])
+    return {
+      ok: true,
+      banco,
+      removidos,
+      aviso: nuvemError
+        ? `Excluiu neste computador, mas a nuvem não atualizou (${nuvemError}).`
+        : undefined,
+    }
   } catch {
     return { ok: false, error: 'Não foi possível excluir o item.' }
   }
