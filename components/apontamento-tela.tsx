@@ -5,7 +5,7 @@ import { ApontamentoVoltarButton } from '@/components/apontamento-nav'
 import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { getApontamentoPedido } from '@/data/apontamento'
+import { getApontamentoPedido, listarOficinasApontamento } from '@/data/apontamento'
 import { ETAPAS_APONTAMENTO, type EtapaApontamento } from '@/lib/apontamento'
 import { formatInt } from '@/lib/format'
 
@@ -23,6 +23,7 @@ export async function ApontamentoTela({
   const params = await searchParams
   const pedido = first(params.pedido)?.trim() ?? ''
   const consulta = pedido ? await getApontamentoPedido(etapa, pedido) : null
+  const oficinas = etapa === 'costura' ? listarOficinasApontamento() : []
   const config = ETAPAS_APONTAMENTO[etapa]
   const temQtdPedida = consulta?.itens.some((row) => row.qtdPedida != null) ?? false
   const totalPecas =
@@ -139,6 +140,7 @@ export async function ApontamentoTela({
               etapa={etapa}
               pedidoNorm={consulta.pedidoNorm ?? pedido}
               itens={consulta.itens}
+              oficinas={oficinas}
               permitirInclusao={consulta.inclusaoManual}
               temOrigem={config.temOrigem}
               qtdLabel={config.qtdLabel}

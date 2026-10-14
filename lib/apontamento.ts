@@ -50,6 +50,10 @@ export function origemCosturaValida(value: string) {
   return (ORIGENS_COSTURA as readonly string[]).includes(value)
 }
 
+export function origemCosturaConserto(value: string) {
+  return value.trim() === 'Conserto'
+}
+
 export function responsavelApontamentoValido(etapa: EtapaApontamento, value: string) {
   const lista = etapa === 'costura' ? RESPONSAVEIS_COSTURA : RESPONSAVEIS_REVISAO
   return (lista as readonly string[]).includes(value)

@@ -5,6 +5,7 @@ import { ETAPAS_APONTAMENTO, type EtapaApontamento } from '@/lib/apontamento'
 export type ApontamentoNuvem = {
   codProduto: string
   origem: string | null
+  oficina: string | null
   qtdPecas: number | null
   dataProducao: string | null
   responsavel: string | null
@@ -71,6 +72,7 @@ function lancamentoDe(raw: unknown, codArquivo?: string): ApontamentoNuvem | nul
   return {
     codProduto,
     origem: texto(row.origem),
+    oficina: texto(row.oficina),
     qtdPecas: numero(row.qtdPecas),
     dataProducao: texto(row.dataProducao),
     responsavel: texto(row.responsavel),
@@ -207,6 +209,7 @@ export async function gravarApontamentoNuvem(
   const corpo: ApontamentoNuvem = {
     codProduto: lancamento.codProduto,
     origem: lancamento.origem,
+    oficina: lancamento.oficina ?? null,
     qtdPecas: lancamento.qtdPecas,
     dataProducao: lancamento.dataProducao,
     responsavel: lancamento.responsavel,
@@ -239,6 +242,7 @@ export async function marcarAvisoApontamentoNuvem(
   return gravarApontamentoNuvem(etapa, pedidoNorm, {
     codProduto: base.codProduto,
     origem: base.origem,
+    oficina: base.oficina,
     qtdPecas: base.qtdPecas,
     dataProducao,
     responsavel: base.responsavel,

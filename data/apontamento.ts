@@ -16,6 +16,7 @@ export type ItemApontamento = {
   nomeProduto: string | null
   qtdPedida: number | null
   origem: string | null
+  oficina: string | null
   qtdPecas: number | null
   dataProducao: string | null
   responsavel: string | null
@@ -82,6 +83,7 @@ async function lancamentosDoPedido(etapa: EtapaApontamento, pedidoNorm: string) 
   for (const row of getSqlite()
     .prepare(
       `SELECT cod_produto as codProduto, excel_row as excelRow, ${origem},
+              ${etapa === 'costura' ? 'oficina' : 'NULL as oficina'},
               qtd_pecas as qtdPecas, data_producao as dataProducao,
               responsavel, aviso_data_producao as avisoDataProducao,
               observacao, nome_produto as nomeProduto,
@@ -116,12 +118,27 @@ function itemDe(
     nomeProduto,
     qtdPedida,
     origem: lancamento?.origem ?? null,
+    oficina: lancamento?.oficina ?? null,
     qtdPecas: lancamento?.qtdPecas ?? null,
     dataProducao: lancamento?.dataProducao ?? null,
     responsavel: lancamento?.responsavel ?? null,
     avisoDataProducao: lancamento?.avisoDataProducao ?? null,
     observacao: lancamento?.observacao ?? null,
   }
+}
+
+export function listarOficinasApontamento() {
+  const existe = getSqlite()
+    .prepare(
+      `SELECT 1 as v FROM sqlite_master WHERE type = 'table' AND name = 'dim_oficina'`,
+    )
+    .get()
+  if (!existe) return [] as string[]
+  return (
+    getSqlite()
+      .prepare('SELECT oficina FROM dim_oficina ORDER BY oficina')
+      .all() as { oficina: string }[]
+  ).map((row) => row.oficina)
 }
 
 export const getApontamentoPedido = cache(

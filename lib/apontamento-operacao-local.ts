@@ -7,6 +7,7 @@ type LinhaLocal = {
   codProduto: string
   excelRow: number
   origem: string | null
+  oficina: string | null
   qtdPecas: number | null
   dataProducao: string | null
   responsavel: string | null
@@ -55,10 +56,11 @@ function ler(etapa: EtapaApontamento): LinhaLocal[] {
   const tabela = ETAPAS_APONTAMENTO[etapa].tabela
   if (!tabelaExiste(tabela)) return []
   const origem = etapa === 'costura' ? 'origem' : 'NULL as origem'
+  const oficina = etapa === 'costura' ? 'oficina' : 'NULL as oficina'
   return getSqlite()
     .prepare(
       `SELECT pedido_norm as pedidoNorm, cod_produto as codProduto,
-              excel_row as excelRow, ${origem}, qtd_pecas as qtdPecas,
+              excel_row as excelRow, ${origem}, ${oficina}, qtd_pecas as qtdPecas,
               data_producao as dataProducao, responsavel,
               aviso_data_producao as avisoDataProducao,
               observacao, nome_produto as nomeProduto,
@@ -190,9 +192,10 @@ export function mergeApontamentoOperacao(backup: ApontamentoOperacaoBackup | nul
   const gravar = db.transaction(() => {
     for (const etapa of ['costura', 'revisao'] as const) {
       const tabela = ETAPAS_APONTAMENTO[etapa].tabela
-      const colunasOrigem = etapa === 'costura' ? 'origem, ' : ''
-      const valoresOrigem = etapa === 'costura' ? '?, ' : ''
-      const atualizaOrigem = etapa === 'costura' ? 'origem = excluded.origem,' : ''
+      const colunasOrigem = etapa === 'costura' ? 'origem, oficina, ' : ''
+      const valoresOrigem = etapa === 'costura' ? '?, ?, ' : ''
+      const atualizaOrigem =
+        etapa === 'costura' ? 'origem = excluded.origem, oficina = excluded.oficina,' : ''
       const upsert = db.prepare(
         `INSERT INTO ${tabela} (
            pedido_norm, cod_produto, excel_row, ${colunasOrigem}qtd_pecas, data_producao,
@@ -214,7 +217,7 @@ export function mergeApontamentoOperacao(backup: ApontamentoOperacaoBackup | nul
           row.pedidoNorm,
           row.codProduto,
           row.excelRow,
-          ...(etapa === 'costura' ? [row.origem] : []),
+          ...(etapa === 'costura' ? [row.origem, row.oficina ?? null] : []),
           row.qtdPecas,
           row.dataProducao,
           row.responsavel,

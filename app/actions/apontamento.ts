@@ -9,6 +9,7 @@ import { readSession } from '@/lib/auth/cookie'
 import {
   ETAPAS_APONTAMENTO,
   etapaApontamento,
+  origemCosturaConserto,
   origemCosturaValida,
   responsavelApontamentoValido,
   type EtapaApontamento,
@@ -38,6 +39,7 @@ export type SalvarApontamentoInput = {
   codProduto: string
   excelRow: number
   origem: string
+  oficina?: string
   qtdPecas: string
   dataProducao: string
   responsavel: string
@@ -78,6 +80,12 @@ function quantidade(value: string): number | null | 'invalida' {
   return numero
 }
 
+function oficinaCadastrada(value: string) {
+  return Boolean(
+    getSqlite().prepare('SELECT 1 as v FROM dim_oficina WHERE oficina = ?').get(value),
+  )
+}
+
 function semPermissao(etapa: EtapaApontamento) {
   return `Sem permissão para lançar em ${ETAPAS_APONTAMENTO[etapa].titulo}.`
 }
@@ -115,15 +123,17 @@ export async function buscarProdutoApontamento(
     .run(pedido, resolvido.codProduto, EXCEL_ROW_FORA_DA_CARGA, resolvido.nomeProduto, agora)
 
   const origemSql = etapa === 'costura' ? 'origem' : 'NULL as origem'
+  const oficinaSql = etapa === 'costura' ? 'oficina' : 'NULL as oficina'
   const gravado = getSqlite()
     .prepare(
-      `SELECT ${origemSql}, qtd_pecas as qtdPecas, data_producao as dataProducao,
+      `SELECT ${origemSql}, ${oficinaSql}, qtd_pecas as qtdPecas, data_producao as dataProducao,
               responsavel, nome_produto as nomeProduto
        FROM ${tabela}
        WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
     )
     .get(pedido, resolvido.codProduto, EXCEL_ROW_FORA_DA_CARGA) as {
     origem: string | null
+    oficina: string | null
     qtdPecas: number | null
     dataProducao: string | null
     responsavel: string | null
@@ -133,6 +143,7 @@ export async function buscarProdutoApontamento(
   const nuvem = await gravarApontamentoNuvem(etapa, pedido, {
     codProduto: resolvido.codProduto,
     origem: gravado?.origem ?? null,
+    oficina: gravado?.oficina ?? null,
     qtdPecas: gravado?.qtdPecas ?? null,
     dataProducao: gravado?.dataProducao ?? null,
     responsavel: gravado?.responsavel ?? null,
@@ -192,9 +203,21 @@ export async function salvarApontamento(
   if (origem && !origemCosturaValida(origem)) {
     return { ok: false, error: 'Escolha uma origem do relatório de Costura.' }
   }
+  const conserto = etapa === 'costura' && origemCosturaConserto(origem)
+  const oficina = conserto ? (input.oficina?.trim() ?? '') : ''
+  if (oficina && !oficinaCadastrada(oficina)) {
+    return { ok: false, error: 'Escolha uma oficina da lista de Oficinas.' }
+  }
   const observacao = clipObs(input.observacao, 500)
   if (etapa === 'costura' && (qtdPecas != null || dataProducao || responsavel || observacao) && !origem) {
     return { ok: false, error: 'Escolha a origem antes de gravar o lançamento.' }
+  }
+  if (
+    conserto &&
+    (qtdPecas != null || dataProducao || responsavel || observacao) &&
+    !oficina
+  ) {
+    return { ok: false, error: 'Em Conserto, escolha a oficina antes de gravar o lançamento.' }
   }
 
   let nomeProduto: string | null = null
@@ -233,7 +256,8 @@ export async function salvarApontamento(
 
   const tabela = ETAPAS_APONTAMENTO[etapa].tabela
   const db = getSqlite()
-  const vazio = qtdPecas == null && !dataProducao && !responsavel && !origem && !observacao
+  const vazio =
+    qtdPecas == null && !dataProducao && !responsavel && !origem && !oficina && !observacao
 
   if (vazio) {
     if (foraDaCarga) {
@@ -246,12 +270,15 @@ export async function salvarApontamento(
       ).run(nomeProduto, new Date().toISOString(), pedidoNorm, codProduto)
       if (etapa === 'costura') {
         db.prepare(
-          `UPDATE ${tabela} SET origem = NULL WHERE pedido_norm = ? AND cod_produto = ?`,
+          `UPDATE ${tabela}
+           SET origem = NULL, oficina = NULL
+           WHERE pedido_norm = ? AND cod_produto = ?`,
         ).run(pedidoNorm, codProduto)
       }
       const nuvem = await gravarApontamentoNuvem(etapa, pedidoNorm, {
         codProduto,
         origem: null,
+        oficina: null,
         qtdPecas: null,
         dataProducao: null,
         responsavel: null,
@@ -293,11 +320,12 @@ export async function salvarApontamento(
   if (etapa === 'costura') {
     db.prepare(
       `INSERT INTO ${tabela} (
-         pedido_norm, cod_produto, excel_row, origem, qtd_pecas, data_producao,
+         pedido_norm, cod_produto, excel_row, origem, oficina, qtd_pecas, data_producao,
          responsavel, observacao, nome_produto, atualizado_em
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
          origem = excluded.origem,
+         oficina = excluded.oficina,
          qtd_pecas = excluded.qtd_pecas,
          data_producao = excluded.data_producao,
          responsavel = excluded.responsavel,
@@ -308,7 +336,8 @@ export async function salvarApontamento(
       pedidoNorm,
       codProduto,
       excelRow,
-      origem,
+      origem || null,
+      oficina || null,
       qtdPecas,
       dataProducao || null,
       responsavel || null,
@@ -350,6 +379,7 @@ export async function salvarApontamento(
   const nuvem = await gravarApontamentoNuvem(etapa, pedidoNorm, {
     codProduto,
     origem: origem || null,
+    oficina: oficina || null,
     qtdPecas,
     dataProducao: dataProducao || null,
     responsavel: responsavel || null,
@@ -419,6 +449,7 @@ export async function salvarListaApontamento(
     codProduto: string
     nomeProduto: string | null
     origem: string | null
+    oficina: string | null
     qtdPecas: number | null
     dataProducao: string
     responsavel: string | null
@@ -443,6 +474,7 @@ export async function salvarListaApontamento(
       codProduto: item.codProduto,
       nomeProduto: item.nomeProduto,
       origem: item.origem,
+      oficina: item.oficina,
       qtdPecas: item.qtdPecas,
       dataProducao: item.dataProducao,
       responsavel: item.responsavel,
@@ -599,6 +631,7 @@ export async function salvarListaApontamento(
       {
         codProduto: item.codProduto,
         origem: item.origem,
+        oficina: item.oficina ?? null,
         qtdPecas: item.qtdPecas,
         dataProducao: item.dataProducao,
         responsavel: item.responsavel,

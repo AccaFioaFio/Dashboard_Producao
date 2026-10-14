@@ -359,6 +359,7 @@ export const costuraLancamento = sqliteTable(
     codProduto: text('cod_produto').notNull(),
     excelRow: integer('excel_row').notNull(),
     origem: text('origem'),
+    oficina: text('oficina'),
     qtdPecas: real('qtd_pecas'),
     dataProducao: text('data_producao'),
     responsavel: text('responsavel'),

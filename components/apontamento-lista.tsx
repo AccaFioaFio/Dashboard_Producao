@@ -11,9 +11,17 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   ORIGENS_COSTURA,
   RESPONSAVEIS_COSTURA,
   RESPONSAVEIS_REVISAO,
+  origemCosturaConserto,
   type EtapaApontamento,
 } from '@/lib/apontamento'
 import { EXCEL_ROW_FORA_DA_CARGA } from '@/lib/corte-producao'
@@ -21,12 +29,15 @@ import { formatNumber } from '@/lib/format'
 import { isCodigoGeradoSemCadastro } from '@/lib/produto-codigo-manual'
 import { cn } from '@/lib/utils'
 
+const SELECT_VAZIO = '__none__'
+
 export type ItemApontamentoLista = {
   codProduto: string
   excelRow: number
   nomeProduto: string | null
   qtdPedida: number | null
   origem: string | null
+  oficina: string | null
   qtdPecas: number | null
   dataProducao: string | null
   responsavel: string | null
@@ -40,6 +51,7 @@ function chaveCodigo(cod: string) {
 
 type Lancamento = {
   origem: string
+  oficina: string
   qtdPecas: string
   dataProducao: string
   responsavel: string
@@ -74,10 +86,54 @@ function textoQtd(value: number | null) {
 function lancamentoIgual(a: Lancamento, b: Lancamento) {
   return (
     a.origem === b.origem &&
+    a.oficina === b.oficina &&
     a.qtdPecas.trim() === b.qtdPecas.trim() &&
     a.dataProducao === b.dataProducao &&
     a.responsavel === b.responsavel &&
     a.observacao.trim() === b.observacao.trim()
+  )
+}
+
+function CampoSelect({
+  label,
+  value,
+  items,
+  onChange,
+}: {
+  label: string
+  value: string
+  items: readonly string[]
+  onChange: (value: string) => void
+}) {
+  return (
+    <Select
+      value={value || SELECT_VAZIO}
+      onValueChange={(next) => {
+        onChange(!next || next === SELECT_VAZIO ? '' : String(next))
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        aria-label={label}
+        className="h-8 w-full min-w-0 sm:h-7 sm:text-xs"
+      >
+        <SelectValue>
+          {(selected) => (
+            <span className="truncate">
+              {selected == null || selected === SELECT_VAZIO ? '—' : String(selected)}
+            </span>
+          )}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent align="start" alignItemWithTrigger={false} className="max-h-72">
+        <SelectItem value={SELECT_VAZIO}>—</SelectItem>
+        {items.map((nome) => (
+          <SelectItem key={nome} value={nome}>
+            {nome}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 
@@ -88,6 +144,7 @@ function Linha({
   temOrigem,
   qtdLabel,
   responsaveis,
+  oficinas,
   dataConfirmada,
   salvandoItem,
   onOcupada,
@@ -99,6 +156,7 @@ function Linha({
   temOrigem: boolean
   qtdLabel: string
   responsaveis: readonly string[]
+  oficinas: readonly string[]
   dataConfirmada?: string
   salvandoItem: boolean
   onOcupada: (ocupada: boolean) => void
@@ -106,12 +164,14 @@ function Linha({
 }) {
   const inicial: Lancamento = {
     origem: item.origem ?? '',
+    oficina: origemCosturaConserto(item.origem ?? '') ? (item.oficina ?? '') : '',
     qtdPecas: textoQtd(item.qtdPecas),
     dataProducao: item.dataProducao ?? '',
     responsavel: item.responsavel ?? '',
     observacao: item.observacao ?? '',
   }
   const [origem, setOrigem] = useState(inicial.origem)
+  const [oficina, setOficina] = useState(inicial.oficina)
   const [qtdPecas, setQtdPecas] = useState(inicial.qtdPecas)
   const [dataProducao, setDataProducao] = useState(inicial.dataProducao)
   const [responsavel, setResponsavel] = useState(inicial.responsavel)
@@ -125,7 +185,8 @@ function Linha({
   const [erro, setErro] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const descricao = item.nomeProduto?.replace(/\s+/g, ' ').trim() || '—'
-  const colunas = temOrigem ? 9 : 8
+  const colunas = temOrigem ? 10 : 8
+  const mostraOficina = temOrigem && origemCosturaConserto(origem)
   const naLista =
     Boolean(dataProducao) &&
     (item.avisoDataProducao === dataProducao || dataConfirmada === dataProducao)
@@ -150,6 +211,7 @@ function Linha({
           codProduto: item.codProduto,
           excelRow: item.excelRow,
           origem: atual.origem,
+          oficina: atual.oficina,
           qtdPecas: atual.qtdPecas,
           dataProducao: atual.dataProducao,
           responsavel: atual.responsavel,
@@ -159,8 +221,13 @@ function Linha({
         if (!viva.current || ticket !== geracao.current) return
         if (result.ok) gravado.current = atual
         const preenchido =
-          Boolean(atual.origem || atual.dataProducao || atual.responsavel || atual.observacao.trim()) ||
-          atual.qtdPecas.trim() !== ''
+          Boolean(
+            atual.origem ||
+              atual.oficina ||
+              atual.dataProducao ||
+              atual.responsavel ||
+              atual.observacao.trim(),
+          ) || atual.qtdPecas.trim() !== ''
         setErro(result.ok ? null : result.error)
         setAviso(result.ok && preenchido ? 'Gravado neste pedido.' : null)
       } catch {
@@ -209,6 +276,7 @@ function Linha({
         codProduto: item.codProduto,
         excelRow: item.excelRow,
         origem: next.origem,
+        oficina: next.oficina,
         qtdPecas: next.qtdPecas,
         dataProducao: next.dataProducao,
         responsavel: next.responsavel,
@@ -249,43 +317,46 @@ function Linha({
         </td>
         {temOrigem ? (
           <td data-label="Origem" data-span="full" className="w-44 px-1.5 py-1.5">
-            <select
-              aria-label={`Origem de ${descricao}`}
+            <CampoSelect
+              label={`Origem de ${descricao}`}
               value={origem}
-              className={campo}
-              onChange={(event) => {
-                const next = event.currentTarget.value
+              items={ORIGENS_COSTURA}
+              onChange={(next) => {
+                const proximaOficina = origemCosturaConserto(next) ? oficina : ''
                 setOrigem(next)
-                agendar({ ...valores.current, origem: next })
+                setOficina(proximaOficina)
+                agendar({ ...valores.current, origem: next, oficina: proximaOficina })
               }}
-            >
-              <option value="">—</option>
-              {ORIGENS_COSTURA.map((nome) => (
-                <option key={nome} value={nome}>
-                  {nome}
-                </option>
-              ))}
-            </select>
+            />
+          </td>
+        ) : null}
+        {temOrigem ? (
+          <td data-label="Oficina" data-span="full" className="w-44 px-1.5 py-1.5">
+            {mostraOficina ? (
+              <CampoSelect
+                label={`Oficina de ${descricao}`}
+                value={oficina}
+                items={oficinas}
+                onChange={(next) => {
+                  setOficina(next)
+                  agendar({ ...valores.current, oficina: next })
+                }}
+              />
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
           </td>
         ) : null}
         <td data-label="Responsável" data-span="full" className="w-40 px-1.5 py-1.5">
-          <select
-            aria-label={`Responsável de ${descricao}`}
+          <CampoSelect
+            label={`Responsável de ${descricao}`}
             value={responsavel}
-            className={campo}
-            onChange={(event) => {
-              const next = event.currentTarget.value
+            items={responsaveis}
+            onChange={(next) => {
               setResponsavel(next)
               agendar({ ...valores.current, responsavel: next })
             }}
-          >
-            <option value="">—</option>
-            {responsaveis.map((nome) => (
-              <option key={nome} value={nome}>
-                {nome}
-              </option>
-            ))}
-          </select>
+          />
         </td>
         <td data-label={qtdLabel} className="w-28 px-1.5 py-1.5">
           <input
@@ -448,6 +519,7 @@ function IncluirProduto({
         nomeProduto: result.nomeProduto,
         qtdPedida: null,
         origem: null,
+        oficina: null,
         qtdPecas: null,
         dataProducao: null,
         responsavel: null,
@@ -520,6 +592,7 @@ export function ApontamentoLista({
   etapa,
   pedidoNorm,
   itens,
+  oficinas = [],
   permitirInclusao = false,
   temOrigem,
   qtdLabel,
@@ -527,6 +600,7 @@ export function ApontamentoLista({
   etapa: EtapaApontamento
   pedidoNorm: string
   itens: ItemApontamentoLista[]
+  oficinas?: readonly string[]
   permitirInclusao?: boolean
   temOrigem: boolean
   qtdLabel: string
@@ -548,7 +622,7 @@ export function ApontamentoLista({
   const chaves = new Set(visiveis.map((item) => chaveCodigo(item.codProduto)))
   const dica =
     etapa === 'costura'
-      ? 'O que já entrou na lista fica neste pedido. Em cada item, Salvar na lista leva só aquele produto (origem Produção, qtd, data e responsável). O botão do topo salva todos os novos de uma vez.'
+      ? 'O que já entrou na lista fica neste pedido. Em cada item, Salvar na lista leva só aquele produto (origem Produção, qtd, data e responsável). Em Conserto, escolha também a oficina. O botão do topo salva todos os novos de uma vez.'
       : 'O que já entrou na lista fica neste pedido. Em cada item, Salvar na lista leva só aquele produto (qtd, data e responsável). O botão do topo salva todos os novos de uma vez.'
 
   function marcarOcupada(chave: string, ocupada: boolean) {
@@ -632,6 +706,7 @@ export function ApontamentoLista({
                 <th className="px-1.5 py-1 whitespace-nowrap">Código</th>
                 <th className="px-1.5 py-1">Descrição do produto</th>
                 {temOrigem ? <th className="px-1.5 py-1">Origem</th> : null}
+                {temOrigem ? <th className="px-1.5 py-1">Oficina</th> : null}
                 <th className="px-1.5 py-1">Responsável</th>
                 <th className="px-1.5 py-1">{qtdLabel}</th>
                 <th className="px-1.5 py-1">Data produção</th>
@@ -651,6 +726,7 @@ export function ApontamentoLista({
                     temOrigem={temOrigem}
                     qtdLabel={qtdLabel}
                     responsaveis={responsaveis}
+                    oficinas={oficinas}
                     dataConfirmada={confirmadas[chave]}
                     salvandoItem={salvando && salvandoCod === item.codProduto}
                     onOcupada={(ocupada) =>
