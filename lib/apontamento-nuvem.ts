@@ -120,6 +120,59 @@ export async function lerApontamentoNuvem(etapa: EtapaApontamento, pedidoNorm: s
   return mapa
 }
 
+export type ApontamentoNuvemComPedido = ApontamentoNuvem & { pedidoNorm: string }
+
+/** Lista pastas de pedido em costura-operacao / revisao-operacao (sem _alertas). */
+async function listarPastasPedidoNuvem(etapa: EtapaApontamento): Promise<string[]> {
+  const client = clienteLeitura()
+  if (!client) return []
+  const prefixo = ETAPAS_APONTAMENTO[etapa].nuvem
+  const pastas: string[] = []
+  const page = 1000
+  let offset = 0
+  for (;;) {
+    const { data, error } = await client.storage.from(CARGA_BUCKET).list(prefixo, {
+      limit: page,
+      offset,
+      sortBy: { column: 'name', order: 'asc' },
+    })
+    if (error || !data?.length) break
+    for (const item of data) {
+      if (!item.name || item.name === '_alertas') continue
+      if (item.name.endsWith('.json')) continue
+      pastas.push(item.name)
+    }
+    if (data.length < page) break
+    offset += data.length
+  }
+  return pastas
+}
+
+/**
+ * Todos os lançamentos da etapa na nuvem (JSON no Storage).
+ * Usado para o KPI somar planilha + tela mesmo quando o SQLite publicado veio sem eles.
+ */
+export async function listarTodosApontamentosNuvem(
+  etapa: EtapaApontamento,
+): Promise<ApontamentoNuvemComPedido[]> {
+  const pastas = await listarPastasPedidoNuvem(etapa)
+  if (!pastas.length) return []
+
+  const out: ApontamentoNuvemComPedido[] = []
+  const batchSize = 8
+  for (let i = 0; i < pastas.length; i += batchSize) {
+    const batch = pastas.slice(i, i + batchSize)
+    const mapas = await Promise.all(batch.map((pedido) => lerApontamentoNuvem(etapa, pedido)))
+    for (let j = 0; j < batch.length; j += 1) {
+      const pedidoNorm = batch[j]
+      for (const lancamento of mapas[j].values()) {
+        out.push({ ...lancamento, pedidoNorm })
+      }
+    }
+  }
+  return out
+}
+
 export type ApontamentoNuvemGravacao = Omit<
   ApontamentoNuvem,
   'atualizadoEm' | 'avisoDataProducao'

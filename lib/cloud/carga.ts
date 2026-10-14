@@ -6,6 +6,7 @@ import {
   captureApontamentoOperacao,
   mergeApontamentoOperacao,
 } from '@/lib/apontamento-operacao-local'
+import { ensureApontamentosNuvemNoSqlite } from '@/lib/apontamento-sync'
 import { captureCorteOperacao, mergeCorteOperacao } from '@/lib/corte-operacao-local'
 import {
   createAdminClient,
@@ -36,15 +37,19 @@ const DOWNLOAD_TIMEOUT_MS = 120_000
 /**
  * Na Vercel (e quando Supabase está configurado): baixa o SQLite publicado
  * no Storage. Sem Supabase: usa o SQLite do deploy.
+ * Em seguida sincroniza lançamentos da tela (costura/revisão) da nuvem
+ * para o SQLite — os KPIs somam planilha + esses lançamentos.
  */
 export async function ensureCloudDatabase(options?: { force?: boolean }) {
-  if (!IS_CLOUD && !options?.force) return
-  if (!inFlight) {
-    inFlight = restoreDatabase(Boolean(options?.force)).finally(() => {
-      inFlight = null
-    })
+  if (IS_CLOUD || options?.force) {
+    if (!inFlight) {
+      inFlight = restoreDatabase(Boolean(options?.force)).finally(() => {
+        inFlight = null
+      })
+    }
+    await inFlight
   }
-  await inFlight
+  await ensureApontamentosNuvemNoSqlite({ force: options?.force })
 }
 
 async function restoreDatabase(force: boolean) {
@@ -254,6 +259,7 @@ export async function refreshFromSupabaseCarga(): Promise<
     getSqlite()
     mergeCorteOperacao(backup)
     mergeApontamentoOperacao(backupApontamento)
+    await ensureApontamentosNuvemNoSqlite({ force: true })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return { ok: false, error: `Baixou o Storage, mas falhou gravar o SQLite. ${message}` }
