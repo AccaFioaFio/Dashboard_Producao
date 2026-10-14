@@ -29,7 +29,7 @@ import { pedidoDigits } from '@/lib/pedido'
 import { clipObs } from '@/lib/obs'
 import { resolverProdutoParaIncluir } from '@/lib/produto-manual'
 
-/** Mesma lista/instância do corte (`WHATSAPP_CORTE_TO`). */
+/** Mesma lista/instância do corte (`WHATSAPP_CORTE_TO`). A lista e o alerta continuam se o envio falhar. */
 const ENVIO_WHATSAPP_APONTAMENTO_PAUSADO = false
 
 export type SalvarApontamentoInput = {
@@ -479,19 +479,6 @@ export async function salvarListaApontamento(
     })),
   }
 
-  if (!ENVIO_WHATSAPP_APONTAMENTO_PAUSADO) {
-    try {
-      await enviarAvisoApontamentoWhatsApp({ ...avisoPayload, etapa })
-    } catch (error) {
-      const detalhe = error instanceof Error ? error.message : String(error)
-      console.error('aviso de apontamento WhatsApp não enviado', etapa, pedidoNorm, detalhe)
-      return {
-        ok: false,
-        error: `O WhatsApp não saiu (${detalhe.slice(0, 140)}). Os itens continuam pendentes.`,
-      }
-    }
-  }
-
   const db = getSqlite()
   const enviadoEm = new Date().toISOString()
   const alertaId = `${etapa}-${pedidoNorm}-${Date.now()}`
@@ -631,6 +618,17 @@ export async function salvarListaApontamento(
   })
   if (!alertaNuvem.ok) falhasNuvem.push(alertaNuvem.error)
 
+  const avisosEnvio: string[] = []
+  if (!ENVIO_WHATSAPP_APONTAMENTO_PAUSADO) {
+    try {
+      await enviarAvisoApontamentoWhatsApp({ ...avisoPayload, etapa })
+    } catch (error) {
+      const detalhe = error instanceof Error ? error.message : String(error)
+      console.error('aviso de apontamento WhatsApp não enviado', etapa, pedidoNorm, detalhe)
+      avisosEnvio.push(`O WhatsApp não saiu (${detalhe.slice(0, 140)}).`)
+    }
+  }
+
   revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
   revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
   revalidatePath('/')
@@ -640,6 +638,13 @@ export async function salvarListaApontamento(
     salvos === 1
       ? `1 item entrou na ${listaNome}. O alerta ficou na Visão Geral.`
       : `${salvos} itens entraram na ${listaNome}. O alerta ficou na Visão Geral.`
+  const extras: string[] = []
+  if (falhasNuvem.length) {
+    extras.push(
+      `A nuvem não gravou a lista (${falhasNuvem[0]}). Ao reabrir, pode parecer que o item não entrou.`,
+    )
+  }
+  extras.push(...avisosEnvio)
   return {
     ok: true,
     salvos,
@@ -647,9 +652,7 @@ export async function salvarListaApontamento(
       codProduto: item.codProduto,
       dataProducao: item.dataProducao,
     })),
-    aviso: falhasNuvem.length
-      ? `${base} A nuvem não gravou a lista (${falhasNuvem[0]}). Ao reabrir, pode parecer que o item não entrou.`
-      : base,
+    aviso: extras.length ? `${base} ${extras.join(' ')}` : base,
   }
 }
 

@@ -513,7 +513,7 @@ export function CorteProducaoLista({
         <p className="text-xs text-muted-foreground">
           {gravando
             ? 'Aguardando a gravação da lista.'
-            : 'O que já entrou na lista fica neste pedido. O próximo clique leva só os itens novos com data final (e só esses disparam WhatsApp/alerta). O e-mail está pausado; o WhatsApp está ativo.'}
+            : 'O que já entrou na lista fica neste pedido. O próximo clique leva só os itens novos com data final (e só esses disparam WhatsApp/alerta). A lista grava mesmo se o WhatsApp falhar. O e-mail está pausado; o WhatsApp está ativo.'}
         </p>
       </div>
       {permitirInclusao ? (

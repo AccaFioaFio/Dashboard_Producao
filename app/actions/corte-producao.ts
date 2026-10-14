@@ -54,7 +54,7 @@ export type SalvarListaCortadorResult =
 /** Pausa o SMTP. A lista e o alerta continuam. Volte para `false` para reativar o e-mail. */
 const ENVIO_EMAIL_CORTE_PAUSADO = true
 
-/** Pausa o WhatsApp (Evolution API). Volte para `false` após configurar as env vars. */
+/** Pausa o WhatsApp (Evolution API). A lista e o alerta continuam. Volte para `false` para reativar. */
 const ENVIO_WHATSAPP_CORTE_PAUSADO = false
 
 const DATA = /^\d{4}-\d{2}-\d{2}$/
@@ -416,32 +416,6 @@ export async function salvarListaCortador(
     itens: pendentes,
   }
 
-  if (!ENVIO_EMAIL_CORTE_PAUSADO) {
-    try {
-      await enviarAvisoCorteFinalizado(avisoCorte)
-    } catch (error) {
-      const detalhe = error instanceof Error ? error.message : String(error)
-      console.error('aviso de corte finalizado não enviado', pedidoNorm, detalhe)
-      return {
-        ok: false,
-        error: `O e-mail não saiu (${detalhe.slice(0, 140)}). Os itens continuam pendentes.`,
-      }
-    }
-  }
-
-  if (!ENVIO_WHATSAPP_CORTE_PAUSADO) {
-    try {
-      await enviarAvisoCorteWhatsApp(avisoCorte)
-    } catch (error) {
-      const detalhe = error instanceof Error ? error.message : String(error)
-      console.error('aviso de corte WhatsApp não enviado', pedidoNorm, detalhe)
-      return {
-        ok: false,
-        error: `O WhatsApp não saiu (${detalhe.slice(0, 140)}). Os itens continuam pendentes.`,
-      }
-    }
-  }
-
   const db = getSqlite()
   const enviadoEm = new Date().toISOString()
   const alertaId = `${pedidoNorm}-${Date.now()}`
@@ -530,6 +504,26 @@ export async function salvarListaCortador(
   })
   if (!alertaNuvem.ok) falhasNuvem.push(alertaNuvem.error)
 
+  const avisosEnvio: string[] = []
+  if (!ENVIO_EMAIL_CORTE_PAUSADO) {
+    try {
+      await enviarAvisoCorteFinalizado(avisoCorte)
+    } catch (error) {
+      const detalhe = error instanceof Error ? error.message : String(error)
+      console.error('aviso de corte finalizado não enviado', pedidoNorm, detalhe)
+      avisosEnvio.push(`O e-mail não saiu (${detalhe.slice(0, 140)}).`)
+    }
+  }
+  if (!ENVIO_WHATSAPP_CORTE_PAUSADO) {
+    try {
+      await enviarAvisoCorteWhatsApp(avisoCorte)
+    } catch (error) {
+      const detalhe = error instanceof Error ? error.message : String(error)
+      console.error('aviso de corte WhatsApp não enviado', pedidoNorm, detalhe)
+      avisosEnvio.push(`O WhatsApp não saiu (${detalhe.slice(0, 140)}).`)
+    }
+  }
+
   revalidatePath('/corte/producao')
   revalidatePath('/')
 
@@ -538,6 +532,13 @@ export async function salvarListaCortador(
     salvos === 1
       ? '1 item entrou na lista do cortador. O alerta ficou na Visão Geral.'
       : `${salvos} itens entraram na lista do cortador. O alerta ficou na Visão Geral.`
+  const extras: string[] = []
+  if (falhasNuvem.length) {
+    extras.push(
+      `A nuvem não gravou a lista (${falhasNuvem[0]}). Ao reabrir, pode parecer que o item não entrou.`,
+    )
+  }
+  extras.push(...avisosEnvio)
   return {
     ok: true,
     salvos,
@@ -545,9 +546,7 @@ export async function salvarListaCortador(
       codProduto: item.codProduto,
       dataFinal: item.dataFinal,
     })),
-    aviso: falhasNuvem.length
-      ? `${base} A nuvem não gravou a lista (${falhasNuvem[0]}). Ao reabrir, pode parecer que o item não entrou.`
-      : base,
+    aviso: extras.length ? `${base} ${extras.join(' ')}` : base,
   }
 }
 
