@@ -9,6 +9,10 @@ import {
 import { ensureApontamentosNuvemNoSqlite } from '@/lib/apontamento-sync'
 import { captureCorteOperacao, mergeCorteOperacao } from '@/lib/corte-operacao-local'
 import {
+  captureProgramacaoOperacao,
+  mergeProgramacaoOperacao,
+} from '@/lib/programacao-operacao-local'
+import {
   createAdminClient,
   createAnonClient,
   isSupabaseConfigured,
@@ -99,11 +103,13 @@ async function restoreDatabase(force: boolean) {
 
     const backup = captureCorteOperacao()
     const backupApontamento = captureApontamentoOperacao()
+    const backupProgramacao = captureProgramacaoOperacao()
     resetSqlite()
     writeFileSync(DB_PATH, downloaded.bytes)
     getSqlite()
     mergeCorteOperacao(backup)
     mergeApontamentoOperacao(backupApontamento)
+    mergeProgramacaoOperacao(backupProgramacao)
     localEtag = etag || String(downloaded.bytes.length)
   } catch {
     getSqlite()

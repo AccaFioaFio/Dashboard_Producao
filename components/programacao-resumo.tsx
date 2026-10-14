@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Minus, Plus, Trash2 } from 'lucide-react'
+import {
+  excluirItemProgramacao,
+  excluirPedidoProgramacaoAction,
+} from '@/app/actions/programacao'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatDate, formatInt } from '@/lib/format'
@@ -9,8 +13,6 @@ import {
   cadaDiaNoPeriodo,
   parseQuantidade,
   periodosSobrepoem,
-  removerLinhasDoBanco,
-  removerPedidoDoBanco,
   type LinhaProgramacao,
   type ProgramacaoBanco,
 } from '@/lib/programacao'
@@ -189,7 +191,7 @@ export function ProgramacaoResumo({
   onAlterou,
 }: {
   banco: ProgramacaoBanco
-  onAlterou?: () => void
+  onAlterou?: (banco?: ProgramacaoBanco) => void
 }) {
   const [modo, setModo] = useState<ModoPeriodo>('dia')
   const [referencia, setReferencia] = useState('')
@@ -298,27 +300,38 @@ export function ProgramacaoResumo({
     })
   }
 
-  function excluirPedido(pedido: PedidoResumo) {
+  async function excluirPedido(pedido: PedidoResumo) {
     const ok = window.confirm(
       `Excluir o pedido ${pedido.pedido} da programação? Todos os itens desse pedido serão removidos.`,
     )
     if (!ok) return
-    removerPedidoDoBanco(pedido.pedido, pedido.pedidoNorm)
+    const result = await excluirPedidoProgramacaoAction(
+      pedido.pedido,
+      pedido.pedidoNorm,
+    )
+    if (!result.ok) {
+      window.alert(result.error)
+      return
+    }
     setAbertos((prev) => {
       const next = new Set(prev)
       next.delete(pedido.key)
       return next
     })
-    onAlterou?.()
+    onAlterou?.(result.banco)
   }
 
-  function excluirItem(linha: LinhaProgramacao) {
+  async function excluirItem(linha: LinhaProgramacao) {
     const ok = window.confirm(
       `Excluir o item "${linha.nome}" do pedido ${linha.pedido}?`,
     )
     if (!ok) return
-    removerLinhasDoBanco([linha.key])
-    onAlterou?.()
+    const result = await excluirItemProgramacao(linha.key)
+    if (!result.ok) {
+      window.alert(result.error)
+      return
+    }
+    onAlterou?.(result.banco)
   }
 
   const periodoLabel =

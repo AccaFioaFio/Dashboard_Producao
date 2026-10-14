@@ -1,22 +1,18 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
 import { ProgramacaoResumo } from '@/components/programacao-resumo'
-import {
-  lerBancoProgramacao,
-  type ProgramacaoBanco,
-} from '@/lib/programacao'
+import { useProgramacaoBanco } from '@/components/use-programacao-banco'
 
 export function ProgramacaoConsultaTela() {
-  const [banco, setBanco] = useState<ProgramacaoBanco>({ version: 2, linhas: [] })
+  const { banco, setBanco, recarregar } = useProgramacaoBanco()
 
-  const recarregar = useCallback(() => {
-    setBanco(lerBancoProgramacao())
-  }, [])
-
-  useEffect(() => {
-    recarregar()
-  }, [recarregar])
-
-  return <ProgramacaoResumo banco={banco} onAlterou={recarregar} />
+  return (
+    <ProgramacaoResumo
+      banco={banco}
+      onAlterou={(next) => {
+        if (next) setBanco(next)
+        else void recarregar()
+      }}
+    />
+  )
 }

@@ -182,7 +182,7 @@ export function normalizarItemSalvo(
   }
 }
 
-function normalizarLinha(raw: unknown): LinhaProgramacao | null {
+export function normalizarLinha(raw: unknown): LinhaProgramacao | null {
   if (!raw || typeof raw !== 'object') return null
   const row = raw as Record<string, unknown>
   if (typeof row.pedido !== 'string' || typeof row.nome !== 'string') return null

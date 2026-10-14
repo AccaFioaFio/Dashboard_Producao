@@ -498,6 +498,29 @@ export const qualidadeEvento = sqliteTable('qualidade_evento', {
   valor: real('valor'),
 })
 
+export const programacaoLinha = sqliteTable(
+  'programacao_linha',
+  {
+    key: text('key').primaryKey(),
+    pedido: text('pedido').notNull(),
+    pedidoNorm: text('pedido_norm'),
+    cliente: text('cliente'),
+    itemId: text('item_id').notNull(),
+    codProduto: text('cod_produto').notNull().default(''),
+    nome: text('nome').notNull(),
+    qtdPedido: real('qtd_pedido'),
+    quantidadeProducao: text('quantidade_producao').notNull(),
+    dataInicio: text('data_inicio').notNull(),
+    dataFim: text('data_fim').notNull(),
+    savedAt: text('saved_at').notNull(),
+  },
+  (table) => [
+    index('idx_programacao_linha_pedido_norm').on(table.pedidoNorm),
+    index('idx_programacao_linha_pedido').on(table.pedido),
+    index('idx_programacao_linha_periodo').on(table.dataInicio, table.dataFim),
+  ],
+)
+
 export const carga = sqliteTable('carga', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   lidaEm: text('lida_em').notNull(),

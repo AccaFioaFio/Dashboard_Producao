@@ -12,7 +12,11 @@ import {
   Search,
   Trash2,
 } from 'lucide-react'
-import { buscarProgramacaoPedido } from '@/app/actions/programacao'
+import {
+  buscarProgramacaoPedido,
+  excluirPedidoProgramacaoAction,
+  salvarPedidoProgramacao,
+} from '@/app/actions/programacao'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatInt } from '@/lib/format'
@@ -21,11 +25,9 @@ import {
   itemComQuantidade,
   itemProntoParaSalvar,
   itensSalvosDoPedido,
-  lerBancoProgramacao,
-  mesclarPedidoNoBanco,
   periodoValido,
-  removerPedidoDoBanco,
   type ItemProgramacao,
+  type ProgramacaoBanco,
 } from '@/lib/programacao'
 import { cn } from '@/lib/utils'
 
@@ -65,7 +67,13 @@ function itemEhManual(item: ItemProgramacao) {
   return item.id.startsWith('manual-') || !item.codProduto
 }
 
-export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
+export function ProgramacaoMontar({
+  banco,
+  onSalvou,
+}: {
+  banco: ProgramacaoBanco
+  onSalvou?: (banco?: ProgramacaoBanco) => void
+}) {
   const [pedido, setPedido] = useState('')
   const [pedidoNorm, setPedidoNorm] = useState<string | null>(null)
   const [cliente, setCliente] = useState<string | null>(null)
@@ -93,7 +101,6 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
   const chaveAtual = (pedidoNorm ?? pedido).trim()
 
   function entrarModoManual(pedidoInformado: string, aviso: string) {
-    const banco = lerBancoProgramacao()
     const salvos = itensSalvosDoPedido(banco, pedidoInformado, null)
     const clienteSalvo =
       banco.linhas.find(
@@ -155,11 +162,7 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
 
       const pedidoAtual =
         result.pedidoNorm ?? result.pedidoInformado ?? informado
-      const salvos = itensSalvosDoPedido(
-        lerBancoProgramacao(),
-        pedidoAtual,
-        result.pedidoNorm,
-      )
+      const salvos = itensSalvosDoPedido(banco, pedidoAtual, result.pedidoNorm)
       const porId = new Map(salvos.map((item) => [item.id, item]))
       const daCarga = result.itens.map((item) => {
         const salvo = porId.get(item.id)
@@ -277,25 +280,34 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
       `Excluir o pedido ${pedido.trim()} da programação salva? Todos os itens desse pedido serão removidos.`,
     )
     if (!ok) return
-    const { removidos } = removerPedidoDoBanco(pedido.trim(), pedidoNorm)
-    const chave = (pedidoNorm ?? pedido).trim()
-    setPedidosSessao((prev) =>
-      prev.filter((item) => (item.pedidoNorm ?? item.pedido).trim() !== chave),
-    )
-    setItens([])
-    setBuscou(false)
-    setManual(false)
-    setPedido('')
-    setPedidoNorm(null)
-    setCliente(null)
-    setErro(null)
-    setMensagem(
-      removidos > 0
-        ? 'Pedido excluído da programação. Informe o próximo pedido.'
-        : 'Esse pedido não tinha programação salva.',
-    )
-    onSalvou?.()
-    window.setTimeout(() => pedidoInputRef.current?.focus(), 0)
+    startTransition(async () => {
+      const result = await excluirPedidoProgramacaoAction(
+        pedido.trim(),
+        pedidoNorm,
+      )
+      if (!result.ok) {
+        setErro(result.error)
+        return
+      }
+      const chave = (pedidoNorm ?? pedido).trim()
+      setPedidosSessao((prev) =>
+        prev.filter((item) => (item.pedidoNorm ?? item.pedido).trim() !== chave),
+      )
+      setItens([])
+      setBuscou(false)
+      setManual(false)
+      setPedido('')
+      setPedidoNorm(null)
+      setCliente(null)
+      setErro(null)
+      setMensagem(
+        (result.removidos ?? 0) > 0
+          ? 'Pedido excluído da programação. Informe o próximo pedido.'
+          : 'Esse pedido não tinha programação salva.',
+      )
+      onSalvou?.(result.banco)
+      window.setTimeout(() => pedidoInputRef.current?.focus(), 0)
+    })
   }
 
   function copiarPeriodoDeCima(index: number) {
@@ -347,24 +359,30 @@ export function ProgramacaoMontar({ onSalvou }: { onSalvou?: () => void }) {
     const removidos = itens.length - filtrados.length
     const pedidoSalvo = pedido.trim()
     const clienteSalvo = cliente?.trim() ? cliente.trim() : null
-    mesclarPedidoNoBanco({
-      pedido: pedidoSalvo,
-      pedidoNorm,
-      cliente: clienteSalvo,
-      itens: filtrados,
+    startTransition(async () => {
+      const result = await salvarPedidoProgramacao({
+        pedido: pedidoSalvo,
+        pedidoNorm,
+        cliente: clienteSalvo,
+        itens: filtrados,
+      })
+      if (!result.ok) {
+        setErro(result.error)
+        return
+      }
+      registrarPedidoSessao({
+        pedido: pedidoSalvo,
+        pedidoNorm: pedidoNorm ?? null,
+        cliente: clienteSalvo,
+      })
+      setErro(null)
+      onSalvou?.(result.banco)
+      limparParaProximoPedido(
+        removidos > 0
+          ? `Programação salva. ${removidos} item${removidos === 1 ? '' : 's'} sem qtd produção saiu da lista. Informe o próximo pedido.`
+          : undefined,
+      )
     })
-    registrarPedidoSessao({
-      pedido: pedidoSalvo,
-      pedidoNorm: pedidoNorm ?? null,
-      cliente: clienteSalvo,
-    })
-    setErro(null)
-    onSalvou?.()
-    limparParaProximoPedido(
-      removidos > 0
-        ? `Programação salva. ${removidos} item${removidos === 1 ? '' : 's'} sem qtd produção saiu da lista. Informe o próximo pedido.`
-        : undefined,
-    )
   }
 
   function imprimir() {

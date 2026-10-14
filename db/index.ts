@@ -48,6 +48,7 @@ function applyMigrations(connection: Database.Database) {
     '0020_apontamento_alerta.sql',
     '0021_apontamento_observacao.sql',
     '0022_costura_oficina.sql',
+    '0023_programacao.sql',
   ]
   for (const file of files) {
     if (applied.has(file)) continue
