@@ -847,29 +847,45 @@
 }
 
 /* Layouts de impressão da programação: só na tela de impressão. */
+#programacao-print-root,
 .programacao-print-lista {
   display: none !important;
 }
 
 @media print {
+  @page {
+    margin: 12mm;
+  }
+
   body {
     background: white !important;
+    background-image: none !important;
   }
 
   [data-slot='sidebar'],
   [data-slot='sidebar-gap'],
   [data-slot='sidebar-container'],
   [data-slot='sidebar-rail'],
-  header,
+  /* Esconde o header do app; não o cabeçalho da lista de impressão. */
+  header:not(.programacao-print-header),
   .print\:hidden {
     display: none !important;
   }
 
+  /* Evita cortar o conteúdo e remove min-h-svh que gera 1ª folha em branco. */
+  html,
+  body,
+  [data-slot='sidebar-wrapper'],
   [data-slot='sidebar-inset'],
-  .page-shell {
+  .page-shell,
+  [data-slot='sidebar-inset'] > div {
     overflow: visible !important;
     height: auto !important;
     max-height: none !important;
+    min-height: 0 !important;
+  }
+
+  .page-shell {
     padding: 0 !important;
   }
 
@@ -878,9 +894,154 @@
     backdrop-filter: none !important;
   }
 
-  html[data-print='lista-recolhido'] [data-programacao-print='lista-recolhido'],
-  html[data-print='lista-expandido'] [data-programacao-print='lista-expandido'] {
+  /*
+   * Lista: portal no body vem DEPOIS do shell (min-h-svh).
+   * Esconde tudo exceto #programacao-print-root para não sobrar página vazia.
+   */
+  html[data-print^='lista-'] body > *:not(#programacao-print-root) {
+    display: none !important;
+  }
+
+  html[data-print^='lista-'] #programacao-print-root {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Ganha do .programacao-print-lista { display:none !important } da tela. */
+  html[data-print='lista-recolhido']
+    [data-programacao-print='lista-recolhido'].programacao-print-lista,
+  html[data-print='lista-expandido']
+    [data-programacao-print='lista-expandido'].programacao-print-lista {
     display: flex !important;
+    flex-direction: column;
+    gap: 0.55em;
+    visibility: visible !important;
+    /* Calibri (Windows/Office); em herda a escala 80% do container. */
+    font-family:
+      Calibri,
+      Calibre,
+      'Segoe UI',
+      Arial,
+      sans-serif;
+    font-size: 80%;
+    line-height: 1.25;
+    color: #111 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .programacao-print-header {
+    margin-bottom: 0.45em;
+  }
+
+  .programacao-print-kicker {
+    margin: 0;
+    font-size: 0.68em;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #666 !important;
+  }
+
+  .programacao-print-titulo {
+    margin: 0.2em 0 0;
+    font-size: 1.15em;
+    font-weight: 700;
+  }
+
+  .programacao-print-datas {
+    margin: 0.25em 0 0;
+    font-size: 0.9em;
+    font-weight: 600;
+  }
+
+  .programacao-print-resumo {
+    margin: 0.15em 0 0;
+    font-size: 0.75em;
+    color: #666 !important;
+  }
+
+  .programacao-print-vazio {
+    margin: 0;
+    font-size: 0.85em;
+    color: #666 !important;
+  }
+
+  .programacao-print-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .programacao-print-cards--expandido {
+    gap: 0.55em;
+  }
+
+  .programacao-print-card {
+    border: 1px solid #c8c8c8;
+    border-radius: 0.35em;
+    padding: 0.4em 0.55em;
+    break-inside: avoid;
+  }
+
+  .programacao-print-pedido {
+    margin: 0;
+    font-size: 0.95em;
+    font-weight: 700;
+  }
+
+  .programacao-print-cliente {
+    margin: 0.1em 0 0;
+    font-size: 0.82em;
+    font-weight: 500;
+  }
+
+  .programacao-print-meta {
+    margin: 0.15em 0 0;
+    font-size: 0.72em;
+    color: #666 !important;
+  }
+
+  .programacao-print-periodo-label {
+    margin: 0;
+    font-size: 0.58em;
+    font-weight: 650;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #666 !important;
+  }
+
+  .programacao-print-periodo-valor {
+    margin: 0.05em 0 0;
+    font-size: 1.05em;
+    font-weight: 700;
+  }
+
+  .programacao-print-itens {
+    font-size: 0.72em;
+    border-collapse: collapse;
+  }
+
+  .programacao-print-itens th {
+    padding: 0.2em 0.3em 0.2em 0;
+    font-size: 0.62em;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #666 !important;
+    border-bottom: 1px solid #ccc;
+  }
+
+  .programacao-print-itens td {
+    padding: 0.22em 0.3em 0.22em 0;
+    border-bottom: 1px solid #e5e5e5;
+    vertical-align: top;
   }
 
   html[data-print='lista-recolhido'] [data-programacao-print='pedido'],

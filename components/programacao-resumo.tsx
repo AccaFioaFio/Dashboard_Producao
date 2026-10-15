@@ -357,6 +357,8 @@ export function ProgramacaoResumo({
   podeEditar?: boolean
   onImpressaoChange?: (estado: {
     periodoLabel: string | null
+    dataInicio: string | null
+    dataFim: string | null
     pedidos: PedidoResumo[]
   }) => void
 }) {
@@ -441,6 +443,18 @@ export function ProgramacaoResumo({
     [linhasFiltradas],
   )
 
+  const periodoFiltro = (() => {
+    if (!referencia) return null
+    if (modo === 'dia') {
+      return { dataInicio: referencia, dataFim: referencia }
+    }
+    if (modo === 'semana') {
+      const inicio = inicioSemana(referencia)
+      return { dataInicio: inicio, dataFim: fimSemana(inicio) }
+    }
+    return { dataInicio: `${referencia}-01`, dataFim: fimMes(referencia) }
+  })()
+
   const periodoLabel =
     !referencia
       ? null
@@ -453,9 +467,18 @@ export function ProgramacaoResumo({
   useEffect(() => {
     onImpressaoChange?.({
       periodoLabel,
+      dataInicio: periodoFiltro?.dataInicio ?? null,
+      dataFim: periodoFiltro?.dataFim ?? null,
       pedidos: aba === 'atual' ? pedidos : [],
     })
-  }, [aba, onImpressaoChange, pedidos, periodoLabel])
+  }, [
+    aba,
+    onImpressaoChange,
+    pedidos,
+    periodoFiltro?.dataFim,
+    periodoFiltro?.dataInicio,
+    periodoLabel,
+  ])
 
   function trocarModo(next: ModoPeriodo) {
     const preferida = preferenciaNoModo(next, referencia || hojeIso())
@@ -974,7 +997,9 @@ export function ProgramacaoResumo({
 
     <ProgramacaoImpressaoLista
       periodoLabel={periodoLabel}
-      pedidos={pedidos}
+      dataInicio={periodoFiltro?.dataInicio ?? null}
+      dataFim={periodoFiltro?.dataFim ?? null}
+      pedidos={aba === 'atual' ? pedidos : []}
     />
     </>
   )

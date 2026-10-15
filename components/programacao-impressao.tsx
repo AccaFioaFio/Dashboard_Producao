@@ -1,3 +1,7 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { formatDate, formatInt } from '@/lib/format'
 import { parseQuantidade, type LinhaProgramacao } from '@/lib/programacao'
 
@@ -51,24 +55,22 @@ function CabecalhoPedido({ pedido }: { pedido: PedidoImpressao }) {
   const qtdPecas = totalPecas(pedido.linhas)
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+    <div className="programacao-print-cabecalho flex items-start justify-between gap-x-3 gap-y-1">
       <div className="min-w-0 flex-1">
-        <p className="font-mono text-base font-bold tabular-nums">
+        <p className="programacao-print-pedido tabular-nums">
           Pedido {pedido.pedido}
         </p>
-        <p className="mt-0.5 text-sm">
+        <p className="programacao-print-cliente">
           {pedido.cliente?.trim() || 'Sem nome fantasia'}
         </p>
-        <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+        <p className="programacao-print-meta tabular-nums">
           {qtdItens} item{qtdItens === 1 ? '' : 's'} · {formatInt(qtdPecas)} peça
           {qtdPecas === 1 ? '' : 's'}
         </p>
       </div>
-      <div className="shrink-0 text-right">
-        <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-          Período
-        </p>
-        <p className="mt-0.5 font-mono text-lg font-bold tabular-nums">
+      <div className="programacao-print-periodo shrink-0 text-right">
+        <p className="programacao-print-periodo-label">Período</p>
+        <p className="programacao-print-periodo-valor tabular-nums">
           {periodo
             ? formatPeriodo(periodo.dataInicio, periodo.dataFim)
             : '—'}
@@ -80,26 +82,24 @@ function CabecalhoPedido({ pedido }: { pedido: PedidoImpressao }) {
 
 function ItensPedido({ linhas }: { linhas: LinhaProgramacao[] }) {
   return (
-    <table className="mt-2 w-full text-left text-sm">
+    <table className="programacao-print-itens mt-1.5 w-full text-left">
       <thead>
-        <tr className="border-b border-foreground/20 text-[10px] text-muted-foreground uppercase">
-          <th className="py-1 pr-2 font-semibold tracking-wide">Produto</th>
-          <th className="w-20 py-1 px-2 font-semibold tracking-wide">Qtd ped.</th>
-          <th className="w-20 py-1 px-2 font-semibold tracking-wide">Qtd prod.</th>
-          <th className="w-36 py-1 pl-2 font-semibold tracking-wide">Período</th>
+        <tr>
+          <th>Produto</th>
+          <th className="w-16">Qtd ped.</th>
+          <th className="w-16">Qtd prod.</th>
+          <th className="w-28">Período</th>
         </tr>
       </thead>
       <tbody>
         {linhas.map((linha) => (
-          <tr key={linha.key} className="border-b border-foreground/10">
-            <td className="py-1.5 pr-2 break-words">{linha.nome}</td>
-            <td className="py-1.5 px-2 font-mono tabular-nums text-muted-foreground">
-              {formatQtd(linha.qtdPedido)}
-            </td>
-            <td className="py-1.5 px-2 font-mono tabular-nums">
+          <tr key={linha.key}>
+            <td className="break-words">{linha.nome}</td>
+            <td className="tabular-nums">{formatQtd(linha.qtdPedido)}</td>
+            <td className="tabular-nums">
               {formatQtdProducao(linha.quantidadeProducao)}
             </td>
-            <td className="py-1.5 pl-2 font-mono tabular-nums">
+            <td className="tabular-nums">
               {formatPeriodo(linha.dataInicio, linha.dataFim)}
             </td>
           </tr>
@@ -109,41 +109,86 @@ function ItensPedido({ linhas }: { linhas: LinhaProgramacao[] }) {
   )
 }
 
+function CabecalhoLista({
+  dataInicio,
+  dataFim,
+  resumo,
+}: {
+  dataInicio: string | null
+  dataFim: string | null
+  resumo: string
+}) {
+  const temDatas = Boolean(dataInicio && dataFim)
+
+  // div (não <header>): @media print esconde todos os `header` do app.
+  return (
+    <div className="programacao-print-header">
+      <p className="programacao-print-kicker">Produção · 2026</p>
+      <p className="programacao-print-titulo">Programação de Produção</p>
+      {temDatas ? (
+        <p className="programacao-print-datas tabular-nums">
+          <span className="programacao-print-data-linha">
+            Data inicial: {formatDate(dataInicio!)}
+          </span>
+          <span className="programacao-print-data-sep" aria-hidden>
+            {' '}
+            ·{' '}
+          </span>
+          <span className="programacao-print-data-linha">
+            Data final: {formatDate(dataFim!)}
+          </span>
+        </p>
+      ) : null}
+      <p className="programacao-print-resumo">{resumo}</p>
+    </div>
+  )
+}
+
 export function ProgramacaoImpressaoLista({
   periodoLabel,
+  dataInicio = null,
+  dataFim = null,
   pedidos,
 }: {
   periodoLabel: string | null
+  dataInicio?: string | null
+  dataFim?: string | null
   pedidos: PedidoImpressao[]
 }) {
-  const titulo = periodoLabel ?? 'Programação'
-  const resumo = `${pedidos.length} pedido${pedidos.length === 1 ? '' : 's'}`
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
-  return (
-    <>
+  const totalPecasLista = pedidos.reduce(
+    (acc, pedido) => acc + totalPecas(pedido.linhas),
+    0,
+  )
+  const resumo = [
+    periodoLabel,
+    `${pedidos.length} pedido${pedidos.length === 1 ? '' : 's'}`,
+    `${formatInt(totalPecasLista)} peça${totalPecasLista === 1 ? '' : 's'}`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  const conteudo = (
+    <div id="programacao-print-root" aria-hidden>
       <section
         data-programacao-print="lista-recolhido"
-        className="programacao-print-lista flex-col gap-4 text-foreground"
+        className="programacao-print-lista"
       >
-        <header>
-          <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-            Programação de Produção · Pedidos
-          </p>
-          <p className="mt-1 text-sm font-medium">
-            {titulo} · {resumo}
-          </p>
-        </header>
+        <CabecalhoLista
+          dataInicio={dataInicio}
+          dataFim={dataFim}
+          resumo={resumo || 'Programação'}
+        />
         {pedidos.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="programacao-print-vazio">
             Nada programado neste período.
           </p>
         ) : (
-          <ul className="flex flex-col gap-3">
+          <ul className="programacao-print-cards">
             {pedidos.map((pedido) => (
-              <li
-                key={pedido.key}
-                className="rounded-md border border-foreground/25 px-3 py-2.5"
-              >
+              <li key={pedido.key} className="programacao-print-card">
                 <CabecalhoPedido pedido={pedido} />
               </li>
             ))}
@@ -153,27 +198,21 @@ export function ProgramacaoImpressaoLista({
 
       <section
         data-programacao-print="lista-expandido"
-        className="programacao-print-lista flex-col gap-4 text-foreground"
+        className="programacao-print-lista"
       >
-        <header>
-          <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-            Programação de Produção · Pedidos e itens
-          </p>
-          <p className="mt-1 text-sm font-medium">
-            {titulo} · {resumo}
-          </p>
-        </header>
+        <CabecalhoLista
+          dataInicio={dataInicio}
+          dataFim={dataFim}
+          resumo={resumo || 'Programação'}
+        />
         {pedidos.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="programacao-print-vazio">
             Nada programado neste período.
           </p>
         ) : (
-          <ul className="flex flex-col gap-4">
+          <ul className="programacao-print-cards programacao-print-cards--expandido">
             {pedidos.map((pedido) => (
-              <li
-                key={pedido.key}
-                className="rounded-md border border-foreground/25 px-3 py-2.5"
-              >
+              <li key={pedido.key} className="programacao-print-card">
                 <CabecalhoPedido pedido={pedido} />
                 <ItensPedido linhas={pedido.linhas} />
               </li>
@@ -181,8 +220,12 @@ export function ProgramacaoImpressaoLista({
           </ul>
         )}
       </section>
-    </>
+    </div>
   )
+
+  // Fora do layout do painel (overflow/hidden) para o preview de impressão.
+  if (!mounted) return null
+  return createPortal(conteudo, document.body)
 }
 
 export function dispararImpressaoProgramacao(
@@ -191,10 +234,22 @@ export function dispararImpressaoProgramacao(
   if (typeof document === 'undefined') return
   const root = document.documentElement
   root.dataset.print = modo
+
+  let limpou = false
   const limpar = () => {
+    if (limpou) return
+    limpou = true
     delete root.dataset.print
     window.removeEventListener('afterprint', limpar)
   }
   window.addEventListener('afterprint', limpar)
-  window.setTimeout(() => window.print(), 50)
+
+  // Espera o atributo/CSS aplicarem antes de abrir o diálogo.
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      window.print()
+      // Fallback se afterprint não disparar (alguns browsers).
+      window.setTimeout(limpar, 60_000)
+    })
+  })
 }

@@ -127,13 +127,20 @@ export function ProgramacaoMontar({
   banco,
   onSalvou,
   podeEditar = false,
-  impressaoLista = { periodoLabel: null, pedidos: [] },
+  impressaoLista = {
+    periodoLabel: null,
+    dataInicio: null,
+    dataFim: null,
+    pedidos: [],
+  },
 }: {
   banco: ProgramacaoBanco
   onSalvou?: (banco?: ProgramacaoBanco) => void
   podeEditar?: boolean
   impressaoLista?: {
     periodoLabel: string | null
+    dataInicio: string | null
+    dataFim: string | null
     pedidos: PedidoImpressao[]
   }
 }) {

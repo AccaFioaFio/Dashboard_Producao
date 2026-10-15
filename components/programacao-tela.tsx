@@ -12,6 +12,8 @@ type AbaMobile = 'consultar' | 'montar'
 
 export type ProgramacaoImpressaoEstado = {
   periodoLabel: string | null
+  dataInicio: string | null
+  dataFim: string | null
   pedidos: PedidoImpressao[]
 }
 
@@ -24,6 +26,8 @@ export function ProgramacaoTela({
   const [abaMobile, setAbaMobile] = useState<AbaMobile>('consultar')
   const [impressaoLista, setImpressaoLista] = useState<ProgramacaoImpressaoEstado>({
     periodoLabel: null,
+    dataInicio: null,
+    dataFim: null,
     pedidos: [],
   })
 

@@ -18,7 +18,7 @@ export function PageShell({
       className="page-shell flex min-w-0 flex-1 flex-col"
       style={{ gap: 'var(--page-gap)', padding: 'var(--page-pad)' }}
     >
-      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+      <div className="page-heading flex flex-col gap-2 print:hidden md:flex-row md:items-end md:justify-between">
         <div className="flex min-w-0 flex-col gap-0.5">
           <p className="text-[10px] font-semibold tracking-[0.2em] text-primary uppercase">
             Produção · 2026
