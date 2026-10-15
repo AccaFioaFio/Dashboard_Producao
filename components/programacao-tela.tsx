@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import type { PedidoImpressao } from '@/components/programacao-impressao'
 import { ProgramacaoMontar } from '@/components/programacao-montar'
 import { ProgramacaoResumo } from '@/components/programacao-resumo'
 import { useProgramacaoBanco } from '@/components/use-programacao-banco'
@@ -9,6 +10,11 @@ import { cn } from '@/lib/utils'
 
 type AbaMobile = 'consultar' | 'montar'
 
+export type ProgramacaoImpressaoEstado = {
+  periodoLabel: string | null
+  pedidos: PedidoImpressao[]
+}
+
 export function ProgramacaoTela({
   podeEditar = false,
 }: {
@@ -16,6 +22,10 @@ export function ProgramacaoTela({
 }) {
   const { banco, setBanco, recarregar } = useProgramacaoBanco()
   const [abaMobile, setAbaMobile] = useState<AbaMobile>('consultar')
+  const [impressaoLista, setImpressaoLista] = useState<ProgramacaoImpressaoEstado>({
+    periodoLabel: null,
+    pedidos: [],
+  })
 
   function aplicarBanco(next?: typeof banco) {
     if (next) setBanco(next)
@@ -61,6 +71,7 @@ export function ProgramacaoTela({
             banco={banco}
             onSalvou={aplicarBanco}
             podeEditar={podeEditar}
+            impressaoLista={impressaoLista}
           />
         </div>
       ) : null}
@@ -75,6 +86,7 @@ export function ProgramacaoTela({
           banco={banco}
           onAlterou={aplicarBanco}
           podeEditar={podeEditar}
+          onImpressaoChange={setImpressaoLista}
         />
       </div>
     </div>

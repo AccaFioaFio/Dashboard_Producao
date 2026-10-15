@@ -846,6 +846,11 @@
   }
 }
 
+/* Layouts de impressão da programação: só na tela de impressão. */
+.programacao-print-lista {
+  display: none !important;
+}
+
 @media print {
   body {
     background: white !important;
@@ -873,7 +878,6 @@
     backdrop-filter: none !important;
   }
 
-  /* Impressão da lista (consulta): mostra só o layout escolhido. */
   html[data-print='lista-recolhido'] [data-programacao-print='lista-recolhido'],
   html[data-print='lista-expandido'] [data-programacao-print='lista-expandido'] {
     display: flex !important;
@@ -883,7 +887,8 @@
   html[data-print='lista-expandido'] [data-programacao-print='pedido'],
   html[data-print='lista-recolhido'] [data-programacao-print='lista-expandido'],
   html[data-print='lista-expandido'] [data-programacao-print='lista-recolhido'],
-  html[data-print='pedido'] [data-programacao-print^='lista-'] {
+  html[data-print='pedido'] .programacao-print-lista,
+  html:not([data-print]) .programacao-print-lista {
     display: none !important;
   }
 }

@@ -17,7 +17,10 @@ import {
   excluirPedidoProgramacaoAction,
   salvarPedidoProgramacao,
 } from '@/app/actions/programacao'
-import { dispararImpressaoProgramacao } from '@/components/programacao-impressao'
+import {
+  dispararImpressaoProgramacao,
+  type PedidoImpressao,
+} from '@/components/programacao-impressao'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatDate, formatInt } from '@/lib/format'
@@ -124,10 +127,15 @@ export function ProgramacaoMontar({
   banco,
   onSalvou,
   podeEditar = false,
+  impressaoLista = { periodoLabel: null, pedidos: [] },
 }: {
   banco: ProgramacaoBanco
   onSalvou?: (banco?: ProgramacaoBanco) => void
   podeEditar?: boolean
+  impressaoLista?: {
+    periodoLabel: string | null
+    pedidos: PedidoImpressao[]
+  }
 }) {
   const [pedido, setPedido] = useState('')
   const [pedidoNorm, setPedidoNorm] = useState<string | null>(null)
@@ -173,7 +181,8 @@ export function ProgramacaoMontar({
     Boolean(pedido.trim()) &&
     prontos.length > 0 &&
     faltandoPeriodo === 0
-  const podeImprimir = podeSalvar
+  const podeImprimirPedido = podeSalvar
+  const podeImprimirLista = impressaoLista.pedidos.length > 0
   const periodoLoteValido = periodoValido(dataInicioLote, dataFimLote)
   const chaveAtual = (pedidoNorm ?? pedido).trim()
 
@@ -474,8 +483,8 @@ export function ProgramacaoMontar({
     })
   }
 
-  function imprimir() {
-    if (!podeImprimir) return
+  function imprimirPedidoAtual() {
+    if (!podeImprimirPedido) return
     setItens(prontos)
     dispararImpressaoProgramacao('pedido')
   }
@@ -510,13 +519,45 @@ export function ProgramacaoMontar({
         <Button
           type="button"
           variant="outline"
-          onClick={imprimir}
-          disabled={!podeImprimir}
+          onClick={() => dispararImpressaoProgramacao('lista-recolhido')}
+          disabled={!podeImprimirLista}
+          title={
+            podeImprimirLista
+              ? `Imprime ${impressaoLista.pedidos.length} pedido(s) do período${impressaoLista.periodoLabel ? ` (${impressaoLista.periodoLabel})` : ''}`
+              : 'Selecione um período com pedidos em Consultar programação'
+          }
           className="h-10 w-full sm:h-8 sm:w-auto"
         >
           <Printer />
-          Imprimir
+          Imprimir pedidos
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => dispararImpressaoProgramacao('lista-expandido')}
+          disabled={!podeImprimirLista}
+          title={
+            podeImprimirLista
+              ? `Imprime ${impressaoLista.pedidos.length} pedido(s) com itens`
+              : 'Selecione um período com pedidos em Consultar programação'
+          }
+          className="h-10 w-full sm:h-8 sm:w-auto"
+        >
+          <Printer />
+          Imprimir com itens
+        </Button>
+        {podeImprimirPedido ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={imprimirPedidoAtual}
+            className="h-10 w-full sm:h-8 sm:w-auto"
+            title="Imprime só o pedido em edição"
+          >
+            <Printer />
+            Imprimir este
+          </Button>
+        ) : null}
       </div>
 
       <section

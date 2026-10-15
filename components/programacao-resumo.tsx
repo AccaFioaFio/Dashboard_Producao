@@ -350,10 +350,15 @@ export function ProgramacaoResumo({
   banco,
   onAlterou,
   podeEditar = false,
+  onImpressaoChange,
 }: {
   banco: ProgramacaoBanco
   onAlterou?: (banco?: ProgramacaoBanco) => void
   podeEditar?: boolean
+  onImpressaoChange?: (estado: {
+    periodoLabel: string | null
+    pedidos: PedidoResumo[]
+  }) => void
 }) {
   const [aba, setAba] = useState<AbaConsulta>('atual')
   const [modo, setModo] = useState<ModoPeriodo>('dia')
@@ -435,6 +440,22 @@ export function ProgramacaoResumo({
     () => agruparPedidos(linhasFiltradas),
     [linhasFiltradas],
   )
+
+  const periodoLabel =
+    !referencia
+      ? null
+      : modo === 'mes'
+        ? rotuloMes(referencia)
+        : modo === 'semana'
+          ? rotuloSemana(inicioSemana(referencia))
+          : formatDate(referencia)
+
+  useEffect(() => {
+    onImpressaoChange?.({
+      periodoLabel,
+      pedidos: aba === 'atual' ? pedidos : [],
+    })
+  }, [aba, onImpressaoChange, pedidos, periodoLabel])
 
   function trocarModo(next: ModoPeriodo) {
     const preferida = preferenciaNoModo(next, referencia || hojeIso())
@@ -535,15 +556,6 @@ export function ProgramacaoResumo({
     void carregarHistorico()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recarrega ao abrir a aba
   }, [aba])
-
-  const periodoLabel =
-    !referencia
-      ? null
-      : modo === 'mes'
-        ? rotuloMes(referencia)
-        : modo === 'semana'
-          ? rotuloSemana(inicioSemana(referencia))
-          : formatDate(referencia)
 
   const temProgramacaoSalva = datasDisponiveis.length > 0
 

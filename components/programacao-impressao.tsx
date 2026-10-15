@@ -123,7 +123,7 @@ export function ProgramacaoImpressaoLista({
     <>
       <section
         data-programacao-print="lista-recolhido"
-        className="hidden flex-col gap-4 text-foreground"
+        className="programacao-print-lista flex-col gap-4 text-foreground"
       >
         <header>
           <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
@@ -153,7 +153,7 @@ export function ProgramacaoImpressaoLista({
 
       <section
         data-programacao-print="lista-expandido"
-        className="hidden flex-col gap-4 text-foreground"
+        className="programacao-print-lista flex-col gap-4 text-foreground"
       >
         <header>
           <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
