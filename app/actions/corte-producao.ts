@@ -32,6 +32,7 @@ export type SalvarCorteProducaoInput = {
   excelRow: number
   qtdReal: string
   qtdVolumes: string
+  qtdVolumesBordados: string
   dataInicio: string
   dataFinal: string
   responsavel: string
@@ -117,6 +118,7 @@ export async function buscarProdutoParaLancamento(
   const gravado = db
     .prepare(
       `SELECT qtd_real as qtdReal, qtd_volumes as qtdVolumes,
+              qtd_volumes_bordados as qtdVolumesBordados,
               data_inicio as dataInicio, data_final as dataFinal,
               responsavel, aviso_data_final as avisoDataFinal,
               nome_produto as nomeProduto
@@ -126,6 +128,7 @@ export async function buscarProdutoParaLancamento(
     .get(pedido, resolvido.codProduto, EXCEL_ROW_FORA_DA_CARGA) as {
     qtdReal: number | null
     qtdVolumes: number | null
+    qtdVolumesBordados: number | null
     dataInicio: string | null
     dataFinal: string | null
     responsavel: string | null
@@ -135,6 +138,7 @@ export async function buscarProdutoParaLancamento(
   const nuvem = await gravarLancamentoNuvem(pedido, resolvido.codProduto, {
     qtdReal: gravado?.qtdReal ?? null,
     qtdVolumes: gravado?.qtdVolumes ?? null,
+    qtdVolumesBordados: gravado?.qtdVolumesBordados ?? null,
     dataInicio: gravado?.dataInicio ?? null,
     dataFinal: gravado?.dataFinal ?? null,
     responsavel: gravado?.responsavel ?? null,
@@ -176,6 +180,13 @@ export async function salvarCorteProducao(
   const qtdVolumes = quantidade(input.qtdVolumes)
   if (qtdVolumes === 'invalida') {
     return { ok: false, error: 'Quantidade de volumes precisa ser um número a partir de zero.' }
+  }
+  const qtdVolumesBordados = quantidade(input.qtdVolumesBordados)
+  if (qtdVolumesBordados === 'invalida') {
+    return {
+      ok: false,
+      error: 'Quantidade de volumes bordados precisa ser um número a partir de zero.',
+    }
   }
 
   const dataInicio = input.dataInicio.trim()
@@ -241,11 +252,19 @@ export async function salvarCorteProducao(
     | { avisoDataFinal: string | null }
     | undefined
 
-  if (qtdReal == null && qtdVolumes == null && !dataInicio && !dataFinal && !responsavel) {
+  if (
+    qtdReal == null &&
+    qtdVolumes == null &&
+    qtdVolumesBordados == null &&
+    !dataInicio &&
+    !dataFinal &&
+    !responsavel
+  ) {
     if (foraDaCarga) {
       db.prepare(
         `UPDATE corte_producao_lancamento
-         SET qtd_real = NULL, qtd_volumes = NULL, data_inicio = NULL, data_final = NULL,
+         SET qtd_real = NULL, qtd_volumes = NULL, qtd_volumes_bordados = NULL,
+             data_inicio = NULL, data_final = NULL,
              responsavel = NULL, aviso_data_final = NULL,
              nome_produto = COALESCE(?, nome_produto), atualizado_em = ?
          WHERE pedido_norm = ? AND cod_produto = ?`,
@@ -253,6 +272,7 @@ export async function salvarCorteProducao(
       const nuvem = await gravarLancamentoNuvem(pedidoNorm, codProduto, {
         qtdReal: null,
         qtdVolumes: null,
+        qtdVolumesBordados: null,
         dataInicio: null,
         dataFinal: null,
         responsavel: null,
@@ -285,12 +305,13 @@ export async function salvarCorteProducao(
 
   db.prepare(
     `INSERT INTO corte_producao_lancamento (
-       pedido_norm, cod_produto, excel_row, qtd_real, qtd_volumes, data_inicio, data_final,
-       responsavel, nome_produto, atualizado_em
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       pedido_norm, cod_produto, excel_row, qtd_real, qtd_volumes, qtd_volumes_bordados,
+       data_inicio, data_final, responsavel, nome_produto, atualizado_em
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
        qtd_real = excluded.qtd_real,
        qtd_volumes = excluded.qtd_volumes,
+       qtd_volumes_bordados = excluded.qtd_volumes_bordados,
        data_inicio = excluded.data_inicio,
        data_final = excluded.data_final,
        responsavel = excluded.responsavel,
@@ -302,6 +323,7 @@ export async function salvarCorteProducao(
     excelRow,
     qtdReal,
     qtdVolumes,
+    qtdVolumesBordados,
     dataInicio || null,
     dataFinal || null,
     responsavel || null,
@@ -325,6 +347,7 @@ export async function salvarCorteProducao(
   const nuvem = await gravarLancamentoNuvem(pedidoNorm, codProduto, {
     qtdReal,
     qtdVolumes,
+    qtdVolumesBordados,
     dataInicio: dataInicio || null,
     dataFinal: dataFinal || null,
     responsavel: responsavel || null,
@@ -378,6 +401,7 @@ export async function salvarListaCortador(
     nomeProduto: string | null
     qtdReal: number | null
     qtdVolumes: number | null
+    qtdVolumesBordados: number | null
     dataInicio: string | null
     dataFinal: string
     responsavel: string | null
@@ -394,6 +418,7 @@ export async function salvarListaCortador(
       nomeProduto: item.nomeProduto,
       qtdReal: item.qtdReal,
       qtdVolumes: item.qtdVolumes,
+      qtdVolumesBordados: item.qtdVolumesBordados,
       dataInicio: item.dataInicio,
       dataFinal: item.dataFinal,
       responsavel: item.responsavel,
@@ -426,9 +451,9 @@ export async function salvarListaCortador(
   )
   const garantir = db.prepare(
     `INSERT INTO corte_producao_lancamento (
-       pedido_norm, cod_produto, excel_row, qtd_real, qtd_volumes, data_inicio, data_final,
-       responsavel, aviso_data_final, atualizado_em
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       pedido_norm, cod_produto, excel_row, qtd_real, qtd_volumes, qtd_volumes_bordados,
+       data_inicio, data_final, responsavel, aviso_data_final, atualizado_em
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
        aviso_data_final = excluded.aviso_data_final,
        atualizado_em = excluded.atualizado_em`,
@@ -452,6 +477,7 @@ export async function salvarListaCortador(
           item.excelRow,
           item.qtdReal,
           item.qtdVolumes,
+          item.qtdVolumesBordados,
           item.dataInicio,
           item.dataFinal,
           item.responsavel,
@@ -481,9 +507,11 @@ export async function salvarListaCortador(
     const marcado = await marcarAvisoNuvem(pedidoNorm, item.codProduto, item.dataFinal, {
       qtdReal: item.qtdReal,
       qtdVolumes: item.qtdVolumes,
+      qtdVolumesBordados: item.qtdVolumesBordados,
       dataInicio: item.dataInicio,
       dataFinal: item.dataFinal,
       responsavel: item.responsavel,
+      nomeProduto: item.nomeProduto,
     })
     if (!marcado.ok) falhasNuvem.push(marcado.error)
   }

@@ -60,6 +60,13 @@ export function canBuscarPedido(acessos: string[]) {
   return acessos.includes(ALL_ACCESS) || acessos.includes('/pedidos')
 }
 
+/** Só o login principal monta/exclui programação. */
+export const LOGIN_PROGRAMACAO_EDITOR = 'geral@fioafio'
+
+export function canEditarProgramacao(login: string) {
+  return normalizeLogin(login) === LOGIN_PROGRAMACAO_EDITOR
+}
+
 export function homePathFor(user: Pick<SessionUser, 'acessos'>) {
   return homePath(user.acessos)
 }

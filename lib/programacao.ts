@@ -25,6 +25,8 @@ export type LinhaProgramacao = {
   quantidadeProducao: string
   dataInicio: string
   dataFim: string
+  /** Anotações gerais do pedido (replicadas em cada linha). */
+  observacoes: string | null
   savedAt: string
 }
 
@@ -37,6 +39,7 @@ export type GrupoPedidoProgramacao = {
   pedido: string
   pedidoNorm: string | null
   cliente: string | null
+  observacoes: string | null
   linhas: LinhaProgramacao[]
 }
 
@@ -200,6 +203,10 @@ export function normalizarLinha(raw: unknown): LinhaProgramacao | null {
     typeof row.qtdPedido === 'number' && Number.isFinite(row.qtdPedido)
       ? row.qtdPedido
       : null
+  const observacoes =
+    typeof row.observacoes === 'string' && row.observacoes.trim()
+      ? row.observacoes.trim()
+      : null
   return {
     key:
       typeof row.key === 'string'
@@ -221,6 +228,7 @@ export function normalizarLinha(raw: unknown): LinhaProgramacao | null {
     quantidadeProducao: row.quantidadeProducao,
     dataInicio: periodo.dataInicio,
     dataFim: periodo.dataFim,
+    observacoes,
     savedAt: typeof row.savedAt === 'string' ? row.savedAt : new Date().toISOString(),
   }
 }
@@ -257,6 +265,7 @@ function migrarV1ParaBanco(raw: Record<string, unknown>): ProgramacaoBanco | nul
       quantidadeProducao: item.quantidadeProducao,
       dataInicio: item.dataInicio,
       dataFim: item.dataFim,
+      observacoes: null,
       savedAt,
     })
   }
@@ -299,6 +308,7 @@ export function mesclarPedidoNoBanco(input: {
   pedido: string
   pedidoNorm: string | null
   cliente: string | null
+  observacoes?: string | null
   itens: ItemProgramacao[]
 }): { banco: ProgramacaoBanco; gravados: number; removidosAnteriores: number } {
   const banco = lerBancoProgramacao()
@@ -310,6 +320,7 @@ export function mesclarPedidoNoBanco(input: {
     (row) => chavePedido(row.pedido, row.pedidoNorm) !== chave,
   )
   const savedAt = new Date().toISOString()
+  const observacoes = input.observacoes?.trim() ? input.observacoes.trim() : null
   const novas = input.itens.filter(itemProntoParaSalvar).map((item) => ({
     key: linhaKey(
       input.pedidoNorm,
@@ -328,6 +339,7 @@ export function mesclarPedidoNoBanco(input: {
     quantidadeProducao: item.quantidadeProducao,
     dataInicio: item.dataInicio,
     dataFim: item.dataFim,
+    observacoes,
     savedAt,
   }))
   const next: ProgramacaoBanco = { version: 2, linhas: [...restantes, ...novas] }
@@ -356,6 +368,20 @@ export function itensSalvosDoPedido(
       dataInicio: row.dataInicio,
       dataFim: row.dataFim,
     }))
+}
+
+/** Observações gerais salvas do pedido (mesmas em todas as linhas). */
+export function observacoesDoPedido(
+  banco: ProgramacaoBanco,
+  pedido: string,
+  pedidoNorm: string | null,
+): string {
+  const chave = chavePedido(pedido, pedidoNorm)
+  for (const row of banco.linhas) {
+    if (chavePedido(row.pedido, row.pedidoNorm) !== chave) continue
+    if (row.observacoes?.trim()) return row.observacoes.trim()
+  }
+  return ''
 }
 
 /** Remove todas as linhas do pedido no banco local. */
@@ -417,11 +443,15 @@ export function agruparProgramacao(
         const grupo = porPedido.get(chavePed)
         if (grupo) {
           grupo.linhas.push(row)
+          if (!grupo.observacoes && row.observacoes) {
+            grupo.observacoes = row.observacoes
+          }
         } else {
           porPedido.set(chavePed, {
             pedido: row.pedido,
             pedidoNorm: row.pedidoNorm,
             cliente: row.cliente,
+            observacoes: row.observacoes,
             linhas: [row],
           })
         }

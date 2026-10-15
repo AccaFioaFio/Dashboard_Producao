@@ -11,6 +11,7 @@ export type ProgramacaoNuvemPedido = {
   pedido: string
   pedidoNorm: string | null
   cliente: string | null
+  observacoes: string | null
   linhas: LinhaProgramacao[]
   savedAt: string
 }
@@ -85,6 +86,7 @@ function linhaDe(raw: unknown): LinhaProgramacao | null {
     quantidadeProducao,
     dataInicio,
     dataFim,
+    observacoes: texto(row.observacoes),
     savedAt,
   }
 }
@@ -99,11 +101,18 @@ function pedidoDe(raw: unknown): ProgramacaoNuvemPedido | null {
   const linhas = linhasRaw
     .map(linhaDe)
     .filter((linha): linha is LinhaProgramacao => linha != null)
+  const observacoes =
+    texto(row.observacoes) ??
+    linhas.find((linha) => linha.observacoes)?.observacoes ??
+    null
   return {
     pedido,
     pedidoNorm: texto(row.pedidoNorm),
     cliente: texto(row.cliente),
-    linhas,
+    observacoes,
+    linhas: linhas.map((linha) =>
+      linha.observacoes ? linha : { ...linha, observacoes },
+    ),
     savedAt,
   }
 }

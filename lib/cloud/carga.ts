@@ -9,6 +9,11 @@ import {
 import { ensureApontamentosNuvemNoSqlite } from '@/lib/apontamento-sync'
 import { captureCorteOperacao, mergeCorteOperacao } from '@/lib/corte-operacao-local'
 import {
+  captureProgramacaoHistorico,
+  mergeProgramacaoHistorico,
+} from '@/lib/programacao-historico-local'
+import { ensureProgramacaoHistoricoNuvemNoSqlite } from '@/lib/programacao-historico-sync'
+import {
   captureProgramacaoOperacao,
   mergeProgramacaoOperacao,
 } from '@/lib/programacao-operacao-local'
@@ -56,6 +61,7 @@ export async function ensureCloudDatabase(options?: { force?: boolean }) {
   }
   await ensureApontamentosNuvemNoSqlite({ force: options?.force })
   await ensureProgramacaoNuvemNoSqlite({ force: options?.force })
+  await ensureProgramacaoHistoricoNuvemNoSqlite({ force: options?.force })
 }
 
 async function restoreDatabase(force: boolean) {
@@ -106,12 +112,14 @@ async function restoreDatabase(force: boolean) {
     const backup = captureCorteOperacao()
     const backupApontamento = captureApontamentoOperacao()
     const backupProgramacao = captureProgramacaoOperacao()
+    const backupHistorico = captureProgramacaoHistorico()
     resetSqlite()
     writeFileSync(DB_PATH, downloaded.bytes)
     getSqlite()
     mergeCorteOperacao(backup)
     mergeApontamentoOperacao(backupApontamento)
     mergeProgramacaoOperacao(backupProgramacao)
+    mergeProgramacaoHistorico(backupHistorico)
     localEtag = etag || String(downloaded.bytes.length)
   } catch {
     getSqlite()
@@ -262,6 +270,7 @@ export async function refreshFromSupabaseCarga(): Promise<
     const backup = captureCorteOperacao()
     const backupApontamento = captureApontamentoOperacao()
     const backupProgramacao = captureProgramacaoOperacao()
+    const backupHistorico = captureProgramacaoHistorico()
     resetSqlite()
     writeFileSync(DB_PATH, downloaded.bytes)
     localEtag = String(downloaded.bytes.length)
@@ -269,8 +278,10 @@ export async function refreshFromSupabaseCarga(): Promise<
     mergeCorteOperacao(backup)
     mergeApontamentoOperacao(backupApontamento)
     mergeProgramacaoOperacao(backupProgramacao)
+    mergeProgramacaoHistorico(backupHistorico)
     await ensureApontamentosNuvemNoSqlite({ force: true })
     await ensureProgramacaoNuvemNoSqlite({ force: true })
+    await ensureProgramacaoHistoricoNuvemNoSqlite({ force: true })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return { ok: false, error: `Baixou o Storage, mas falhou gravar o SQLite. ${message}` }

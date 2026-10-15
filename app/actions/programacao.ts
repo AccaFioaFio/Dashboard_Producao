@@ -1,5 +1,14 @@
 'use server'
 
+import { getSqlite } from '@/db'
+import {
+  registrarHistoricoExcluirItem,
+  registrarHistoricoExcluirPedido,
+  registrarHistoricoSalvarPedido,
+  listarHistoricoProgramacao,
+  type FiltroHistoricoProgramacao,
+  type ProgramacaoHistoricoEvento,
+} from '@/data/programacao-historico'
 import { getItensPorPedido } from '@/data/pedidos'
 import {
   excluirLinhasProgramacao,
@@ -8,8 +17,12 @@ import {
   listarProgramacao,
   substituirPedidoProgramacao,
 } from '@/data/programacao'
-import { canAccessPath } from '@/lib/auth/access'
+import {
+  canAccessPath,
+  canEditarProgramacao,
+} from '@/lib/auth/access'
 import { readSession } from '@/lib/auth/cookie'
+import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import {
   itemProntoParaSalvar,
   normalizarLinha,
@@ -20,6 +33,13 @@ import {
 
 function semPermissao() {
   return { ok: false as const, error: 'Sem permissão.' }
+}
+
+function semPermissaoEditar() {
+  return {
+    ok: false as const,
+    error: 'Somente o login geral@fioafio pode acrescentar ou excluir programação.',
+  }
 }
 
 async function autorizarProgramacao() {
@@ -129,10 +149,12 @@ export async function salvarPedidoProgramacao(input: {
   pedido: string
   pedidoNorm: string | null
   cliente: string | null
+  observacoes?: string | null
   itens: ItemProgramacao[]
 }): Promise<ProgramacaoResult & { gravados?: number }> {
   const session = await autorizarProgramacao()
   if (!session) return semPermissao()
+  if (!canEditarProgramacao(session.login)) return semPermissaoEditar()
 
   const pedido = input.pedido.trim()
   if (!pedido) return { ok: false, error: 'Informe o número do pedido.' }
@@ -147,15 +169,29 @@ export async function salvarPedidoProgramacao(input: {
       pedido,
       pedidoNorm: input.pedidoNorm,
       cliente: input.cliente?.trim() ? input.cliente.trim() : null,
+      observacoes: input.observacoes?.trim() ? input.observacoes.trim() : null,
       itens: prontos,
     })
+    const historico = await registrarHistoricoSalvarPedido({
+      usuarioLogin: session.login,
+      pedido,
+      pedidoNorm: input.pedidoNorm,
+      cliente: input.cliente?.trim() ? input.cliente.trim() : null,
+      gravados,
+    })
+    const avisos = [
+      nuvemError
+        ? `Salvou neste computador, mas a nuvem não atualizou (${nuvemError}). No celular a programação pode não aparecer.`
+        : null,
+      historico.nuvemError
+        ? `Histórico local ok; nuvem do histórico não atualizou (${historico.nuvemError}).`
+        : null,
+    ].filter(Boolean)
     return {
       ok: true,
       banco,
       gravados,
-      aviso: nuvemError
-        ? `Salvou neste computador, mas a nuvem não atualizou (${nuvemError}). No celular a programação pode não aparecer.`
-        : undefined,
+      aviso: avisos.length ? avisos.join(' ') : undefined,
     }
   } catch {
     return { ok: false, error: 'Não foi possível salvar a programação.' }
@@ -168,15 +204,35 @@ export async function excluirPedidoProgramacaoAction(
 ): Promise<ProgramacaoResult & { removidos?: number }> {
   const session = await autorizarProgramacao()
   if (!session) return semPermissao()
+  if (!canEditarProgramacao(session.login)) return semPermissaoEditar()
 
   const informado = pedido.trim()
   if (!informado) return { ok: false, error: 'Informe o número do pedido.' }
 
   try {
+    await ensureCloudDatabase()
+    const chave = (pedidoNorm ?? informado).trim()
+    const antes = getSqlite()
+      .prepare(
+        `SELECT cliente FROM programacao_linha
+         WHERE TRIM(COALESCE(pedido_norm, pedido)) = ?
+         LIMIT 1`,
+      )
+      .get(chave) as { cliente: string | null } | undefined
+
     const { banco, removidos, nuvemError } = await excluirPedidoDb(
       informado,
       pedidoNorm,
     )
+    if (removidos > 0) {
+      await registrarHistoricoExcluirPedido({
+        usuarioLogin: session.login,
+        pedido: informado,
+        pedidoNorm,
+        cliente: antes?.cliente ?? null,
+        removidos,
+      })
+    }
     return {
       ok: true,
       banco,
@@ -195,14 +251,40 @@ export async function excluirItemProgramacao(
 ): Promise<ProgramacaoResult & { removidos?: number }> {
   const session = await autorizarProgramacao()
   if (!session) return semPermissao()
+  if (!canEditarProgramacao(session.login)) return semPermissaoEditar()
 
   const chave = key.trim()
   if (!chave) return { ok: false, error: 'Item inválido.' }
 
   try {
+    await ensureCloudDatabase()
+    const antes = getSqlite()
+      .prepare(
+        `SELECT pedido, pedido_norm as pedidoNorm, cliente, nome
+         FROM programacao_linha WHERE key = ? LIMIT 1`,
+      )
+      .get(chave) as
+      | {
+          pedido: string
+          pedidoNorm: string | null
+          cliente: string | null
+          nome: string
+        }
+      | undefined
+
     const { banco, removidos, nuvemError } = await excluirLinhasProgramacao([
       chave,
     ])
+    if (removidos > 0 && antes) {
+      await registrarHistoricoExcluirItem({
+        usuarioLogin: session.login,
+        pedido: antes.pedido,
+        pedidoNorm: antes.pedidoNorm,
+        cliente: antes.cliente,
+        itemKey: chave,
+        itemNome: antes.nome,
+      })
+    }
     return {
       ok: true,
       banco,
@@ -221,6 +303,7 @@ export async function importarProgramacaoLocal(
 ): Promise<ProgramacaoResult & { gravados?: number }> {
   const session = await autorizarProgramacao()
   if (!session) return semPermissao()
+  if (!canEditarProgramacao(session.login)) return semPermissaoEditar()
 
   const normalizadas = linhas
     .map(normalizarLinha)
@@ -239,5 +322,22 @@ export async function importarProgramacaoLocal(
     return { ok: true, banco, gravados }
   } catch {
     return { ok: false, error: 'Não foi possível importar a programação local.' }
+  }
+}
+
+export type HistoricoProgramacaoResult =
+  | { ok: true; eventos: ProgramacaoHistoricoEvento[] }
+  | { ok: false; error: string }
+
+export async function carregarHistoricoProgramacao(
+  filtro: FiltroHistoricoProgramacao = {},
+): Promise<HistoricoProgramacaoResult> {
+  const session = await autorizarProgramacao()
+  if (!session) return semPermissao()
+  try {
+    const eventos = await listarHistoricoProgramacao(filtro)
+    return { ok: true, eventos }
+  } catch {
+    return { ok: false, error: 'Não foi possível carregar o histórico.' }
   }
 }

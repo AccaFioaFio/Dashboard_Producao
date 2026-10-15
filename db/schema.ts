@@ -336,6 +336,7 @@ export const corteProducaoLancamento = sqliteTable(
     excelRow: integer('excel_row').notNull(),
     qtdReal: real('qtd_real'),
     qtdVolumes: real('qtd_volumes'),
+    qtdVolumesBordados: real('qtd_volumes_bordados'),
     semCorte: integer('sem_corte').notNull().default(0),
     dataInicio: text('data_inicio'),
     dataFinal: text('data_final'),
@@ -512,12 +513,34 @@ export const programacaoLinha = sqliteTable(
     quantidadeProducao: text('quantidade_producao').notNull(),
     dataInicio: text('data_inicio').notNull(),
     dataFim: text('data_fim').notNull(),
+    observacoes: text('observacoes'),
     savedAt: text('saved_at').notNull(),
   },
   (table) => [
     index('idx_programacao_linha_pedido_norm').on(table.pedidoNorm),
     index('idx_programacao_linha_pedido').on(table.pedido),
     index('idx_programacao_linha_periodo').on(table.dataInicio, table.dataFim),
+  ],
+)
+
+export const programacaoHistorico = sqliteTable(
+  'programacao_historico',
+  {
+    id: text('id').primaryKey(),
+    ocorridoEm: text('ocorrido_em').notNull(),
+    usuarioLogin: text('usuario_login').notNull(),
+    acao: text('acao').notNull(),
+    pedido: text('pedido'),
+    pedidoNorm: text('pedido_norm'),
+    cliente: text('cliente'),
+    itemKey: text('item_key'),
+    itemNome: text('item_nome'),
+    detalhe: text('detalhe').notNull(),
+  },
+  (table) => [
+    index('idx_programacao_historico_ocorrido').on(table.ocorridoEm),
+    index('idx_programacao_historico_pedido').on(table.pedidoNorm, table.pedido),
+    index('idx_programacao_historico_usuario').on(table.usuarioLogin),
   ],
 )
 

@@ -1,14 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { Minus, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { CalendarDays, Minus, Plus, Trash2 } from 'lucide-react'
 import {
+  carregarHistoricoProgramacao,
   excluirItemProgramacao,
   excluirPedidoProgramacaoAction,
 } from '@/app/actions/programacao'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { formatDate, formatInt } from '@/lib/format'
+import { formatDate, formatDateTime, formatInt } from '@/lib/format'
+import type { ProgramacaoHistoricoEvento } from '@/lib/programacao-historico'
 import {
   cadaDiaNoPeriodo,
   parseQuantidade,
@@ -25,6 +27,7 @@ type PedidoResumo = {
   pedido: string
   pedidoNorm: string | null
   cliente: string | null
+  observacoes: string | null
   linhas: LinhaProgramacao[]
 }
 
@@ -134,13 +137,29 @@ function totalProdutos(linhas: LinhaProgramacao[]) {
   return total
 }
 
+function periodoDoPedido(linhas: LinhaProgramacao[]) {
+  let dataInicio = ''
+  let dataFim = ''
+  for (const linha of linhas) {
+    if (!linha.dataInicio || !linha.dataFim) continue
+    if (!dataInicio || linha.dataInicio < dataInicio) dataInicio = linha.dataInicio
+    if (!dataFim || linha.dataFim > dataFim) dataFim = linha.dataFim
+  }
+  if (!dataInicio || !dataFim) return null
+  return { dataInicio, dataFim }
+}
+
 function formatPeriodo(inicio: string, fim: string) {
   if (inicio === fim) return formatDate(inicio)
   return `${formatDate(inicio)} – ${formatDate(fim)}`
 }
 
+function rotuloIntervaloSemana(inicio: string) {
+  return `${formatDate(inicio)} a ${formatDate(fimSemana(inicio))}`
+}
+
 function rotuloSemana(inicio: string) {
-  return formatPeriodo(inicio, fimSemana(inicio))
+  return rotuloIntervaloSemana(inicio)
 }
 
 function rotuloMes(anoMes: string) {
@@ -153,6 +172,137 @@ function rotuloMes(anoMes: string) {
   return nome.charAt(0).toUpperCase() + nome.slice(1)
 }
 
+/** Input nativo fora da tela — no Windows `opacity:0` ainda desenha a data. */
+const pickerOcultoClassName =
+  'fixed top-0 left-0 -z-10 h-px w-px overflow-hidden border-0 p-0 opacity-0'
+
+/** Mostra só dd/mm/aaaa (ou o texto passado). Calendário só pelo botão. */
+function CampoDataBr({
+  value,
+  onChange,
+  displayValue,
+  placeholder = 'dd/mm/aaaa',
+  'aria-label': ariaLabel = 'Escolher data',
+  className,
+}: {
+  value: string
+  onChange: (iso: string) => void
+  displayValue?: string
+  placeholder?: string
+  'aria-label'?: string
+  className?: string
+}) {
+  const pickerRef = useRef<HTMLInputElement>(null)
+  const texto = displayValue ?? (value ? formatDate(value) : '')
+
+  function abrirCalendario() {
+    const el = pickerRef.current
+    if (!el) return
+    try {
+      el.showPicker?.()
+    } catch {
+      el.click()
+    }
+  }
+
+  return (
+    <div className={cn('flex min-w-0 items-center gap-1', className)}>
+      <Input
+        readOnly
+        value={texto}
+        placeholder={placeholder}
+        className="h-9 min-w-0 flex-1 tabular-nums sm:h-8"
+        onClick={abrirCalendario}
+        aria-label={ariaLabel}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-xs"
+        className="size-9 shrink-0 sm:size-8"
+        onClick={abrirCalendario}
+        title={ariaLabel}
+        aria-label={ariaLabel}
+      >
+        <CalendarDays className="size-3.5" />
+      </Button>
+      <input
+        ref={pickerRef}
+        type="date"
+        value={value || ''}
+        onChange={(event) => onChange(event.target.value)}
+        tabIndex={-1}
+        aria-hidden
+        className={pickerOcultoClassName}
+      />
+    </div>
+  )
+}
+
+function CampoMesBr({
+  value,
+  onChange,
+  'aria-label': ariaLabel = 'Escolher mês',
+  className,
+}: {
+  value: string
+  onChange: (anoMes: string) => void
+  'aria-label'?: string
+  className?: string
+}) {
+  const pickerRef = useRef<HTMLInputElement>(null)
+
+  function abrirCalendario() {
+    const el = pickerRef.current
+    if (!el) return
+    try {
+      el.showPicker?.()
+    } catch {
+      el.click()
+    }
+  }
+
+  return (
+    <div className={cn('flex min-w-0 items-center gap-1', className)}>
+      <Input
+        readOnly
+        value={value ? rotuloMes(value) : ''}
+        placeholder="mês/ano"
+        className="h-9 min-w-0 flex-1 sm:h-8"
+        onClick={abrirCalendario}
+        aria-label={ariaLabel}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-xs"
+        className="size-9 shrink-0 sm:size-8"
+        onClick={abrirCalendario}
+        title={ariaLabel}
+        aria-label={ariaLabel}
+      >
+        <CalendarDays className="size-3.5" />
+      </Button>
+      <input
+        ref={pickerRef}
+        type="month"
+        value={value || ''}
+        onChange={(event) => onChange(event.target.value)}
+        tabIndex={-1}
+        aria-hidden
+        className={pickerOcultoClassName}
+      />
+    </div>
+  )
+}
+
+function observacoesDasLinhas(linhas: LinhaProgramacao[]) {
+  for (const linha of linhas) {
+    if (linha.observacoes?.trim()) return linha.observacoes.trim()
+  }
+  return null
+}
+
 function agruparPedidos(linhas: LinhaProgramacao[]): PedidoResumo[] {
   const porPedido = new Map<string, PedidoResumo>()
   for (const row of linhas) {
@@ -160,12 +310,16 @@ function agruparPedidos(linhas: LinhaProgramacao[]): PedidoResumo[] {
     const existente = porPedido.get(key)
     if (existente) {
       existente.linhas.push(row)
+      if (!existente.observacoes && row.observacoes?.trim()) {
+        existente.observacoes = row.observacoes.trim()
+      }
     } else {
       porPedido.set(key, {
         key,
         pedido: row.pedido,
         pedidoNorm: row.pedidoNorm,
         cliente: row.cliente,
+        observacoes: row.observacoes?.trim() ? row.observacoes.trim() : null,
         linhas: [row],
       })
     }
@@ -186,16 +340,28 @@ function agruparPedidos(linhas: LinhaProgramacao[]): PedidoResumo[] {
     )
 }
 
+type AbaConsulta = 'atual' | 'historico'
+
 export function ProgramacaoResumo({
   banco,
   onAlterou,
+  podeEditar = false,
 }: {
   banco: ProgramacaoBanco
   onAlterou?: (banco?: ProgramacaoBanco) => void
+  podeEditar?: boolean
 }) {
+  const [aba, setAba] = useState<AbaConsulta>('atual')
   const [modo, setModo] = useState<ModoPeriodo>('dia')
   const [referencia, setReferencia] = useState('')
   const [abertos, setAbertos] = useState<Set<string>>(() => new Set())
+  const [historico, setHistorico] = useState<ProgramacaoHistoricoEvento[]>([])
+  const [historicoErro, setHistoricoErro] = useState<string | null>(null)
+  const [historicoCarregando, setHistoricoCarregando] = useState(false)
+  const [filtroPedido, setFiltroPedido] = useState('')
+  const [filtroUsuario, setFiltroUsuario] = useState('')
+  const [filtroDataInicio, setFiltroDataInicio] = useState('')
+  const [filtroDataFim, setFiltroDataFim] = useState('')
 
   const datasDisponiveis = useMemo(() => {
     const unicas = new Set<string>()
@@ -307,6 +473,7 @@ export function ProgramacaoResumo({
   }
 
   async function excluirPedido(pedido: PedidoResumo) {
+    if (!podeEditar) return
     const ok = window.confirm(
       `Excluir o pedido ${pedido.pedido} da programação? Todos os itens desse pedido serão removidos.`,
     )
@@ -328,6 +495,7 @@ export function ProgramacaoResumo({
   }
 
   async function excluirItem(linha: LinhaProgramacao) {
+    if (!podeEditar) return
     const ok = window.confirm(
       `Excluir o item "${linha.nome}" do pedido ${linha.pedido}?`,
     )
@@ -339,6 +507,30 @@ export function ProgramacaoResumo({
     }
     onAlterou?.(result.banco)
   }
+
+  async function carregarHistorico() {
+    setHistoricoCarregando(true)
+    setHistoricoErro(null)
+    const result = await carregarHistoricoProgramacao({
+      pedido: filtroPedido,
+      usuario: filtroUsuario,
+      dataInicio: filtroDataInicio,
+      dataFim: filtroDataFim,
+    })
+    setHistoricoCarregando(false)
+    if (!result.ok) {
+      setHistoricoErro(result.error)
+      setHistorico([])
+      return
+    }
+    setHistorico(result.eventos)
+  }
+
+  useEffect(() => {
+    if (aba !== 'historico') return
+    void carregarHistorico()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recarrega ao abrir a aba
+  }, [aba])
 
   const periodoLabel =
     !referencia
@@ -366,6 +558,101 @@ export function ProgramacaoResumo({
       <div className="flex flex-wrap gap-1.5">
         {(
           [
+            ['atual', 'Atual'],
+            ['historico', 'Histórico'],
+          ] as const
+        ).map(([value, label]) => (
+          <Button
+            key={value}
+            type="button"
+            size="sm"
+            variant={aba === value ? 'secondary' : 'outline'}
+            onClick={() => setAba(value)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+
+      {aba === 'historico' ? (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+            <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-36">
+              Pedido
+              <Input
+                value={filtroPedido}
+                onChange={(event) => setFiltroPedido(event.target.value)}
+                placeholder="Nº ou trecho"
+                className="h-9 sm:h-8"
+              />
+            </label>
+            <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-44">
+              Usuário
+              <Input
+                value={filtroUsuario}
+                onChange={(event) => setFiltroUsuario(event.target.value)}
+                placeholder="login"
+                className="h-9 sm:h-8"
+              />
+            </label>
+            <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-44">
+              De
+              <CampoDataBr
+                value={filtroDataInicio}
+                onChange={setFiltroDataInicio}
+                aria-label="Data inicial do histórico"
+              />
+            </label>
+            <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-44">
+              Até
+              <CampoDataBr
+                value={filtroDataFim}
+                onChange={setFiltroDataFim}
+                aria-label="Data final do histórico"
+              />
+            </label>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-9 sm:h-8"
+              disabled={historicoCarregando}
+              onClick={() => void carregarHistorico()}
+            >
+              Filtrar
+            </Button>
+          </div>
+          {historicoErro ? (
+            <p className="text-xs text-destructive">{historicoErro}</p>
+          ) : null}
+          {historicoCarregando ? (
+            <p className="text-xs text-muted-foreground">Carregando histórico…</p>
+          ) : historico.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Nenhum evento no histórico para este filtro.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {historico.map((evento) => (
+                <li
+                  key={evento.id}
+                  className="rounded-lg border border-border/80 px-3 py-2"
+                >
+                  <p className="text-sm">{evento.detalhe}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                    {formatDateTime(evento.ocorridoEm)}
+                    {evento.pedido ? ` · Pedido ${evento.pedido}` : ''}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : (
+        <>
+      <div className="flex flex-wrap gap-1.5">
+        {(
+          [
             ['dia', 'Dia'],
             ['semana', 'Semana'],
             ['mes', 'Mês'],
@@ -387,46 +674,43 @@ export function ProgramacaoResumo({
         {modo === 'dia' ? (
           <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-44">
             Data
-            <Input
-              type="date"
+            <CampoDataBr
               value={referencia}
-              onChange={(event) => selecionar(event.target.value)}
-              className="h-9 sm:h-8"
+              onChange={selecionar}
+              aria-label="Escolher data"
             />
           </label>
         ) : null}
         {modo === 'semana' ? (
-          <div className="flex min-w-0 flex-col gap-1">
-            <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-44">
-              Data
-              <Input
-                type="date"
-                value={referencia}
-                onChange={(event) => selecionarDataSemana(event.target.value)}
-                className="h-9 sm:h-8"
-              />
-            </label>
-            {referencia ? (
-              <p className="text-xs text-muted-foreground tabular-nums">
-                Semana {rotuloSemana(inicioSemana(referencia))}
-              </p>
-            ) : null}
-          </div>
+          <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:min-w-56 sm:w-auto">
+            Data
+            <CampoDataBr
+              value={referencia}
+              onChange={selecionarDataSemana}
+              displayValue={
+                referencia
+                  ? rotuloIntervaloSemana(inicioSemana(referencia))
+                  : ''
+              }
+              placeholder="dd/mm/aaaa a dd/mm/aaaa"
+              aria-label="Escolher semana"
+              className="sm:min-w-56"
+            />
+          </label>
         ) : null}
         {modo === 'mes' ? (
-          <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-44">
+          <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-52">
             Mês
-            <Input
-              type="month"
+            <CampoMesBr
               value={referencia}
-              onChange={(event) => selecionar(event.target.value)}
-              className="h-9 sm:h-8"
+              onChange={selecionar}
+              aria-label="Escolher mês"
             />
           </label>
         ) : null}
       </div>
 
-      {!temProgramacaoSalva ? (
+      {modo === 'semana' ? null : !temProgramacaoSalva ? (
         <p className="text-xs text-muted-foreground">
           Nenhuma data programada ainda.
         </p>
@@ -434,9 +718,6 @@ export function ProgramacaoResumo({
         <div className="flex flex-col gap-1.5">
           <p className="text-xs font-medium text-muted-foreground">
             Com programação
-            {modo === 'semana' && referencia
-              ? ` · ${rotuloSemana(inicioSemana(referencia))}`
-              : ''}
           </p>
           <ul className="flex flex-wrap gap-1.5">
             {opcoesChips.map((opcao) => {
@@ -460,11 +741,6 @@ export function ProgramacaoResumo({
             })}
           </ul>
         </div>
-      ) : modo === 'semana' && referencia ? (
-        <p className="text-xs text-muted-foreground">
-          Nenhum dia com programação em {rotuloSemana(inicioSemana(referencia))}.
-          Escolha outra data para mudar de semana.
-        </p>
       ) : (
         <p className="text-xs text-muted-foreground">
           Selecione um período para ver as datas com programação.
@@ -489,6 +765,9 @@ export function ProgramacaoResumo({
                 const aberto = abertos.has(pedido.key)
                 const qtdItens = pedido.linhas.length
                 const qtdProdutos = totalProdutos(pedido.linhas)
+                const periodo = periodoDoPedido(pedido.linhas)
+                const observacoes =
+                  pedido.observacoes ?? observacoesDasLinhas(pedido.linhas)
                 return (
                   <li
                     key={pedido.key}
@@ -515,6 +794,16 @@ export function ProgramacaoResumo({
                           <span className="mt-0.5 block truncate text-sm text-muted-foreground">
                             {pedido.cliente?.trim() || 'Sem nome fantasia'}
                           </span>
+                          {periodo ? (
+                            <span className="mt-0.5 block font-mono text-xs tabular-nums text-muted-foreground">
+                              {formatPeriodo(periodo.dataInicio, periodo.dataFim)}
+                            </span>
+                          ) : null}
+                          {observacoes ? (
+                            <span className="mt-0.5 block line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">
+                              {observacoes}
+                            </span>
+                          ) : null}
                         </span>
                         <span className="shrink-0 text-right text-xs text-muted-foreground tabular-nums">
                           <span className="block">
@@ -526,19 +815,21 @@ export function ProgramacaoResumo({
                           </span>
                         </span>
                       </button>
-                      <div className="flex items-center border-l border-border/70 px-1.5">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          className="size-9 text-destructive hover:bg-destructive/10 hover:text-destructive md:size-6"
-                          onClick={() => excluirPedido(pedido)}
-                          title="Excluir pedido da programação"
-                          aria-label={`Excluir pedido ${pedido.pedido}`}
-                        >
-                          <Trash2 />
-                        </Button>
-                      </div>
+                      {podeEditar ? (
+                        <div className="flex items-center border-l border-border/70 px-1.5">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-xs"
+                            className="size-9 text-destructive hover:bg-destructive/10 hover:text-destructive md:size-6"
+                            onClick={() => excluirPedido(pedido)}
+                            title="Excluir pedido da programação"
+                            aria-label={`Excluir pedido ${pedido.pedido}`}
+                          >
+                            <Trash2 />
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
                     {aberto ? (
                       <div className="border-t border-border/70 bg-muted/15">
@@ -558,9 +849,11 @@ export function ProgramacaoResumo({
                                 <th className="w-40 px-3 py-1.5 font-semibold tracking-wide">
                                   Período
                                 </th>
-                                <th className="w-12 px-1.5 py-1.5 font-semibold tracking-wide">
-                                  <span className="sr-only">Excluir</span>
-                                </th>
+                                {podeEditar ? (
+                                  <th className="w-12 px-1.5 py-1.5 font-semibold tracking-wide">
+                                    <span className="sr-only">Excluir</span>
+                                  </th>
+                                ) : null}
                               </tr>
                             </thead>
                             <tbody>
@@ -595,23 +888,25 @@ export function ProgramacaoResumo({
                                   >
                                     {formatPeriodo(linha.dataInicio, linha.dataFim)}
                                   </td>
-                                  <td
-                                    data-label="Excluir"
-                                    data-span="full"
-                                    className="px-1.5 py-1.5"
-                                  >
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon-xs"
-                                      className="size-9 text-destructive hover:bg-destructive/10 hover:text-destructive md:size-6"
-                                      onClick={() => excluirItem(linha)}
-                                      title="Excluir item"
-                                      aria-label={`Excluir item ${linha.nome}`}
+                                  {podeEditar ? (
+                                    <td
+                                      data-label="Excluir"
+                                      data-span="full"
+                                      className="px-1.5 py-1.5"
                                     >
-                                      <Trash2 />
-                                    </Button>
-                                  </td>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        className="size-9 text-destructive hover:bg-destructive/10 hover:text-destructive md:size-6"
+                                        onClick={() => excluirItem(linha)}
+                                        title="Excluir item"
+                                        aria-label={`Excluir item ${linha.nome}`}
+                                      >
+                                        <Trash2 />
+                                      </Button>
+                                    </td>
+                                  ) : null}
                                 </tr>
                               ))}
                             </tbody>
@@ -626,6 +921,8 @@ export function ProgramacaoResumo({
           )}
         </div>
       ) : null}
+        </>
+      )}
     </section>
   )
 }

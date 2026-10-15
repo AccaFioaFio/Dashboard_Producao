@@ -22,6 +22,7 @@ export type CorteProducaoItem = {
   qtdPedida: number | null
   qtdReal: number | null
   qtdVolumes: number | null
+  qtdVolumesBordados: number | null
   dataInicio: string | null
   dataFinal: string | null
   responsavel: string | null
@@ -35,6 +36,7 @@ function chaveCodigo(cod: string) {
 type Lancamento = {
   qtdReal: string
   qtdVolumes: string
+  qtdVolumesBordados: string
   dataInicio: string
   dataFinal: string
   responsavel: string
@@ -65,6 +67,7 @@ function lancamentoIgual(a: Lancamento, b: Lancamento) {
   return (
     a.qtdReal.trim() === b.qtdReal.trim() &&
     a.qtdVolumes.trim() === b.qtdVolumes.trim() &&
+    a.qtdVolumesBordados.trim() === b.qtdVolumesBordados.trim() &&
     a.dataInicio === b.dataInicio &&
     a.dataFinal === b.dataFinal &&
     a.responsavel === b.responsavel
@@ -85,12 +88,16 @@ function Linha({
   const inicial: Lancamento = {
     qtdReal: textoQtd(item.qtdReal),
     qtdVolumes: textoQtd(item.qtdVolumes),
+    qtdVolumesBordados: textoQtd(item.qtdVolumesBordados),
     dataInicio: item.dataInicio ?? '',
     dataFinal: item.dataFinal ?? '',
     responsavel: item.responsavel ?? '',
   }
   const [qtdReal, setQtdReal] = useState(inicial.qtdReal)
   const [qtdVolumes, setQtdVolumes] = useState(inicial.qtdVolumes)
+  const [qtdVolumesBordados, setQtdVolumesBordados] = useState(
+    inicial.qtdVolumesBordados,
+  )
   const [dataInicio, setDataInicio] = useState(inicial.dataInicio)
   const [dataFinal, setDataFinal] = useState(inicial.dataFinal)
   const [responsavel, setResponsavel] = useState(inicial.responsavel)
@@ -124,6 +131,7 @@ function Linha({
           excelRow: item.excelRow,
           qtdReal: atual.qtdReal,
           qtdVolumes: atual.qtdVolumes,
+          qtdVolumesBordados: atual.qtdVolumesBordados,
           dataInicio: atual.dataInicio,
           dataFinal: atual.dataFinal,
           responsavel: atual.responsavel,
@@ -164,6 +172,7 @@ function Linha({
         excelRow: item.excelRow,
         qtdReal: next.qtdReal,
         qtdVolumes: next.qtdVolumes,
+        qtdVolumesBordados: next.qtdVolumesBordados,
         dataInicio: next.dataInicio,
         dataFinal: next.dataFinal,
         responsavel: next.responsavel,
@@ -254,6 +263,24 @@ function Linha({
             }}
           />
         </td>
+        <td data-label="Qtd volumes bordados" className="w-28 px-1.5 py-1">
+          <input
+            aria-label={`Qtd volumes bordados de ${descricao}`}
+            inputMode="decimal"
+            value={qtdVolumesBordados}
+            className={cn(campo, 'text-right tabular-nums')}
+            onChange={(event) => {
+              const next = event.currentTarget.value
+              setQtdVolumesBordados(next)
+              agendar({ ...valores.current, qtdVolumesBordados: next })
+            }}
+            onBlur={(event) => {
+              const next = event.currentTarget.value
+              setQtdVolumesBordados(next)
+              agendar({ ...valores.current, qtdVolumesBordados: next })
+            }}
+          />
+        </td>
         <td data-label="Data Início" className="w-36 px-1.5 py-1">
           <input
             aria-label={`Data início corte de ${descricao}`}
@@ -300,13 +327,13 @@ function Linha({
       </tr>
       {erro ? (
         <tr>
-          <td colSpan={9} className="px-1.5 pb-1 text-[11px] text-destructive">
+          <td colSpan={10} className="px-1.5 pb-1 text-[11px] text-destructive">
             {erro}
           </td>
         </tr>
       ) : aviso ? (
         <tr>
-          <td colSpan={9} className="px-1.5 pb-1 text-[11px] text-muted-foreground">
+          <td colSpan={10} className="px-1.5 pb-1 text-[11px] text-muted-foreground">
             {aviso}
           </td>
         </tr>
@@ -376,6 +403,7 @@ function IncluirProduto({
         qtdPedida: null,
         qtdReal: null,
         qtdVolumes: null,
+        qtdVolumesBordados: null,
         dataInicio: null,
         dataFinal: null,
         responsavel: null,
@@ -548,6 +576,7 @@ export function CorteProducaoLista({
             <th className="px-1.5 py-1">Responsável</th>
             <th className="px-1.5 py-1">Qtd Real Corte</th>
             <th className="px-1.5 py-1">Qtd volumes</th>
+            <th className="px-1.5 py-1">Qtd volumes bordados</th>
             <th className="px-1.5 py-1">Data Inicio Corte</th>
             <th className="px-1.5 py-1">Data Final Corte</th>
             <th className="px-1.5 py-1">Lista</th>

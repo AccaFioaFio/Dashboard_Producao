@@ -6,6 +6,7 @@ type LancamentoLocal = {
   excelRow: number
   qtdReal: number | null
   qtdVolumes: number | null
+  qtdVolumesBordados: number | null
   dataInicio: string | null
   dataFinal: string | null
   responsavel: string | null
@@ -55,6 +56,7 @@ export function captureCorteOperacao(): CorteOperacaoBackup | null {
       .prepare(
         `SELECT pedido_norm as pedidoNorm, cod_produto as codProduto,
                 excel_row as excelRow, qtd_real as qtdReal, qtd_volumes as qtdVolumes,
+                qtd_volumes_bordados as qtdVolumesBordados,
                 data_inicio as dataInicio, data_final as dataFinal,
                 responsavel, aviso_data_final as avisoDataFinal,
                 nome_produto as nomeProduto,
@@ -94,12 +96,13 @@ export function mergeCorteOperacao(backup: CorteOperacaoBackup | null) {
   const db = getSqlite()
   const upsert = db.prepare(
     `INSERT INTO corte_producao_lancamento (
-       pedido_norm, cod_produto, excel_row, qtd_real, qtd_volumes, data_inicio, data_final,
-       responsavel, aviso_data_final, nome_produto, atualizado_em
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       pedido_norm, cod_produto, excel_row, qtd_real, qtd_volumes, qtd_volumes_bordados,
+       data_inicio, data_final, responsavel, aviso_data_final, nome_produto, atualizado_em
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
        qtd_real = excluded.qtd_real,
        qtd_volumes = excluded.qtd_volumes,
+       qtd_volumes_bordados = excluded.qtd_volumes_bordados,
        data_inicio = excluded.data_inicio,
        data_final = excluded.data_final,
        responsavel = excluded.responsavel,
@@ -130,6 +133,7 @@ export function mergeCorteOperacao(backup: CorteOperacaoBackup | null) {
         row.excelRow,
         row.qtdReal,
         row.qtdVolumes,
+        row.qtdVolumesBordados,
         row.dataInicio,
         row.dataFinal,
         row.responsavel,

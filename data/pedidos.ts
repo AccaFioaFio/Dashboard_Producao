@@ -196,6 +196,7 @@ export type ItemPedidoConsulta = {
   qtdPedida: number | null
   qtdReal: number | null
   qtdVolumes: number | null
+  qtdVolumesBordados: number | null
   dataInicio: string | null
   dataFinal: string | null
   responsavel: string | null
@@ -918,6 +919,7 @@ async function lancamentosDoPedido(pedidoNorm: string) {
     .prepare(
       `SELECT cod_produto as codProduto, excel_row as excelRow,
               qtd_real as qtdReal, qtd_volumes as qtdVolumes,
+              qtd_volumes_bordados as qtdVolumesBordados,
               data_inicio as dataInicio, data_final as dataFinal,
               responsavel, aviso_data_final as avisoDataFinal,
               nome_produto as nomeProduto,
@@ -956,6 +958,7 @@ function itemDoLancamento(
     qtdPedida,
     qtdReal: lancamento?.qtdReal ?? null,
     qtdVolumes: lancamento?.qtdVolumes ?? null,
+    qtdVolumesBordados: lancamento?.qtdVolumesBordados ?? null,
     dataInicio: lancamento?.dataInicio ?? null,
     dataFinal: lancamento?.dataFinal ?? null,
     responsavel: lancamento?.responsavel ?? null,
@@ -1004,6 +1007,7 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
     excelRow: number
     qtdReal: number | null
     qtdVolumes: number | null
+    qtdVolumesBordados: number | null
     dataInicio: string | null
     dataFinal: string | null
     responsavel: string | null
@@ -1045,6 +1049,7 @@ export const getItensPorPedido = cache(async (raw: string): Promise<ItensPedidoC
       ...row,
       qtdReal: null,
       qtdVolumes: null,
+      qtdVolumesBordados: null,
       dataInicio: null,
       dataFinal: null,
       responsavel: null,

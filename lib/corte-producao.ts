@@ -37,6 +37,7 @@ export type ItemCortePedido = {
   qtdPedida: number
   qtdReal: number | null
   qtdVolumes: number | null
+  qtdVolumesBordados: number | null
   dataInicio: string | null
   dataFinal: string | null
   responsavel: string | null
@@ -56,6 +57,7 @@ function preenchimento(row: ItemCortePedido) {
   return (
     (row.qtdReal != null ? 1 : 0) +
     (row.qtdVolumes != null ? 1 : 0) +
+    (row.qtdVolumesBordados != null ? 1 : 0) +
     (row.dataInicio ? 1 : 0) +
     (row.dataFinal ? 1 : 0) +
     (row.responsavel ? 1 : 0)
@@ -100,6 +102,8 @@ export function collapseItensCorte<T extends ItemCortePedido>(rows: T[]): T[] {
       qtdPedida,
       qtdReal: lancamento?.qtdReal ?? escolhida.qtdReal,
       qtdVolumes: lancamento?.qtdVolumes ?? escolhida.qtdVolumes,
+      qtdVolumesBordados:
+        lancamento?.qtdVolumesBordados ?? escolhida.qtdVolumesBordados,
       dataInicio: lancamento?.dataInicio ?? escolhida.dataInicio,
       dataFinal: lancamento?.dataFinal ?? escolhida.dataFinal,
       responsavel: lancamento?.responsavel ?? escolhida.responsavel,

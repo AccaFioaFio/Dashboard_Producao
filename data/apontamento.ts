@@ -217,6 +217,7 @@ export const getApontamentoPedido = cache(
         pedidoNorm,
         qtdReal: null,
         qtdVolumes: null,
+        qtdVolumesBordados: null,
         dataInicio: null,
         dataFinal: null,
         responsavel: null,

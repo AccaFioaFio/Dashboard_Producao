@@ -26,6 +26,7 @@ type RowDb = {
   quantidadeProducao: string
   dataInicio: string
   dataFim: string
+  observacoes: string | null
   savedAt: string
 }
 
@@ -46,6 +47,7 @@ function rowToLinha(row: RowDb): LinhaProgramacao {
     quantidadeProducao: row.quantidadeProducao,
     dataInicio: row.dataInicio,
     dataFim: row.dataFim,
+    observacoes: row.observacoes?.trim() ? row.observacoes.trim() : null,
     savedAt: row.savedAt,
   }
 }
@@ -67,7 +69,8 @@ function lerBancoLocal(): ProgramacaoBanco {
       `SELECT key, pedido, pedido_norm as pedidoNorm, cliente,
               item_id as itemId, cod_produto as codProduto, nome,
               qtd_pedido as qtdPedido, quantidade_producao as quantidadeProducao,
-              data_inicio as dataInicio, data_fim as dataFim, saved_at as savedAt
+              data_inicio as dataInicio, data_fim as dataFim,
+              observacoes, saved_at as savedAt
        FROM programacao_linha
        ORDER BY data_inicio, pedido, nome`,
     )
@@ -85,8 +88,8 @@ function upsertLinhaStmt() {
   return getSqlite().prepare(
     `INSERT INTO programacao_linha (
        key, pedido, pedido_norm, cliente, item_id, cod_produto, nome,
-       qtd_pedido, quantidade_producao, data_inicio, data_fim, saved_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       qtd_pedido, quantidade_producao, data_inicio, data_fim, observacoes, saved_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(key) DO UPDATE SET
        pedido = excluded.pedido,
        pedido_norm = excluded.pedido_norm,
@@ -98,6 +101,7 @@ function upsertLinhaStmt() {
        quantidade_producao = excluded.quantidade_producao,
        data_inicio = excluded.data_inicio,
        data_fim = excluded.data_fim,
+       observacoes = excluded.observacoes,
        saved_at = excluded.saved_at`,
   )
 }
@@ -115,6 +119,7 @@ function runUpsert(stmt: ReturnType<typeof upsertLinhaStmt>, row: LinhaProgramac
     row.quantidadeProducao,
     row.dataInicio,
     row.dataFim,
+    row.observacoes,
     row.savedAt,
   )
 }
@@ -129,7 +134,8 @@ function linhasDoPedido(
       `SELECT key, pedido, pedido_norm as pedidoNorm, cliente,
               item_id as itemId, cod_produto as codProduto, nome,
               qtd_pedido as qtdPedido, quantidade_producao as quantidadeProducao,
-              data_inicio as dataInicio, data_fim as dataFim, saved_at as savedAt
+              data_inicio as dataInicio, data_fim as dataFim,
+              observacoes, saved_at as savedAt
        FROM programacao_linha
        WHERE TRIM(COALESCE(pedido_norm, pedido)) = ?
        ORDER BY data_inicio, nome`,
@@ -142,6 +148,7 @@ async function publicarPedidoLocal(
   pedido: string,
   pedidoNorm: string | null,
   cliente: string | null,
+  observacoes: string | null,
 ) {
   const linhas = linhasDoPedido(pedido, pedidoNorm)
   if (linhas.length === 0) {
@@ -155,6 +162,7 @@ async function publicarPedidoLocal(
     pedido,
     pedidoNorm,
     cliente: cliente ?? linhas[0]?.cliente ?? null,
+    observacoes: observacoes ?? linhas[0]?.observacoes ?? null,
     linhas,
     savedAt,
   })
@@ -164,6 +172,7 @@ export async function substituirPedidoProgramacao(input: {
   pedido: string
   pedidoNorm: string | null
   cliente: string | null
+  observacoes?: string | null
   itens: ItemProgramacao[]
 }): Promise<{
   banco: ProgramacaoBanco
@@ -174,6 +183,7 @@ export async function substituirPedidoProgramacao(input: {
   await ensureCloudDatabase()
   const chave = chavePedido(input.pedido, input.pedidoNorm)
   const savedAt = new Date().toISOString()
+  const observacoes = input.observacoes?.trim() ? input.observacoes.trim() : null
   const novas = input.itens.filter(itemProntoParaSalvar).map((item) => ({
     key: linhaKey(
       input.pedidoNorm,
@@ -192,6 +202,7 @@ export async function substituirPedidoProgramacao(input: {
     quantidadeProducao: item.quantidadeProducao,
     dataInicio: item.dataInicio,
     dataFim: item.dataFim,
+    observacoes,
     savedAt,
   }))
 
@@ -216,6 +227,7 @@ export async function substituirPedidoProgramacao(input: {
     input.pedido,
     input.pedidoNorm,
     input.cliente,
+    observacoes,
   )
 
   return {
@@ -258,11 +270,16 @@ export async function excluirLinhasProgramacao(
   const db = getSqlite()
   const pedidoInfo = db
     .prepare(
-      `SELECT pedido, pedido_norm as pedidoNorm, cliente
+      `SELECT pedido, pedido_norm as pedidoNorm, cliente, observacoes
        FROM programacao_linha WHERE key = ? LIMIT 1`,
     )
     .get(unicas[0]!) as
-    | { pedido: string; pedidoNorm: string | null; cliente: string | null }
+    | {
+        pedido: string
+        pedidoNorm: string | null
+        cliente: string | null
+        observacoes: string | null
+      }
     | undefined
 
   const del = db.prepare(`DELETE FROM programacao_linha WHERE key = ?`)
@@ -281,6 +298,7 @@ export async function excluirLinhasProgramacao(
       pedidoInfo.pedido,
       pedidoInfo.pedidoNorm,
       pedidoInfo.cliente,
+      pedidoInfo.observacoes,
     )
     if (!nuvem.ok) nuvemError = nuvem.error
   }
@@ -330,6 +348,7 @@ export async function importarLinhasProgramacao(
       head.pedido,
       head.pedidoNorm,
       head.cliente,
+      head.observacoes,
     )
     if (!nuvem.ok && !nuvemError) nuvemError = nuvem.error
   }

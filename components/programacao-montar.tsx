@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import {
   ArrowDownToLine,
   CalendarPlus,
@@ -19,12 +19,13 @@ import {
 } from '@/app/actions/programacao'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { formatInt } from '@/lib/format'
+import { formatDate, formatInt } from '@/lib/format'
 import {
   dataProducaoValida,
   itemComQuantidade,
   itemProntoParaSalvar,
   itensSalvosDoPedido,
+  observacoesDoPedido,
   periodoValido,
   type ItemProgramacao,
   type ProgramacaoBanco,
@@ -35,6 +36,57 @@ type PedidoSessao = {
   pedido: string
   pedidoNorm: string | null
   cliente: string | null
+  dataInicio: string
+  dataFim: string
+}
+
+function periodoDosItens(itens: ItemProgramacao[]) {
+  let dataInicio = ''
+  let dataFim = ''
+  for (const item of itens) {
+    if (!periodoValido(item.dataInicio, item.dataFim)) continue
+    if (!dataInicio || item.dataInicio < dataInicio) dataInicio = item.dataInicio
+    if (!dataFim || item.dataFim > dataFim) dataFim = item.dataFim
+  }
+  return { dataInicio, dataFim }
+}
+
+function formatPeriodoSessao(dataInicio: string, dataFim: string) {
+  if (!periodoValido(dataInicio, dataFim)) return null
+  const inicio = formatDate(dataInicio)
+  const fim = formatDate(dataFim)
+  return dataInicio === dataFim ? inicio : `${inicio} – ${fim}`
+}
+
+function chavePedidoSessao(item: {
+  pedido: string
+  pedidoNorm: string | null
+}) {
+  return (item.pedidoNorm ?? item.pedido).trim()
+}
+
+/** Agrupa linhas salvas por pedido com o período (mín. início / máx. fim). */
+function pedidosDoBanco(banco: ProgramacaoBanco): PedidoSessao[] {
+  const porChave = new Map<string, PedidoSessao>()
+  for (const row of banco.linhas) {
+    const chave = chavePedidoSessao(row)
+    if (!chave) continue
+    const atual = porChave.get(chave)
+    if (!atual) {
+      porChave.set(chave, {
+        pedido: row.pedido,
+        pedidoNorm: row.pedidoNorm,
+        cliente: row.cliente,
+        dataInicio: row.dataInicio,
+        dataFim: row.dataFim,
+      })
+      continue
+    }
+    if (row.dataInicio < atual.dataInicio) atual.dataInicio = row.dataInicio
+    if (row.dataFim > atual.dataFim) atual.dataFim = row.dataFim
+    if (!atual.cliente && row.cliente) atual.cliente = row.cliente
+  }
+  return [...porChave.values()]
 }
 
 function formatQtdPedido(value: number | null) {
@@ -70,13 +122,16 @@ function itemEhManual(item: ItemProgramacao) {
 export function ProgramacaoMontar({
   banco,
   onSalvou,
+  podeEditar = false,
 }: {
   banco: ProgramacaoBanco
   onSalvou?: (banco?: ProgramacaoBanco) => void
+  podeEditar?: boolean
 }) {
   const [pedido, setPedido] = useState('')
   const [pedidoNorm, setPedidoNorm] = useState<string | null>(null)
   const [cliente, setCliente] = useState<string | null>(null)
+  const [observacoes, setObservacoes] = useState('')
   const [itens, setItens] = useState<ItemProgramacao[]>([])
   const [mensagem, setMensagem] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
@@ -84,9 +139,27 @@ export function ProgramacaoMontar({
   const [manual, setManual] = useState(false)
   const [dataInicioLote, setDataInicioLote] = useState('')
   const [dataFimLote, setDataFimLote] = useState('')
-  const [pedidosSessao, setPedidosSessao] = useState<PedidoSessao[]>([])
+  const [pedidosSessao, setPedidosSessao] = useState<PedidoSessao[]>(() =>
+    pedidosDoBanco(banco),
+  )
   const [pending, startTransition] = useTransition()
   const pedidoInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const doBanco = pedidosDoBanco(banco)
+    const porChave = new Map(
+      doBanco.map((item) => [chavePedidoSessao(item), item]),
+    )
+    setPedidosSessao((prev) => {
+      if (prev.length === 0) return doBanco
+      const atualizados = prev
+        .map((item) => porChave.get(chavePedidoSessao(item)) ?? item)
+        .filter((item) => porChave.has(chavePedidoSessao(item)))
+      const chavesPrev = new Set(atualizados.map((item) => chavePedidoSessao(item)))
+      const novos = doBanco.filter((item) => !chavesPrev.has(chavePedidoSessao(item)))
+      return [...atualizados, ...novos]
+    })
+  }, [banco])
 
   const comQuantidade = useMemo(
     () => itens.filter(itemComQuantidade),
@@ -95,7 +168,10 @@ export function ProgramacaoMontar({
   const prontos = useMemo(() => itens.filter(itemProntoParaSalvar), [itens])
   const faltandoPeriodo = comQuantidade.length - prontos.length
   const podeSalvar =
-    Boolean(pedido.trim()) && prontos.length > 0 && faltandoPeriodo === 0
+    podeEditar &&
+    Boolean(pedido.trim()) &&
+    prontos.length > 0 &&
+    faltandoPeriodo === 0
   const podeImprimir = podeSalvar
   const periodoLoteValido = periodoValido(dataInicioLote, dataFimLote)
   const chaveAtual = (pedidoNorm ?? pedido).trim()
@@ -110,6 +186,7 @@ export function ProgramacaoMontar({
     setPedido(pedidoInformado)
     setPedidoNorm(null)
     setCliente(clienteSalvo ?? '')
+    setObservacoes(observacoesDoPedido(banco, pedidoInformado, null))
     setManual(true)
     setBuscou(true)
     setErro(null)
@@ -134,6 +211,7 @@ export function ProgramacaoMontar({
         setErro(result.error)
         setCliente(null)
         setPedidoNorm(null)
+        setObservacoes('')
         setManual(false)
         setItens([])
         return
@@ -183,6 +261,7 @@ export function ProgramacaoMontar({
       setPedido(pedidoAtual)
       setPedidoNorm(result.pedidoNorm)
       setCliente(result.cliente ?? '')
+      setObservacoes(observacoesDoPedido(banco, pedidoAtual, result.pedidoNorm))
       setManual(modoManual)
       setItens([...daCarga, ...extrasManuais])
       setMensagem(
@@ -299,6 +378,7 @@ export function ProgramacaoMontar({
       setPedido('')
       setPedidoNorm(null)
       setCliente(null)
+      setObservacoes('')
       setErro(null)
       setMensagem(
         (result.removidos ?? 0) > 0
@@ -335,6 +415,7 @@ export function ProgramacaoMontar({
     setPedido('')
     setPedidoNorm(null)
     setCliente(null)
+    setObservacoes('')
     setItens([])
     setBuscou(false)
     setManual(false)
@@ -359,21 +440,26 @@ export function ProgramacaoMontar({
     const removidos = itens.length - filtrados.length
     const pedidoSalvo = pedido.trim()
     const clienteSalvo = cliente?.trim() ? cliente.trim() : null
+    const observacoesSalvas = observacoes.trim() ? observacoes.trim() : null
     startTransition(async () => {
       const result = await salvarPedidoProgramacao({
         pedido: pedidoSalvo,
         pedidoNorm,
         cliente: clienteSalvo,
+        observacoes: observacoesSalvas,
         itens: filtrados,
       })
       if (!result.ok) {
         setErro(result.error)
         return
       }
+      const periodo = periodoDosItens(filtrados)
       registrarPedidoSessao({
         pedido: pedidoSalvo,
         pedidoNorm: pedidoNorm ?? null,
         cliente: clienteSalvo,
+        dataInicio: periodo.dataInicio,
+        dataFim: periodo.dataFim,
       })
       onSalvou?.(result.banco)
       limparParaProximoPedido(
@@ -396,26 +482,30 @@ export function ProgramacaoMontar({
   return (
     <div className="flex flex-col gap-3 print:gap-4">
       <div className="flex flex-col gap-2 print:hidden sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={excluirPedidoSalvo}
-          disabled={!pedido.trim() || pending}
-          className="h-10 w-full text-destructive hover:bg-destructive/10 hover:text-destructive sm:h-8 sm:w-auto"
-        >
-          <Trash2 />
-          Excluir pedido
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={salvar}
-          disabled={!podeSalvar}
-          className="h-10 w-full sm:h-8 sm:w-auto"
-        >
-          <Save />
-          Salvar
-        </Button>
+        {podeEditar ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={excluirPedidoSalvo}
+              disabled={!pedido.trim() || pending}
+              className="h-10 w-full text-destructive hover:bg-destructive/10 hover:text-destructive sm:h-8 sm:w-auto"
+            >
+              <Trash2 />
+              Excluir pedido
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={salvar}
+              disabled={!podeSalvar}
+              className="h-10 w-full sm:h-8 sm:w-auto"
+            >
+              <Save />
+              Salvar
+            </Button>
+          </>
+        ) : null}
         <Button
           type="button"
           variant="outline"
@@ -441,12 +531,19 @@ export function ProgramacaoMontar({
         {pedidosSessao.length > 0 ? (
           <div className="flex flex-col gap-1.5 print:hidden">
             <p className="text-xs font-medium text-muted-foreground">
-              Pedidos nesta sessão
+              Pedidos salvos
             </p>
             <div className="flex flex-wrap gap-1.5">
               {pedidosSessao.map((item) => {
                 const chave = (item.pedidoNorm ?? item.pedido).trim()
                 const ativo = chave === chaveAtual && buscou
+                const periodo = formatPeriodoSessao(item.dataInicio, item.dataFim)
+                const titulo = [
+                  item.cliente,
+                  periodo ? `Programação: ${periodo}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
                 return (
                   <Button
                     key={chave}
@@ -455,13 +552,21 @@ export function ProgramacaoMontar({
                     size="sm"
                     disabled={pending}
                     onClick={() => pesquisar(item.pedidoNorm ?? item.pedido)}
-                    className={cn('max-w-full', ativo && 'ring-1 ring-ring/40')}
-                    title={item.cliente ?? undefined}
+                    className={cn(
+                      'h-auto max-w-full flex-col items-start gap-0.5 py-1.5',
+                      ativo && 'ring-1 ring-ring/40',
+                    )}
+                    title={titulo || undefined}
                   >
                     <span className="truncate">
                       {item.pedido}
                       {item.cliente ? ` · ${item.cliente}` : ''}
                     </span>
+                    {periodo ? (
+                      <span className="truncate text-[11px] font-normal text-muted-foreground">
+                        {periodo}
+                      </span>
+                    ) : null}
                   </Button>
                 )
               })}
@@ -547,6 +652,22 @@ export function ProgramacaoMontar({
                 para incluir os itens.
               </p>
             ) : null}
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+              Observações
+              <textarea
+                value={observacoes}
+                onChange={(event) => setObservacoes(event.target.value)}
+                readOnly={!podeEditar}
+                rows={3}
+                maxLength={2000}
+                placeholder="Anotações gerais deste pedido (opcional)"
+                className={cn(
+                  'min-h-16 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/40',
+                  !podeEditar && 'bg-muted/40',
+                  'print:border-0 print:bg-transparent print:px-0',
+                )}
+              />
+            </label>
             <div className="flex flex-col gap-2 rounded-lg border border-border/70 bg-muted/20 p-2.5 print:hidden sm:flex-row sm:flex-wrap sm:items-end">
               <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-40">
                 Data inicial

@@ -5,6 +5,7 @@ import { CARGA_BUCKET } from '@/lib/supabase/constants'
 export type CorteNuvemLancamento = {
   qtdReal: number | null
   qtdVolumes: number | null
+  qtdVolumesBordados: number | null
   dataInicio: string | null
   dataFinal: string | null
   responsavel: string | null
@@ -71,6 +72,7 @@ function lancamentoDe(raw: unknown): CorteNuvemLancamento | null {
   return {
     qtdReal: numero(row.qtdReal),
     qtdVolumes: numero(row.qtdVolumes),
+    qtdVolumesBordados: numero(row.qtdVolumesBordados),
     dataInicio: texto(row.dataInicio),
     dataFinal: texto(row.dataFinal),
     responsavel: texto(row.responsavel),
@@ -178,6 +180,7 @@ export async function gravarLancamentoNuvem(
   const corpo: CorteNuvemLancamento = {
     qtdReal: lancamento.qtdReal,
     qtdVolumes: lancamento.qtdVolumes,
+    qtdVolumesBordados: lancamento.qtdVolumesBordados,
     dataInicio: lancamento.dataInicio,
     dataFinal,
     responsavel: lancamento.responsavel,

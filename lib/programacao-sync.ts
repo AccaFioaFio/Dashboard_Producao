@@ -32,8 +32,8 @@ function upsertLinha(row: LinhaProgramacao) {
     .prepare(
       `INSERT INTO programacao_linha (
          key, pedido, pedido_norm, cliente, item_id, cod_produto, nome,
-         qtd_pedido, quantidade_producao, data_inicio, data_fim, saved_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         qtd_pedido, quantidade_producao, data_inicio, data_fim, observacoes, saved_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(key) DO UPDATE SET
          pedido = excluded.pedido,
          pedido_norm = excluded.pedido_norm,
@@ -45,6 +45,7 @@ function upsertLinha(row: LinhaProgramacao) {
          quantidade_producao = excluded.quantidade_producao,
          data_inicio = excluded.data_inicio,
          data_fim = excluded.data_fim,
+         observacoes = excluded.observacoes,
          saved_at = excluded.saved_at
        WHERE excluded.saved_at >= programacao_linha.saved_at`,
     )
@@ -60,6 +61,7 @@ function upsertLinha(row: LinhaProgramacao) {
       row.quantidadeProducao,
       row.dataInicio,
       row.dataFim,
+      row.observacoes,
       row.savedAt,
     )
 }
@@ -96,7 +98,8 @@ function pedidosLocais(): ProgramacaoNuvemPedido[] {
       `SELECT key, pedido, pedido_norm as pedidoNorm, cliente,
               item_id as itemId, cod_produto as codProduto, nome,
               qtd_pedido as qtdPedido, quantidade_producao as quantidadeProducao,
-              data_inicio as dataInicio, data_fim as dataFim, saved_at as savedAt
+              data_inicio as dataInicio, data_fim as dataFim,
+              observacoes, saved_at as savedAt
        FROM programacao_linha
        ORDER BY saved_at DESC`,
     )
@@ -111,15 +114,20 @@ function pedidosLocais(): ProgramacaoNuvemPedido[] {
         pedido: row.pedido,
         pedidoNorm: row.pedidoNorm,
         cliente: row.cliente,
+        observacoes: row.observacoes,
         linhas: [row],
         savedAt: row.savedAt,
       })
       continue
     }
     atual.linhas.push(row)
+    if (!atual.observacoes && row.observacoes) {
+      atual.observacoes = row.observacoes
+    }
     if (row.savedAt > atual.savedAt) {
       atual.savedAt = row.savedAt
       atual.cliente = row.cliente ?? atual.cliente
+      atual.observacoes = row.observacoes ?? atual.observacoes
       atual.pedido = row.pedido
       atual.pedidoNorm = row.pedidoNorm
     }
