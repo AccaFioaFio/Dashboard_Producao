@@ -1,5 +1,6 @@
 import {
   CalendarRange,
+  CircleHelp,
   ClipboardCheck,
   Factory,
   Handshake,
@@ -107,6 +108,12 @@ export const navigation: NavItem[] = [
     href: '/configuracoes',
     icon: Settings,
     description: 'Caminhos da pasta Arquivos do Excel, última carga e atualizar dados.',
+  },
+  {
+    title: 'Ajuda',
+    href: '/ajuda',
+    icon: CircleHelp,
+    description: 'Escopo, fontes, KPIs e limites de cada aba.',
   },
 ]
 

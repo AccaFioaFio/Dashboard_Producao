@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react'
+import { AjudaTrigger } from '@/components/ajuda-trigger'
 
 type PageShellProps = {
   title: string
   description: string
   actions?: ReactNode
+  /** Botão “Como funciona” da tela atual. Padrão: ligado. */
+  help?: boolean
   children: ReactNode
 }
 
@@ -11,8 +14,17 @@ export function PageShell({
   title,
   description,
   actions,
+  help = true,
   children,
 }: PageShellProps) {
+  const trailing =
+    help || actions ? (
+      <div className="flex w-full min-w-0 shrink-0 flex-wrap items-center gap-2 md:w-auto md:justify-end">
+        {help ? <AjudaTrigger /> : null}
+        {actions}
+      </div>
+    ) : null
+
   return (
     <main
       className="page-shell flex min-w-0 flex-1 flex-col"
@@ -30,11 +42,7 @@ export function PageShell({
             {description}
           </p>
         </div>
-        {actions ? (
-          <div className="flex w-full min-w-0 shrink-0 flex-wrap items-center gap-2 md:w-auto md:justify-end">
-            {actions}
-          </div>
-        ) : null}
+        {trailing}
       </div>
       {children}
     </main>

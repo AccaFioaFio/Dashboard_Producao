@@ -41,6 +41,8 @@ export function areaForPath(pathname: string): string | null {
 
 export function canAccessPath(pathname: string, acessos: string[]) {
   if (acessos.includes(ALL_ACCESS)) return true
+  // Ajuda é liberada para qualquer usuário logado.
+  if (pathname === '/ajuda' || pathname.startsWith('/ajuda/')) return true
   const area = areaForPath(pathname)
   if (!area) return false
   if (acessos.includes(area)) return true
@@ -48,6 +50,7 @@ export function canAccessPath(pathname: string, acessos: string[]) {
 }
 
 export function canSeeNav(href: string, acessos: string[]) {
+  if (href === '/ajuda') return true
   if (acessos.includes(ALL_ACCESS)) return true
   return acessos.includes(href)
 }
