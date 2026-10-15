@@ -8,16 +8,23 @@ export function ProgramacaoConsultaTela({
 }: {
   podeEditar?: boolean
 }) {
-  const { banco, setBanco, recarregar } = useProgramacaoBanco()
+  const { banco, setBanco, recarregar, erroCarga } = useProgramacaoBanco()
 
   return (
-    <ProgramacaoResumo
-      banco={banco}
-      podeEditar={podeEditar}
-      onAlterou={(next) => {
-        if (next) setBanco(next)
-        else void recarregar()
-      }}
-    />
+    <div className="flex flex-col gap-4">
+      {erroCarga ? (
+        <p className="card-surface px-3 py-2 text-xs text-destructive" role="status">
+          {erroCarga}
+        </p>
+      ) : null}
+      <ProgramacaoResumo
+        banco={banco}
+        podeEditar={podeEditar}
+        onAlterou={(next) => {
+          if (next) setBanco(next)
+          else void recarregar()
+        }}
+      />
+    </div>
   )
 }

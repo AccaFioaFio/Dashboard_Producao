@@ -25,6 +25,7 @@ function espelharLocal(banco: ProgramacaoBanco) {
 
 export function useProgramacaoBanco() {
   const [banco, setBancoState] = useState<ProgramacaoBanco>(VAZIO)
+  const [erroCarga, setErroCarga] = useState<string | null>(null)
 
   const setBanco = useCallback((next: ProgramacaoBanco) => {
     setBancoState(next)
@@ -32,36 +33,52 @@ export function useProgramacaoBanco() {
   }, [])
 
   const recarregar = useCallback(async () => {
-    const result = await carregarProgramacao()
-    if (!result.ok) {
-      const local = lerBancoProgramacao()
-      setBancoState(local.linhas.length > 0 ? local : VAZIO)
-      return local.linhas.length > 0 ? local : VAZIO
-    }
-
-    if (result.banco.linhas.length === 0) {
-      const local = lerBancoProgramacao()
-      if (local.linhas.length > 0) {
-        const imported = await importarProgramacaoLocal(local.linhas)
-        if (imported.ok && imported.banco.linhas.length > 0) {
-          setBanco(imported.banco)
-          return imported.banco
-        }
-        // SQLite ainda vazio: mostra o espelho deste aparelho.
-        setBancoState(local)
-        return local
+    try {
+      const result = await carregarProgramacao()
+      if (!result.ok) {
+        const local = lerBancoProgramacao()
+        const fallback = local.linhas.length > 0 ? local : VAZIO
+        setBancoState(fallback)
+        setErroCarga(
+          local.linhas.length > 0
+            ? 'Não foi possível carregar a programação do servidor. Exibindo cópia local.'
+            : result.error || 'Não foi possível carregar a programação.',
+        )
+        return fallback
       }
-      setBancoState(VAZIO)
-      return VAZIO
-    }
 
-    setBanco(result.banco)
-    return result.banco
+      setErroCarga(null)
+
+      if (result.banco.linhas.length === 0) {
+        const local = lerBancoProgramacao()
+        if (local.linhas.length > 0) {
+          const imported = await importarProgramacaoLocal(local.linhas)
+          if (imported.ok && imported.banco.linhas.length > 0) {
+            setBanco(imported.banco)
+            return imported.banco
+          }
+          // SQLite ainda vazio: mostra o espelho deste aparelho.
+          setBancoState(local)
+          return local
+        }
+        setBancoState(VAZIO)
+        return VAZIO
+      }
+
+      setBanco(result.banco)
+      return result.banco
+    } catch {
+      const local = lerBancoProgramacao()
+      const fallback = local.linhas.length > 0 ? local : VAZIO
+      setBancoState(fallback)
+      setErroCarga('Não foi possível carregar a programação.')
+      return fallback
+    }
   }, [setBanco])
 
   useEffect(() => {
     void recarregar()
   }, [recarregar])
 
-  return { banco, setBanco, recarregar }
+  return { banco, setBanco, recarregar, erroCarga }
 }

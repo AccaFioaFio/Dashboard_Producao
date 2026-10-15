@@ -176,46 +176,50 @@ function Linha({
     }
     const ticket = ++geracao.current
     onOcupada(true)
-    fila.current = fila.current.then(async () => {
-      const atual = valores.current
-      if (ticket !== geracao.current || lancamentoIgual(atual, gravado.current)) {
-        if (ticket === geracao.current) onOcupada(false)
-        return
-      }
-      try {
-        const result = await salvarApontamento({
-          etapa,
-          pedidoNorm,
-          codProduto: item.codProduto,
-          excelRow: item.excelRow,
-          origem: atual.origem,
-          oficina: atual.oficina,
-          qtdPecas: atual.qtdPecas,
-          dataProducao: atual.dataProducao,
-          responsavel: atual.responsavel,
-          observacao: atual.observacao,
-          nomeProduto: item.nomeProduto,
-        })
-        if (!viva.current || ticket !== geracao.current) return
-        if (result.ok) gravado.current = atual
-        const preenchido =
-          Boolean(
-            atual.origem ||
-              atual.oficina ||
-              atual.dataProducao ||
-              atual.responsavel ||
-              atual.observacao.trim(),
-          ) || atual.qtdPecas.trim() !== ''
-        setErro(result.ok ? null : result.error)
-        setAviso(result.ok && preenchido ? 'Gravado neste pedido.' : null)
-      } catch {
-        if (viva.current && ticket === geracao.current) {
-          setErro('Não foi possível gravar agora.')
+    fila.current = fila.current
+      .then(async () => {
+        const atual = valores.current
+        if (ticket !== geracao.current || lancamentoIgual(atual, gravado.current)) {
+          if (ticket === geracao.current) onOcupada(false)
+          return
         }
-      } finally {
-        if (viva.current && ticket === geracao.current) onOcupada(false)
-      }
-    })
+        try {
+          const result = await salvarApontamento({
+            etapa,
+            pedidoNorm,
+            codProduto: item.codProduto,
+            excelRow: item.excelRow,
+            origem: atual.origem,
+            oficina: atual.oficina,
+            qtdPecas: atual.qtdPecas,
+            dataProducao: atual.dataProducao,
+            responsavel: atual.responsavel,
+            observacao: atual.observacao,
+            nomeProduto: item.nomeProduto,
+          })
+          if (!viva.current || ticket !== geracao.current) return
+          if (result.ok) gravado.current = atual
+          const preenchido =
+            Boolean(
+              atual.origem ||
+                atual.oficina ||
+                atual.dataProducao ||
+                atual.responsavel ||
+                atual.observacao.trim(),
+            ) || atual.qtdPecas.trim() !== ''
+          setErro(result.ok ? null : result.error)
+          setAviso(result.ok && preenchido ? 'Gravado neste pedido.' : null)
+        } catch {
+          if (viva.current && ticket === geracao.current) {
+            setErro('Não foi possível gravar agora.')
+          }
+        } finally {
+          if (viva.current && ticket === geracao.current) onOcupada(false)
+        }
+      })
+      .catch(() => {
+        /* mantém a fila viva após falha inesperada */
+      })
   }
 
   function agendar(next: Lancamento) {
@@ -260,6 +264,8 @@ function Linha({
         responsavel: next.responsavel,
         observacao: next.observacao,
         nomeProduto: item.nomeProduto,
+      }).catch(() => {
+        /* unmount: evita rejection não tratada */
       })
     }
   }, [etapa, item.codProduto, item.excelRow, pedidoNorm, item.nomeProduto])

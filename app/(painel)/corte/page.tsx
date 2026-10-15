@@ -4,7 +4,13 @@ import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { FilterBar } from '@/components/filter-bar'
-import { getCorteBreakdown, getFilterOptions } from '@/data/dashboard'
+import { SectionPlaceholder } from '@/components/section-placeholder'
+import { Scissors } from 'lucide-react'
+import {
+  getCorteBreakdown,
+  getFilterOptions,
+  getLatestCarga,
+} from '@/data/dashboard'
 import {
   MONTH_LABELS,
   formatDate,
@@ -36,10 +42,33 @@ export default async function CortePage({
 }) {
   const params = await searchParams
   const filters = parseFilters(params)
-  const [corte, options] = await Promise.all([
+  const [corte, options, carga] = await Promise.all([
     getCorteBreakdown(filters),
     getFilterOptions(),
+    getLatestCarga(),
   ])
+
+  if (!carga) {
+    return (
+      <PageShell
+        title="Corte"
+        description="Volume em peça e pedido. Agosto explode linha de tecido: não use contagem de linha. Consumo e baixa de tecido ficam na aba Tecidos."
+        actions={
+          <>
+            <VerProgramacaoButton area="corte" />
+            <CorteProducaoButton />
+            <CorteAcaoButton filters={filters} />
+          </>
+        }
+      >
+        <SectionPlaceholder
+          icon={Scissors}
+          title="Nenhuma carga 2026"
+          description="Atualize os dados em Configurações para liberar o Corte."
+        />
+      </PageShell>
+    )
+  }
 
   return (
     <PageShell

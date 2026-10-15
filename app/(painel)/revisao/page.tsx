@@ -4,9 +4,12 @@ import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { FilterBar } from '@/components/filter-bar'
+import { SectionPlaceholder } from '@/components/section-placeholder'
+import { ClipboardCheck } from 'lucide-react'
 import {
   getFilterOptions,
   getFunil,
+  getLatestCarga,
   getRevisao,
   getSerieMensal,
 } from '@/data/dashboard'
@@ -29,13 +32,35 @@ export default async function RevisaoPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   const filters = parseFilters(await searchParams)
-  const [revisao, funil, serie, options] = await Promise.all([
+  const [revisao, funil, serie, options, carga] = await Promise.all([
     getRevisao(filters),
     getFunil(),
     getSerieMensal(),
     getFilterOptions(),
+    getLatestCarga(),
   ])
   const pecasHoje = revisao.doDia.reduce((sum, row) => sum + row.pecas, 0)
+
+  if (!carga) {
+    return (
+      <PageShell
+        title="Revisão"
+        description="Sem linha de total da tabela e sem Qtd igual ao número do pedido."
+        actions={
+          <>
+            <VerProgramacaoButton area="revisao" />
+            <RevisaoLancamentoButton />
+          </>
+        }
+      >
+        <SectionPlaceholder
+          icon={ClipboardCheck}
+          title="Nenhuma carga 2026"
+          description="Atualize os dados em Configurações para liberar a Revisão."
+        />
+      </PageShell>
+    )
+  }
 
   return (
     <PageShell

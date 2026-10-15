@@ -118,33 +118,41 @@ function Linha({
     }
     const ticket = ++geracao.current
     onOcupada(true)
-    fila.current = fila.current.then(async () => {
-      const atual = valores.current
-      if (ticket !== geracao.current || lancamentoIgual(atual, gravado.current)) {
-        if (ticket === geracao.current) onOcupada(false)
-        return
-      }
-      try {
-        const result = await salvarCorteProducao({
-          pedidoNorm,
-          codProduto: item.codProduto,
-          excelRow: item.excelRow,
-          qtdReal: atual.qtdReal,
-          qtdVolumes: atual.qtdVolumes,
-          qtdVolumesBordados: atual.qtdVolumesBordados,
-          dataInicio: atual.dataInicio,
-          dataFinal: atual.dataFinal,
-          responsavel: atual.responsavel,
-          nomeProduto: item.nomeProduto,
-        })
-        if (!viva.current || ticket !== geracao.current) return
-        if (result.ok) gravado.current = atual
-        setErro(result.ok ? null : result.error)
-        setAviso(result.ok ? (result.aviso ?? null) : null)
-      } finally {
-        if (viva.current && ticket === geracao.current) onOcupada(false)
-      }
-    })
+    fila.current = fila.current
+      .then(async () => {
+        const atual = valores.current
+        if (ticket !== geracao.current || lancamentoIgual(atual, gravado.current)) {
+          if (ticket === geracao.current) onOcupada(false)
+          return
+        }
+        try {
+          const result = await salvarCorteProducao({
+            pedidoNorm,
+            codProduto: item.codProduto,
+            excelRow: item.excelRow,
+            qtdReal: atual.qtdReal,
+            qtdVolumes: atual.qtdVolumes,
+            qtdVolumesBordados: atual.qtdVolumesBordados,
+            dataInicio: atual.dataInicio,
+            dataFinal: atual.dataFinal,
+            responsavel: atual.responsavel,
+            nomeProduto: item.nomeProduto,
+          })
+          if (!viva.current || ticket !== geracao.current) return
+          if (result.ok) gravado.current = atual
+          setErro(result.ok ? null : result.error)
+          setAviso(result.ok ? (result.aviso ?? null) : null)
+        } catch {
+          if (viva.current && ticket === geracao.current) {
+            setErro('Não foi possível gravar agora.')
+          }
+        } finally {
+          if (viva.current && ticket === geracao.current) onOcupada(false)
+        }
+      })
+      .catch(() => {
+        /* mantém a fila viva após falha inesperada */
+      })
   }
 
   function agendar(next: Lancamento) {
@@ -177,6 +185,8 @@ function Linha({
         dataFinal: next.dataFinal,
         responsavel: next.responsavel,
         nomeProduto: item.nomeProduto,
+      }).catch(() => {
+        /* unmount: evita rejection não tratada */
       })
     }
   }, [item.codProduto, item.excelRow, pedidoNorm])

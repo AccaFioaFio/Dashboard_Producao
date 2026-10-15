@@ -6,6 +6,7 @@ import {
   type ApontamentoNuvemComPedido,
 } from '@/lib/apontamento-nuvem'
 import { EXCEL_ROW_FORA_DA_CARGA } from '@/lib/corte-producao'
+import { setDataHealthWarning } from '@/lib/cloud/data-health'
 import { isSupabaseConfigured } from '@/lib/supabase/admin'
 
 export type ApontamentoSyncResult = {
@@ -140,6 +141,9 @@ async function syncOnce(): Promise<ApontamentoSyncResult> {
     return lastResult
   } catch (error) {
     console.error('sync apontamento nuvem → sqlite falhou', error)
+    setDataHealthWarning(
+      'Não foi possível sincronizar lançamentos da nuvem. Costura/revisão podem estar incompletos.',
+    )
     lastAt = Date.now()
     return lastResult
   }

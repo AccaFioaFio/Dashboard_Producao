@@ -30,6 +30,10 @@ import {
   IS_CLOUD,
   ensureDataDirs,
 } from '@/lib/paths'
+import {
+  clearDataHealthWarning,
+  setDataHealthWarning,
+} from '@/lib/cloud/data-health'
 
 // Undici na Vercel às vezes falha em IPv6 para *.supabase.co ("fetch failed").
 try {
@@ -85,6 +89,9 @@ async function restoreDatabase(force: boolean) {
       .list('', { search: CARGA_OBJECT, limit: 10 })
 
     if (listError) {
+      setDataHealthWarning(
+        'Não foi possível consultar a carga na nuvem. Os números podem estar desatualizados.',
+      )
       getSqlite()
       return
     }
@@ -99,12 +106,16 @@ async function restoreDatabase(force: boolean) {
       ''
 
     if (!force && etag && etag === localEtag && existsSync(DB_PATH)) {
+      clearDataHealthWarning()
       getSqlite()
       return
     }
 
     const downloaded = await downloadCargaBytes(client)
     if (!downloaded.ok) {
+      setDataHealthWarning(
+        'Não foi possível baixar a carga da nuvem. Os números podem estar desatualizados.',
+      )
       getSqlite()
       return
     }
@@ -121,7 +132,11 @@ async function restoreDatabase(force: boolean) {
     mergeProgramacaoOperacao(backupProgramacao)
     mergeProgramacaoHistorico(backupHistorico)
     localEtag = etag || String(downloaded.bytes.length)
+    clearDataHealthWarning()
   } catch {
+    setDataHealthWarning(
+      'Falha ao restaurar a carga da nuvem. Os números podem estar desatualizados.',
+    )
     getSqlite()
   }
 }

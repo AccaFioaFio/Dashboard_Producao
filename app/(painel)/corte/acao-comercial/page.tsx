@@ -6,7 +6,13 @@ import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { DonutChart } from '@/components/donut-chart'
 import { FilterBar } from '@/components/filter-bar'
 import { CorteVoltarButton } from '@/components/corte-acao-nav'
-import { getAcaoComercial, getFilterOptions } from '@/data/dashboard'
+import { SectionPlaceholder } from '@/components/section-placeholder'
+import { Handshake } from 'lucide-react'
+import {
+  getAcaoComercial,
+  getFilterOptions,
+  getLatestCarga,
+} from '@/data/dashboard'
 import { MONTH_LABELS, formatInt, formatNumber } from '@/lib/format'
 import { parseFilters } from '@/lib/filters'
 
@@ -19,11 +25,28 @@ export default async function AcaoComercialPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   const filters = parseFilters(await searchParams)
-  const [acao, options] = await Promise.all([
+  const [acao, options, carga] = await Promise.all([
     getAcaoComercial(filters),
     getFilterOptions(),
+    getLatestCarga(),
   ])
   const pct = acao.pctAproveitamento
+
+  if (!carga) {
+    return (
+      <PageShell
+        title="Ação Comercial"
+        description="Sobra de corte em TAB_ENTRADA menos peças já aproveitadas em TAB_SAIDA. Saldo = cortadas − aproveitadas."
+        actions={<CorteVoltarButton filters={filters} />}
+      >
+        <SectionPlaceholder
+          icon={Handshake}
+          title="Nenhuma carga 2026"
+          description="Atualize os dados em Configurações para liberar a Ação Comercial."
+        />
+      </PageShell>
+    )
+  }
 
   return (
     <PageShell

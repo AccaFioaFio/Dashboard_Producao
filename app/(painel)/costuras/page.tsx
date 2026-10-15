@@ -4,10 +4,13 @@ import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { FilterBar } from '@/components/filter-bar'
+import { SectionPlaceholder } from '@/components/section-placeholder'
+import { Shirt } from 'lucide-react'
 import {
   getCosturas,
   getFilterOptions,
   getFunil,
+  getLatestCarga,
   getSerieMensal,
 } from '@/data/dashboard'
 import { MONTH_LABELS, formatDate, formatInt, formatProduto } from '@/lib/format'
@@ -30,16 +33,38 @@ export default async function CosturasPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   const filters = parseFilters(await searchParams)
-  const [costuras, funil, serie, options] = await Promise.all([
+  const [costuras, funil, serie, options, carga] = await Promise.all([
     getCosturas(filters),
     getFunil(),
     getSerieMensal(),
     getFilterOptions(),
+    getLatestCarga(),
   ])
   const pecasServico = costuras.mix
     .filter((row) => row.origemNorm !== 'Producao')
     .reduce((sum, row) => sum + row.pecas, 0)
   const pecasHoje = costuras.doDia.reduce((sum, row) => sum + row.pecas, 0)
+
+  if (!carga) {
+    return (
+      <PageShell
+        title="Costuras"
+        description="Funil usa só Origem = Produção. Etiqueta, festonê e conserto ficam no mix de serviço."
+        actions={
+          <>
+            <VerProgramacaoButton area="costuras" />
+            <CosturaProducaoButton />
+          </>
+        }
+      >
+        <SectionPlaceholder
+          icon={Shirt}
+          title="Nenhuma carga 2026"
+          description="Atualize os dados em Configurações para liberar as Costuras."
+        />
+      </PageShell>
+    )
+  }
 
   return (
     <PageShell

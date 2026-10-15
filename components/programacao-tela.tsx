@@ -22,7 +22,7 @@ export function ProgramacaoTela({
 }: {
   podeEditar?: boolean
 }) {
-  const { banco, setBanco, recarregar } = useProgramacaoBanco()
+  const { banco, setBanco, recarregar, erroCarga } = useProgramacaoBanco()
   const [abaMobile, setAbaMobile] = useState<AbaMobile>('consultar')
   const [impressaoLista, setImpressaoLista] = useState<ProgramacaoImpressaoEstado>({
     periodoLabel: null,
@@ -47,6 +47,11 @@ export function ProgramacaoTela({
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
+      {erroCarga ? (
+        <p className="card-surface px-3 py-2 text-xs text-destructive" role="status">
+          {erroCarga}
+        </p>
+      ) : null}
       {podeEditar ? (
         <div className="flex gap-1.5 md:hidden print:hidden">
           {abasMobile.map(([value, label]) => (

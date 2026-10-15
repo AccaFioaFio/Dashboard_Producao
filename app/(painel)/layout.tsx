@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
+import { Suspense } from 'react'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { AppHeader } from '@/components/app-header'
 import { AppSidebar } from '@/components/app-sidebar'
+import { CargaAvisoBanner } from '@/components/carga-aviso-banner'
 import { CargaStamp } from '@/components/carga-stamp'
 import { UltimaAtualizacaoSlot } from '@/components/ultima-atualizacao-slot'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
@@ -31,6 +33,9 @@ export default async function PainelLayout({
       />
       <SidebarInset className="relative min-h-0 min-w-0 overflow-hidden">
         <AppHeader acessos={session.acessos} stamp={<CargaStamp />} />
+        <Suspense fallback={null}>
+          <CargaAvisoBanner />
+        </Suspense>
         <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[env(safe-area-inset-bottom)]">
           {children}
         </div>

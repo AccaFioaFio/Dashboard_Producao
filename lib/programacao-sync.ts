@@ -6,6 +6,7 @@ import {
   type ProgramacaoNuvemPedido,
 } from '@/lib/programacao-nuvem'
 import type { LinhaProgramacao } from '@/lib/programacao'
+import { setDataHealthWarning } from '@/lib/cloud/data-health'
 import { isSupabaseConfigured } from '@/lib/supabase/admin'
 
 const TTL_MS = 15_000
@@ -164,6 +165,9 @@ async function syncOnce(): Promise<number> {
     return merged
   } catch (error) {
     console.error('sync programação nuvem → sqlite falhou', error)
+    setDataHealthWarning(
+      'Não foi possível sincronizar a programação da nuvem. A lista pode estar incompleta.',
+    )
     lastAt = Date.now()
     return lastMerged
   }

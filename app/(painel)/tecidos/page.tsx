@@ -5,7 +5,9 @@ import { SimpleTable } from '@/components/simple-table'
 import { MonthlyAreaChart } from '@/components/monthly-area-chart'
 import { FilterBar } from '@/components/filter-bar'
 import { TecidosSubNav } from '@/components/tecidos-valores-nav'
-import { getFilterOptions, getTecidos } from '@/data/dashboard'
+import { SectionPlaceholder } from '@/components/section-placeholder'
+import { Layers } from 'lucide-react'
+import { getFilterOptions, getLatestCarga, getTecidos } from '@/data/dashboard'
 import {
   MONTH_LABELS,
   TIPO_TECIDO_LABEL,
@@ -38,9 +40,10 @@ export default async function TecidosPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   const filters = withCategoriaPadrao(parseFilters(await searchParams))
-  const [tecidos, options] = await Promise.all([
+  const [tecidos, options, carga] = await Promise.all([
     getTecidos(filters),
     getFilterOptions(),
+    getLatestCarga(),
   ])
   const metrosCorte = tecidos.metrosCorte
   const metrosSignus = tecidos.metrosSignus
@@ -66,6 +69,22 @@ export default async function TecidosPage({
   const movCanal = baixaCanal?.movimentos ?? 0
   const pedidosProducao = baixaProducao?.pedidos ?? 0
   const pedidosCanal = baixaCanal?.pedidos ?? 0
+
+  if (!carga) {
+    return (
+      <PageShell
+        title="Tecidos"
+        description={`Consumo no Corte e baixa no Signus (${YEAR}), cruzados pelo código do tecido. Signus e saldo só dos almox ${ALMOX_PRINCIPAIS_LABEL}, categoria MATÉRIA PRIMA por padrão. A diferença com o Corte usa só baixas com nº de pedido; baixas sem pedido ficam em card separado. Ambos já vêm filtrados pelo ano na carga — Corte pela data do pedido, Signus pela data do movimento. Saldo do estoque é snapshot (não filtra por mês/ano).`}
+        actions={<TecidosSubNav filters={filters} current="metros" />}
+      >
+        <SectionPlaceholder
+          icon={Layers}
+          title="Nenhuma carga 2026"
+          description="Atualize os dados em Configurações para liberar os Tecidos."
+        />
+      </PageShell>
+    )
+  }
 
   return (
     <PageShell

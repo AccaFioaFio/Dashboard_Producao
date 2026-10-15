@@ -554,9 +554,15 @@ export const getSerieMensal = cache(async (): Promise<SerieMensal[]> => {
     costura: 0,
     revisao: 0,
   }))
-  for (const row of cortadas) months[row.mes - 1].cortadas = row.pecas
-  for (const row of costura) months[row.mes - 1].costura = row.pecas
-  for (const row of revisao) months[row.mes - 1].revisao = row.pecas
+  for (const row of cortadas) {
+    if (row.mes >= 1 && row.mes <= 12) months[row.mes - 1].cortadas = row.pecas
+  }
+  for (const row of costura) {
+    if (row.mes >= 1 && row.mes <= 12) months[row.mes - 1].costura = row.pecas
+  }
+  for (const row of revisao) {
+    if (row.mes >= 1 && row.mes <= 12) months[row.mes - 1].revisao = row.pecas
+  }
   return months.filter((row) => row.cortadas || row.costura || row.revisao)
 })
 
