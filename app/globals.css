@@ -872,4 +872,18 @@
     box-shadow: none !important;
     backdrop-filter: none !important;
   }
+
+  /* Impressão da lista (consulta): mostra só o layout escolhido. */
+  html[data-print='lista-recolhido'] [data-programacao-print='lista-recolhido'],
+  html[data-print='lista-expandido'] [data-programacao-print='lista-expandido'] {
+    display: flex !important;
+  }
+
+  html[data-print='lista-recolhido'] [data-programacao-print='pedido'],
+  html[data-print='lista-expandido'] [data-programacao-print='pedido'],
+  html[data-print='lista-recolhido'] [data-programacao-print='lista-expandido'],
+  html[data-print='lista-expandido'] [data-programacao-print='lista-recolhido'],
+  html[data-print='pedido'] [data-programacao-print^='lista-'] {
+    display: none !important;
+  }
 }

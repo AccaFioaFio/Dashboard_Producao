@@ -1,12 +1,16 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, Minus, Plus, Trash2 } from 'lucide-react'
+import { CalendarDays, Minus, Plus, Printer, Trash2 } from 'lucide-react'
 import {
   carregarHistoricoProgramacao,
   excluirItemProgramacao,
   excluirPedidoProgramacaoAction,
 } from '@/app/actions/programacao'
+import {
+  dispararImpressaoProgramacao,
+  ProgramacaoImpressaoLista,
+} from '@/components/programacao-impressao'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatDate, formatDateTime, formatInt } from '@/lib/format'
@@ -543,16 +547,47 @@ export function ProgramacaoResumo({
 
   const temProgramacaoSalva = datasDisponiveis.length > 0
 
+  const podeImprimirLista = pedidos.length > 0 && aba === 'atual'
+
   return (
+    <>
     <section className="card-surface flex flex-col gap-3 p-3 print:hidden">
-      <div>
-        <h2 className="text-sm font-semibold tracking-wide">
-          Consultar programação
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Escolha dia, semana ou mês. Ao selecionar, veja o pedido e expanda os
-          produtos.
-        </p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-sm font-semibold tracking-wide">
+            Consultar programação
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Escolha dia, semana ou mês. Ao selecionar, veja o pedido e expanda os
+            produtos.
+          </p>
+        </div>
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-10 w-full sm:h-8 sm:w-auto"
+            disabled={!podeImprimirLista}
+            onClick={() => dispararImpressaoProgramacao('lista-recolhido')}
+            title="Imprime pedidos sem abrir os itens"
+          >
+            <Printer />
+            Imprimir pedidos
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-10 w-full sm:h-8 sm:w-auto"
+            disabled={!podeImprimirLista}
+            onClick={() => dispararImpressaoProgramacao('lista-expandido')}
+            title="Imprime pedidos com a lista de itens"
+          >
+            <Printer />
+            Imprimir com itens
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
@@ -924,5 +959,11 @@ export function ProgramacaoResumo({
         </>
       )}
     </section>
+
+    <ProgramacaoImpressaoLista
+      periodoLabel={periodoLabel}
+      pedidos={pedidos}
+    />
+    </>
   )
 }

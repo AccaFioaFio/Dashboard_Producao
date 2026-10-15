@@ -17,6 +17,7 @@ import {
   excluirPedidoProgramacaoAction,
   salvarPedidoProgramacao,
 } from '@/app/actions/programacao'
+import { dispararImpressaoProgramacao } from '@/components/programacao-impressao'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatDate, formatInt } from '@/lib/format'
@@ -476,7 +477,7 @@ export function ProgramacaoMontar({
   function imprimir() {
     if (!podeImprimir) return
     setItens(prontos)
-    window.setTimeout(() => window.print(), 50)
+    dispararImpressaoProgramacao('pedido')
   }
 
   return (
@@ -520,7 +521,7 @@ export function ProgramacaoMontar({
 
       <section
         className="card-surface flex flex-col gap-3 p-3 print:border print:border-foreground/20 print:shadow-none"
-        data-programacao-print
+        data-programacao-print="pedido"
       >
         <div className="hidden print:block">
           <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
@@ -652,7 +653,7 @@ export function ProgramacaoMontar({
                 para incluir os itens.
               </p>
             ) : null}
-            <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground print:hidden">
               Observações
               <textarea
                 value={observacoes}
@@ -664,7 +665,6 @@ export function ProgramacaoMontar({
                 className={cn(
                   'min-h-16 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/40',
                   !podeEditar && 'bg-muted/40',
-                  'print:border-0 print:bg-transparent print:px-0',
                 )}
               />
             </label>

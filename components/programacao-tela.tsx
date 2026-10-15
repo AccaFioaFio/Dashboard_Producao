@@ -54,7 +54,7 @@ export function ProgramacaoTela({
         <div
           className={cn(
             'md:order-1',
-            abaMobile !== 'montar' && 'hidden md:block',
+            abaMobile !== 'montar' && 'hidden md:block print:contents',
           )}
         >
           <ProgramacaoMontar
@@ -68,7 +68,7 @@ export function ProgramacaoTela({
       <div
         className={cn(
           'md:order-2',
-          podeEditar && abaMobile !== 'consultar' && 'hidden md:block',
+          podeEditar && abaMobile !== 'consultar' && 'hidden md:block print:contents',
         )}
       >
         <ProgramacaoResumo
