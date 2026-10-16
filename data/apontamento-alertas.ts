@@ -99,25 +99,28 @@ async function alertasDaEtapa(etapa: EtapaApontamento): Promise<AlertaApontament
   }))
 
   let nuvem: AlertaApontamento[] = []
+  const chavesNuvem = new Set<string>()
   try {
-    nuvem = (await listarAlertasApontamentoNuvem(etapa))
-      .filter((alerta) => !alerta.vistoEm)
-      .map((alerta) => ({
+    for (const alerta of await listarAlertasApontamentoNuvem(etapa)) {
+      chavesNuvem.add(`${alerta.pedidoNorm}|${alerta.enviadoEm}`)
+      if (alerta.vistoEm) continue
+      nuvem.push({
         id: alerta.id,
         etapa,
         pedidoNorm: alerta.pedidoNorm,
         cliente: alerta.cliente,
         enviadoEm: alerta.enviadoEm,
         itens: alerta.itens,
-      }))
+      })
+    }
   } catch (error) {
     console.error('alertas de apontamento na nuvem falharam', etapa, error)
   }
 
-  const chaves = new Set(nuvem.map((alerta) => `${alerta.pedidoNorm}|${alerta.enviadoEm}`))
+  // Se a nuvem já tem o alerta (visto ou não), o local não entra de novo.
   return [
     ...nuvem,
-    ...locais.filter((alerta) => !chaves.has(`${alerta.pedidoNorm}|${alerta.enviadoEm}`)),
+    ...locais.filter((alerta) => !chavesNuvem.has(`${alerta.pedidoNorm}|${alerta.enviadoEm}`)),
   ].sort(
     (a, b) => b.enviadoEm.localeCompare(a.enviadoEm) || b.id.localeCompare(a.id),
   )

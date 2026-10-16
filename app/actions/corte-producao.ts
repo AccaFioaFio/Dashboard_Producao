@@ -19,6 +19,7 @@ import {
   apagarLancamentoNuvem,
   criarAlertaNuvem,
   gravarLancamentoNuvem,
+  listarAlertasNuvem,
   marcarAlertaNuvemVisto,
   marcarAvisoNuvem,
 } from '@/lib/corte-nuvem'
@@ -589,19 +590,77 @@ export async function marcarAlertaCorteVisto(alertaId: string) {
   }
   await ensureCloudDatabase()
   const vistoEm = new Date().toISOString()
+  const db = getSqlite()
+
+  let pedidoNorm: string | null = null
+  let enviadoEm: string | null = null
+
   if (/^\d+$/.test(id)) {
-    getSqlite()
+    const row = db
       .prepare(
-        `UPDATE corte_producao_alerta
-         SET visto_em = ?
-         WHERE id = ? AND visto_em IS NULL`,
+        `SELECT pedido_norm as pedidoNorm, enviado_em as enviadoEm
+         FROM corte_producao_alerta
+         WHERE id = ?`,
       )
-      .run(vistoEm, Number(id))
+      .get(Number(id)) as { pedidoNorm: string; enviadoEm: string } | undefined
+    if (row) {
+      pedidoNorm = row.pedidoNorm
+      enviadoEm = row.enviadoEm
+    }
   }
-  const nuvem = await marcarAlertaNuvemVisto(id)
-  if (!nuvem.ok) {
-    return { ok: false as const, error: nuvem.error ?? 'Não marcou o alerta na nuvem.' }
+
+  try {
+    const alertasNuvem = await listarAlertasNuvem()
+    const alvo =
+      alertasNuvem.find((alerta) => alerta.id === id) ??
+      (pedidoNorm && enviadoEm
+        ? alertasNuvem.find(
+            (alerta) =>
+              alerta.pedidoNorm === pedidoNorm && alerta.enviadoEm === enviadoEm,
+          )
+        : undefined)
+    if (alvo) {
+      pedidoNorm = alvo.pedidoNorm
+      enviadoEm = alvo.enviadoEm
+    }
+    const idsNuvem = new Set<string>()
+    if (alvo) idsNuvem.add(alvo.id)
+    for (const alerta of alertasNuvem) {
+      if (
+        pedidoNorm &&
+        enviadoEm &&
+        alerta.pedidoNorm === pedidoNorm &&
+        alerta.enviadoEm === enviadoEm
+      ) {
+        idsNuvem.add(alerta.id)
+      }
+    }
+    if (!alvo) idsNuvem.add(id)
+    for (const nuvemId of idsNuvem) {
+      const nuvem = await marcarAlertaNuvemVisto(nuvemId)
+      if (!nuvem.ok) {
+        return { ok: false as const, error: nuvem.error ?? 'Não marcou o alerta na nuvem.' }
+      }
+    }
+  } catch (error) {
+    console.error('marcar alerta de corte na nuvem falhou', error)
   }
+
+  // Local e nuvem usam IDs diferentes; fecha os dois pelo pedido + horário do envio.
+  if (pedidoNorm && enviadoEm) {
+    db.prepare(
+      `UPDATE corte_producao_alerta
+       SET visto_em = ?
+       WHERE pedido_norm = ? AND enviado_em = ? AND visto_em IS NULL`,
+    ).run(vistoEm, pedidoNorm, enviadoEm)
+  } else if (/^\d+$/.test(id)) {
+    db.prepare(
+      `UPDATE corte_producao_alerta
+       SET visto_em = ?
+       WHERE id = ? AND visto_em IS NULL`,
+    ).run(vistoEm, Number(id))
+  }
+
   revalidatePath('/')
   return { ok: true as const }
 }

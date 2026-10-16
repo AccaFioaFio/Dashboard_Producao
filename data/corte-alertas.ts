@@ -77,22 +77,26 @@ export const getAlertasCorteAbertos = cache(async (): Promise<AlertaCorte[]> => 
   }))
 
   let nuvem: AlertaCorte[] = []
+  const chavesNuvem = new Set<string>()
   try {
-    nuvem = (await listarAlertasNuvem())
-      .filter((alerta) => !alerta.vistoEm)
-      .map((alerta) => ({
+    for (const alerta of await listarAlertasNuvem()) {
+      chavesNuvem.add(`${alerta.pedidoNorm}|${alerta.enviadoEm}`)
+      if (alerta.vistoEm) continue
+      nuvem.push({
         id: alerta.id,
         pedidoNorm: alerta.pedidoNorm,
         cliente: alerta.cliente,
         enviadoEm: alerta.enviadoEm,
         itens: alerta.itens,
-      }))
+      })
+    }
   } catch (error) {
     console.error('alertas de corte na nuvem falharam', error)
   }
 
-  const chaves = new Set(nuvem.map((alerta) => `${alerta.pedidoNorm}|${alerta.enviadoEm}`))
-  return [...nuvem, ...locais.filter((alerta) => !chaves.has(`${alerta.pedidoNorm}|${alerta.enviadoEm}`))].sort(
-    (a, b) => b.enviadoEm.localeCompare(a.enviadoEm) || b.id.localeCompare(a.id),
-  )
+  // Se a nuvem já tem o alerta (visto ou não), o local não entra de novo.
+  return [
+    ...nuvem,
+    ...locais.filter((alerta) => !chavesNuvem.has(`${alerta.pedidoNorm}|${alerta.enviadoEm}`)),
+  ].sort((a, b) => b.enviadoEm.localeCompare(a.enviadoEm) || b.id.localeCompare(a.id))
 })

@@ -14,7 +14,13 @@ function quantidade(value: number | null) {
   return formatNumber(value, value % 1 ? 2 : 0)
 }
 
-function VistoButton({ id }: { id: string }) {
+function VistoButton({
+  id,
+  onVisto,
+}: {
+  id: string
+  onVisto: (id: string) => void
+}) {
   const router = useRouter()
   const [erro, setErro] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -34,6 +40,7 @@ function VistoButton({ id }: { id: string }) {
               setErro(result.error)
               return
             }
+            onVisto(id)
             router.refresh()
           })
         }}
@@ -46,7 +53,9 @@ function VistoButton({ id }: { id: string }) {
 }
 
 export function AlertaCorteLista({ alertas }: { alertas: AlertaCorte[] }) {
-  if (!alertas.length) return null
+  const [ocultos, setOcultos] = useState<Set<string>>(() => new Set())
+  const visiveis = alertas.filter((alerta) => !ocultos.has(alerta.id))
+  if (!visiveis.length) return null
 
   return (
     <section id="cortes-avisados" className="card-surface flex flex-col gap-3 p-3">
@@ -55,7 +64,7 @@ export function AlertaCorteLista({ alertas }: { alertas: AlertaCorte[] }) {
         <h2 className="text-sm font-medium">Lista do cortador</h2>
       </div>
       <ul className="flex flex-col gap-3">
-        {alertas.map((alerta) => (
+        {visiveis.map((alerta) => (
           <li key={alerta.id} className="flex flex-col gap-2 border-t border-border/80 pt-3 first:border-t-0 first:pt-0">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
@@ -68,7 +77,16 @@ export function AlertaCorteLista({ alertas }: { alertas: AlertaCorte[] }) {
                   {alerta.itens.length === 1 ? '1 produto' : `${alerta.itens.length} produtos`}
                 </p>
               </div>
-              <VistoButton id={alerta.id} />
+              <VistoButton
+                id={alerta.id}
+                onVisto={(id) =>
+                  setOcultos((prev) => {
+                    const next = new Set(prev)
+                    next.add(id)
+                    return next
+                  })
+                }
+              />
             </div>
             <ul className="flex flex-col gap-1 text-xs">
               {alerta.itens.map((item) => {
@@ -83,7 +101,8 @@ export function AlertaCorteLista({ alertas }: { alertas: AlertaCorte[] }) {
                     {' · '}
                     {nome}
                     {' · '}
-                    {quantidade(item.qtdReal)} un.
+                    <span className="font-bold tabular-nums">{quantidade(item.qtdReal)}</span>
+                    {' un.'}
                     {' · '}
                     {item.responsavel?.trim() || 'sem responsável'}
                     {' · final '}
