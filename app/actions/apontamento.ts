@@ -24,7 +24,6 @@ import {
   somarEntradaApontamentoNuvem,
 } from '@/lib/apontamento-nuvem'
 import { enviarAvisoApontamentoWhatsApp } from '@/lib/whatsapp/apontamento-finalizado'
-import { isProducaoOrigem } from '@/lib/keys'
 import { EXCEL_ROW_FORA_DA_CARGA } from '@/lib/corte-producao'
 import { getApontamentoPedido } from '@/data/apontamento'
 import { pedidoDigits } from '@/lib/pedido'
@@ -587,7 +586,7 @@ function tabelasAlerta(etapa: EtapaApontamento) {
     ? {
         alerta: 'costura_producao_alerta',
         item: 'costura_producao_alerta_item',
-        listaNome: 'lista de costura produção',
+        listaNome: 'lista de costura',
       }
     : {
         alerta: 'revisao_alerta',
@@ -664,7 +663,9 @@ export async function salvarListaApontamento(
       const chave = item.codProduto.trim().replaceAll(' ', '').toLocaleLowerCase('pt-BR')
       if (chave !== codFiltro) continue
     }
-    if (etapa === 'costura' && !isProducaoOrigem(item.origem)) continue
+    // Produção e serviços (etiqueta, festonê, conserto) entram na lista; o funil
+    // continua filtrando só Produção nos KPIs.
+    if (etapa === 'costura' && !origemCosturaValida(item.origem ?? '')) continue
     // Um aviso por produto+data (várias somas no mesmo dia entram juntas).
     const chaveAviso = `${item.codProduto}\0${item.dataProducao}`
     if (vistos.has(chaveAviso)) continue
@@ -689,7 +690,7 @@ export async function salvarListaApontamento(
       itens: [],
       aviso:
         etapa === 'costura'
-          ? `Nenhum item novo para ${foco}. Preencha origem Produção, qtd, data e responsável e salve de novo.`
+          ? `Nenhum item novo para ${foco}. Preencha origem, qtd, data e responsável e salve de novo.`
           : `Nenhum item novo para ${foco}. Preencha qtd, data e responsável e salve de novo.`,
     }
   }
