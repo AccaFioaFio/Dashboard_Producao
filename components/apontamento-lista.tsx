@@ -8,7 +8,6 @@ import {
   useTransition,
   type FormEvent,
 } from 'react'
-import { useRouter } from 'next/navigation'
 import { ListChecks, Pencil, Plus, X } from 'lucide-react'
 import {
   buscarProdutoApontamento,
@@ -134,7 +133,7 @@ function Linha({
   salvandoItem: boolean
   onOcupada: (ocupada: boolean) => void
   onSalvarItem: () => void
-  onCorrigido: () => void
+  onCorrigido?: () => void
   onRegisterFlush: (
     chave: string,
     flush: (() => Promise<{ ok: boolean; somou: boolean }>) | null,
@@ -313,7 +312,7 @@ function Linha({
           ? 'Lançamento apagado. O total deste produto ficou zerado.'
           : `Total corrigido para ${formatNumber(result.total, result.total % 1 ? 2 : 0)} peças.`,
       )
-      onCorrigido()
+      onCorrigido?.()
     } catch {
       setErro('Não foi possível corrigir o total agora.')
     } finally {
@@ -717,7 +716,6 @@ export function ApontamentoLista({
   const flushers = useRef(
     new Map<string, () => Promise<{ ok: boolean; somou: boolean }>>(),
   )
-  const router = useRouter()
   const responsaveis = etapa === 'costura' ? RESPONSAVEIS_COSTURA : RESPONSAVEIS_REVISAO
   const gravando = Object.values(ocupadas).some(Boolean)
   const chavesServidor = new Set(itens.map((item) => chaveCodigo(item.codProduto)))
@@ -762,9 +760,12 @@ export function ApontamentoLista({
       const result = await flush()
       return { ...result, erro: null as string | null }
     }
+    // Várias linhas em paralelo (desktop e mobile usam o mesmo fluxo).
+    const resultados = await Promise.all(
+      [...flushers.current.values()].map((flush) => flush()),
+    )
     let somou = false
-    for (const flush of flushers.current.values()) {
-      const result = await flush()
+    for (const result of resultados) {
       if (!result.ok) return { ok: false, somou, erro: null as string | null }
       if (result.somou) somou = true
     }
@@ -807,8 +808,8 @@ export function ApontamentoLista({
         })
       }
       setSalvandoCod(null)
-      // Só atualiza a página se gravou de verdade — senão o refresh apaga qtd/obs digitados.
-      if (flush.somou || (result.ok && result.salvos > 0)) router.refresh()
+      // Linha já atualiza no estado local (Já lançado / Na lista) — sem refresh RSC
+      // pesado no desktop nem no mobile. KPIs do topo atualizam na próxima pesquisa.
     })
   }
 
@@ -888,7 +889,6 @@ export function ApontamentoLista({
                       marcarOcupada(`${item.codProduto}:${item.excelRow}`, ocupada)
                     }
                     onRegisterFlush={registerFlush}
-                    onCorrigido={() => router.refresh()}
                     onSalvarItem={() => {
                       if (salvando) return
                       salvarLista(item.codProduto)

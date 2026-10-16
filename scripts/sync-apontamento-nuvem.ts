@@ -21,7 +21,10 @@ async function main() {
 
   getSqlite()
   const publicados = await publicarApontamentosLocaisNaNuvem({ force: true })
-  const sync = await ensureApontamentosNuvemNoSqlite({ force: true })
+  const sync = await ensureApontamentosNuvemNoSqlite({
+    force: true,
+    limparOrfaos: publicados.falhas === 0,
+  })
   const db = getSqlite()
 
   const costuraDia = db

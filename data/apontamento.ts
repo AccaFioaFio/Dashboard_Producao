@@ -272,8 +272,13 @@ export function somarLancadoSoPlanilha(
 }
 
 export const getApontamentoPedido = cache(
-  async (etapa: EtapaApontamento, raw: string): Promise<ApontamentoConsulta> => {
-    await ensureCloudDatabase()
+  async (
+    etapa: EtapaApontamento,
+    raw: string,
+    /** `local` = gravação rápida (sem sync global / pedido); tela usa o padrão. */
+    modo: 'full' | 'local' = 'full',
+  ): Promise<ApontamentoConsulta> => {
+    await ensureCloudDatabase(modo === 'local' ? { light: true } : undefined)
     const pedidoInformado = parsePedidoParam(raw).trim()
     const vazio: ApontamentoConsulta = {
       pedidoInformado,
@@ -291,7 +296,9 @@ export const getApontamentoPedido = cache(
     if (!pedidoNorm) return vazio
 
     // Mobile ↔ desktop: sobe o que só estava no SQLite e baixa o que já está na nuvem.
-    await sincronizarPedidoApontamento(etapa, pedidoNorm)
+    if (modo !== 'local') {
+      await sincronizarPedidoApontamento(etapa, pedidoNorm)
+    }
 
     const rows = getSqlite()
       .prepare(

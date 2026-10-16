@@ -7,6 +7,7 @@ import {
   mergeApontamentoOperacao,
 } from '@/lib/apontamento-operacao-local'
 import {
+  apontamentoNuvemSyncOk,
   ensureApontamentosNuvemNoSqlite,
   publicarApontamentosLocaisNaNuvem,
 } from '@/lib/apontamento-sync'
@@ -63,10 +64,19 @@ const DOWNLOAD_TIMEOUT_MS = 120_000
  *
  * No mobile (Vercel): antes de trocar o SQLite, publica TODOS os lançamentos
  * locais (todos os pedidos) no Storage — não precisa pesquisar pedido a pedido.
+ *
+ * `light: true` — usado em gravações: garante a carga local, mas pula o sync
+ * global de apontamento/programação quando a instância já aqueci. O produto
+ * gravado continua sincronizando na action (mesclar na nuvem).
  */
-export async function ensureCloudDatabase(options?: { force?: boolean }) {
+export async function ensureCloudDatabase(options?: {
+  force?: boolean
+  light?: boolean
+}) {
   const force = Boolean(options?.force)
+  const light = Boolean(options?.light) && !force
   const recuperarApontamentoCloud = IS_CLOUD && !cloudApontamentoRecoveryDone
+  const recuperarDesktop = !IS_CLOUD && !desktopApontamentoPullDone
 
   // Salva o que ainda está no /tmp da instância ANTES do download da carga.
   if (recuperarApontamentoCloud && existsSync(DB_PATH)) {
@@ -88,13 +98,27 @@ export async function ensureCloudDatabase(options?: { force?: boolean }) {
     await inFlight
   }
 
-  const recuperarDesktop = !IS_CLOUD && !desktopApontamentoPullDone
+  // Gravação com DB já quente: não repuxa todos os pedidos / programação.
+  if (light && !recuperarApontamentoCloud && !recuperarDesktop) {
+    ensureDataDirs()
+    getSqlite()
+    return
+  }
+
   const forceApontamento = force || recuperarApontamentoCloud || recuperarDesktop
-  await ensureApontamentosNuvemNoSqlite({ force: forceApontamento })
-  // Todos os pedidos do SQLite → Storage (união; não apaga o que já estava na nuvem).
-  await publicarApontamentosLocaisNaNuvem({ force: forceApontamento })
-  if (recuperarApontamentoCloud) cloudApontamentoRecoveryDone = true
-  if (recuperarDesktop) desktopApontamentoPullDone = true
+  // Push ANTES do pull: evita limpar órfãos locais que ainda não chegaram à nuvem.
+  const push = await publicarApontamentosLocaisNaNuvem({ force: forceApontamento })
+  await ensureApontamentosNuvemNoSqlite({
+    force: forceApontamento,
+    limparOrfaos: push.falhas === 0,
+  })
+  // Só marca “já recuperou” se o pull global concluiu — senão a próxima abertura força de novo.
+  if (recuperarApontamentoCloud && apontamentoNuvemSyncOk()) {
+    cloudApontamentoRecoveryDone = true
+  }
+  if (recuperarDesktop && apontamentoNuvemSyncOk()) {
+    desktopApontamentoPullDone = true
+  }
 
   await ensureProgramacaoNuvemNoSqlite({ force })
   await ensureProgramacaoHistoricoNuvemNoSqlite({ force })
@@ -326,8 +350,11 @@ export async function refreshFromSupabaseCarga(): Promise<
     mergeApontamentoOperacao(backupApontamento)
     mergeProgramacaoOperacao(backupProgramacao)
     mergeProgramacaoHistorico(backupHistorico)
-    await ensureApontamentosNuvemNoSqlite({ force: true })
-    await publicarApontamentosLocaisNaNuvem({ force: true })
+    const pushAposRestore = await publicarApontamentosLocaisNaNuvem({ force: true })
+    await ensureApontamentosNuvemNoSqlite({
+      force: true,
+      limparOrfaos: pushAposRestore.falhas === 0,
+    })
     await ensureProgramacaoNuvemNoSqlite({ force: true })
     await ensureProgramacaoHistoricoNuvemNoSqlite({ force: true })
   } catch (error) {

@@ -86,6 +86,74 @@ function clienteEscrita() {
   return createAdminClient()
 }
 
+/** Serializa escrita no mesmo path (evita mobile e desktop sobrescreverem o JSON). */
+const escritaPorPath = new Map<string, Promise<unknown>>()
+
+async function comTravaPath<T>(path: string, fn: () => Promise<T>): Promise<T> {
+  const anterior = escritaPorPath.get(path) ?? Promise.resolve()
+  let liberar!: () => void
+  const porta = new Promise<void>((resolve) => {
+    liberar = resolve
+  })
+  const cadeia = anterior.then(() => porta)
+  escritaPorPath.set(path, cadeia)
+  await anterior.catch(() => undefined)
+  try {
+    return await fn()
+  } finally {
+    liberar()
+    if (escritaPorPath.get(path) === cadeia) escritaPorPath.delete(path)
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+function erroTransitorio(message: string) {
+  const t = message.toLowerCase()
+  return (
+    t.includes('fetch failed') ||
+    t.includes('timeout') ||
+    t.includes('aborted') ||
+    t.includes('network') ||
+    t.includes('econnreset') ||
+    t.includes('503') ||
+    t.includes('502') ||
+    t.includes('429') ||
+    t.includes('temporarily')
+  )
+}
+
+async function uploadJsonComRetry(
+  path: string,
+  corpo: unknown,
+  tentativas = 3,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const client = clienteEscrita()
+  if (!client) {
+    const gate = semEscritaNuvem('Gravar na nuvem')
+    if (gate.modo === 'local') return { ok: true }
+    return { ok: false, error: gate.error }
+  }
+  let ultimo = 'Falha ao gravar na nuvem.'
+  for (let i = 0; i < tentativas; i++) {
+    const { error } = await client.storage.from(CARGA_BUCKET).upload(path, JSON.stringify(corpo), {
+      upsert: true,
+      contentType: 'application/json',
+      cacheControl: '0',
+    })
+    if (!error) return { ok: true }
+    ultimo = error.message || ultimo
+    if (i < tentativas - 1 && erroTransitorio(ultimo)) {
+      await sleep(120 * (i + 1))
+      continue
+    }
+    if (i < tentativas - 1) await sleep(80 * (i + 1))
+  }
+  return { ok: false, error: ultimo }
+}
+
 function texto(value: unknown) {
   return typeof value === 'string' && value.trim() ? value : null
 }
@@ -362,50 +430,44 @@ export async function gravarApontamentoNuvem(
   }
 
   const path = caminhoItem(etapa, pedidoNorm, lancamento.codProduto)
-  const baixa = await baixarJson(path)
-  if (baixa.status === 'error') {
-    return { ok: false, error: `Não leu a nuvem antes de gravar (${baixa.error}).` }
-  }
-  const anterior = baixa.status === 'ok' ? lancamentoDe(baixa.data) : null
-  const avisoInformado = Object.prototype.hasOwnProperty.call(
-    lancamento,
-    'avisoDataProducao',
-  )
-  const agora = new Date().toISOString()
-  const avisoDataProducao: string | null = avisoInformado
-    ? (lancamento.avisoDataProducao ?? null)
-    : (anterior?.avisoDataProducao ?? null)
-  const excelRow =
-    typeof lancamento.excelRow === 'number' && Number.isInteger(lancamento.excelRow)
-      ? lancamento.excelRow
-      : 0
-  const entradasAnteriores = anterior ? entradasDoLancamento(anterior) : []
-  const demais = entradasAnteriores.filter((row) => row.excelRow !== excelRow)
-  const entrada: ApontamentoNuvemEntrada = {
-    excelRow,
-    origem: lancamento.origem,
-    oficina: lancamento.oficina ?? null,
-    qtdPecas: lancamento.qtdPecas,
-    dataProducao: lancamento.dataProducao,
-    responsavel: lancamento.responsavel,
-    avisoDataProducao,
-    observacao: lancamento.observacao ?? null,
-    atualizadoEm: agora,
-  }
-  const corpo = agregarEntradas(
-    lancamento.codProduto,
-    lancamento.nomeProduto ?? anterior?.nomeProduto ?? null,
-    [...demais, entrada],
-  )
-  const { error } = await client.storage
-    .from(CARGA_BUCKET)
-    .upload(path, JSON.stringify(corpo), {
-      upsert: true,
-      contentType: 'application/json',
-      cacheControl: '0',
-    })
-  if (error) return { ok: false, error: error.message }
-  return { ok: true }
+  return comTravaPath(path, async () => {
+    const baixa = await baixarJson(path)
+    if (baixa.status === 'error') {
+      return { ok: false, error: `Não leu a nuvem antes de gravar (${baixa.error}).` }
+    }
+    const anterior = baixa.status === 'ok' ? lancamentoDe(baixa.data) : null
+    const avisoInformado = Object.prototype.hasOwnProperty.call(
+      lancamento,
+      'avisoDataProducao',
+    )
+    const agora = new Date().toISOString()
+    const avisoDataProducao: string | null = avisoInformado
+      ? (lancamento.avisoDataProducao ?? null)
+      : (anterior?.avisoDataProducao ?? null)
+    const excelRow =
+      typeof lancamento.excelRow === 'number' && Number.isInteger(lancamento.excelRow)
+        ? lancamento.excelRow
+        : 0
+    const entradasAnteriores = anterior ? entradasDoLancamento(anterior) : []
+    const demais = entradasAnteriores.filter((row) => row.excelRow !== excelRow)
+    const entrada: ApontamentoNuvemEntrada = {
+      excelRow,
+      origem: lancamento.origem,
+      oficina: lancamento.oficina ?? null,
+      qtdPecas: lancamento.qtdPecas,
+      dataProducao: lancamento.dataProducao,
+      responsavel: lancamento.responsavel,
+      avisoDataProducao,
+      observacao: lancamento.observacao ?? null,
+      atualizadoEm: agora,
+    }
+    const corpo = agregarEntradas(
+      lancamento.codProduto,
+      lancamento.nomeProduto ?? anterior?.nomeProduto ?? null,
+      [...demais, entrada],
+    )
+    return uploadJsonComRetry(path, corpo)
+  })
 }
 
 /** Acrescenta uma entrada parcial (outra data / outra soma) sem apagar as anteriores. */
@@ -432,41 +494,37 @@ export async function somarEntradaApontamentoNuvem(
   }
 
   const path = caminhoItem(etapa, pedidoNorm, entrada.codProduto)
-  const baixa = await baixarJson(path)
-  if (baixa.status === 'error') {
-    return {
-      ok: false,
-      error: `Não leu a nuvem antes de somar (${baixa.error}). Tente de novo — o total na nuvem não foi alterado.`,
+  return comTravaPath(path, async () => {
+    const baixa = await baixarJson(path)
+    if (baixa.status === 'error') {
+      return {
+        ok: false as const,
+        error: `Não leu a nuvem antes de somar (${baixa.error}). Tente de novo — o total na nuvem não foi alterado.`,
+      }
     }
-  }
-  const anterior = baixa.status === 'ok' ? lancamentoDe(baixa.data) : null
-  const agora = new Date().toISOString()
-  const entradas = anterior ? entradasDoLancamento(anterior) : []
-  const nova: ApontamentoNuvemEntrada = {
-    excelRow: entrada.excelRow,
-    origem: entrada.origem,
-    oficina: entrada.oficina,
-    qtdPecas: entrada.qtdPecas,
-    dataProducao: entrada.dataProducao,
-    responsavel: entrada.responsavel,
-    avisoDataProducao: null,
-    observacao: entrada.observacao,
-    atualizadoEm: agora,
-  }
-  const corpo = agregarEntradas(
-    entrada.codProduto,
-    entrada.nomeProduto ?? anterior?.nomeProduto ?? null,
-    unirEntradas(entradas, [nova]),
-  )
-  const { error } = await client.storage
-    .from(CARGA_BUCKET)
-    .upload(path, JSON.stringify(corpo), {
-      upsert: true,
-      contentType: 'application/json',
-      cacheControl: '0',
-    })
-  if (error) return { ok: false, error: error.message }
-  return { ok: true, total: corpo.qtdPecas ?? entrada.qtdPecas }
+    const anterior = baixa.status === 'ok' ? lancamentoDe(baixa.data) : null
+    const agora = new Date().toISOString()
+    const entradas = anterior ? entradasDoLancamento(anterior) : []
+    const nova: ApontamentoNuvemEntrada = {
+      excelRow: entrada.excelRow,
+      origem: entrada.origem,
+      oficina: entrada.oficina,
+      qtdPecas: entrada.qtdPecas,
+      dataProducao: entrada.dataProducao,
+      responsavel: entrada.responsavel,
+      avisoDataProducao: null,
+      observacao: entrada.observacao,
+      atualizadoEm: agora,
+    }
+    const corpo = agregarEntradas(
+      entrada.codProduto,
+      entrada.nomeProduto ?? anterior?.nomeProduto ?? null,
+      unirEntradas(entradas, [nova]),
+    )
+    const enviado = await uploadJsonComRetry(path, corpo)
+    if (!enviado.ok) return enviado
+    return { ok: true as const, total: corpo.qtdPecas ?? entrada.qtdPecas }
+  })
 }
 
 export async function marcarAvisoApontamentoNuvem(
@@ -483,48 +541,42 @@ export async function marcarAvisoApontamentoNuvem(
     return { ok: false, error: gate.error }
   }
   const path = caminhoItem(etapa, pedidoNorm, codProduto)
-  const baixa = await baixarJson(path)
-  if (baixa.status === 'error') {
-    return { ok: false, error: `Não leu a nuvem para marcar o aviso (${baixa.error}).` }
-  }
-  const atual = baixa.status === 'ok' ? lancamentoDe(baixa.data) : null
-  const agora = new Date().toISOString()
-  let entradas = atual ? entradasDoLancamento(atual) : []
-  if (!entradas.length && fallback) {
-    entradas = [
-      {
-        excelRow: 0,
-        origem: fallback.origem,
-        oficina: fallback.oficina ?? null,
-        qtdPecas: fallback.qtdPecas,
-        dataProducao: fallback.dataProducao,
-        responsavel: fallback.responsavel,
-        avisoDataProducao: null,
-        observacao: fallback.observacao ?? null,
-        atualizadoEm: agora,
-      },
-    ]
-  }
-  if (!entradas.length) return { ok: true }
-  const marcadas = entradas.map((row) =>
-    row.dataProducao === dataProducao
-      ? { ...row, avisoDataProducao: dataProducao, atualizadoEm: agora }
-      : row,
-  )
-  const corpo = agregarEntradas(
-    codProduto,
-    atual?.nomeProduto ?? fallback?.nomeProduto ?? null,
-    marcadas,
-  )
-  const { error } = await client.storage
-    .from(CARGA_BUCKET)
-    .upload(path, JSON.stringify(corpo), {
-      upsert: true,
-      contentType: 'application/json',
-      cacheControl: '0',
-    })
-  if (error) return { ok: false, error: error.message }
-  return { ok: true }
+  return comTravaPath(path, async () => {
+    const baixa = await baixarJson(path)
+    if (baixa.status === 'error') {
+      return { ok: false, error: `Não leu a nuvem para marcar o aviso (${baixa.error}).` }
+    }
+    const atual = baixa.status === 'ok' ? lancamentoDe(baixa.data) : null
+    const agora = new Date().toISOString()
+    let entradas = atual ? entradasDoLancamento(atual) : []
+    if (!entradas.length && fallback) {
+      entradas = [
+        {
+          excelRow: 0,
+          origem: fallback.origem,
+          oficina: fallback.oficina ?? null,
+          qtdPecas: fallback.qtdPecas,
+          dataProducao: fallback.dataProducao,
+          responsavel: fallback.responsavel,
+          avisoDataProducao: null,
+          observacao: fallback.observacao ?? null,
+          atualizadoEm: agora,
+        },
+      ]
+    }
+    if (!entradas.length) return { ok: true }
+    const marcadas = entradas.map((row) =>
+      row.dataProducao === dataProducao
+        ? { ...row, avisoDataProducao: dataProducao, atualizadoEm: agora }
+        : row,
+    )
+    const corpo = agregarEntradas(
+      codProduto,
+      atual?.nomeProduto ?? fallback?.nomeProduto ?? null,
+      marcadas,
+    )
+    return uploadJsonComRetry(path, corpo)
+  })
 }
 
 export async function apagarApontamentoNuvem(
@@ -538,11 +590,12 @@ export async function apagarApontamentoNuvem(
     if (gate.modo === 'local') return { ok: true }
     return { ok: false, error: gate.error }
   }
-  const { error } = await client.storage
-    .from(CARGA_BUCKET)
-    .remove([caminhoItem(etapa, pedidoNorm, codProduto)])
-  if (error) return { ok: false, error: error.message }
-  return { ok: true }
+  const path = caminhoItem(etapa, pedidoNorm, codProduto)
+  return comTravaPath(path, async () => {
+    const { error } = await client.storage.from(CARGA_BUCKET).remove([path])
+    if (error) return { ok: false, error: error.message }
+    return { ok: true }
+  })
 }
 
 /**
@@ -579,40 +632,36 @@ export async function substituirTotalApontamentoNuvem(
   }
 
   const path = caminhoItem(etapa, pedidoNorm, entrada.codProduto)
-  const baixa = await baixarJson(path)
-  if (baixa.status === 'error') {
-    return {
-      ok: false,
-      error: `Não leu a nuvem antes de corrigir (${baixa.error}). Tente de novo.`,
+  return comTravaPath(path, async () => {
+    const baixa = await baixarJson(path)
+    if (baixa.status === 'error') {
+      return {
+        ok: false as const,
+        error: `Não leu a nuvem antes de corrigir (${baixa.error}). Tente de novo.`,
+      }
     }
-  }
-  const anterior = baixa.status === 'ok' ? lancamentoDe(baixa.data) : null
-  const agora = new Date().toISOString()
-  const unica: ApontamentoNuvemEntrada = {
-    excelRow: entrada.excelRow,
-    origem: entrada.origem,
-    oficina: entrada.oficina,
-    qtdPecas: qtd,
-    dataProducao: entrada.dataProducao,
-    responsavel: entrada.responsavel,
-    avisoDataProducao: null,
-    observacao: entrada.observacao,
-    atualizadoEm: agora,
-  }
-  const corpo = agregarEntradas(
-    entrada.codProduto,
-    entrada.nomeProduto ?? anterior?.nomeProduto ?? null,
-    [unica],
-  )
-  const { error } = await client.storage
-    .from(CARGA_BUCKET)
-    .upload(path, JSON.stringify(corpo), {
-      upsert: true,
-      contentType: 'application/json',
-      cacheControl: '0',
-    })
-  if (error) return { ok: false, error: error.message }
-  return { ok: true, total: qtd }
+    const anterior = baixa.status === 'ok' ? lancamentoDe(baixa.data) : null
+    const agora = new Date().toISOString()
+    const unica: ApontamentoNuvemEntrada = {
+      excelRow: entrada.excelRow,
+      origem: entrada.origem,
+      oficina: entrada.oficina,
+      qtdPecas: qtd,
+      dataProducao: entrada.dataProducao,
+      responsavel: entrada.responsavel,
+      avisoDataProducao: null,
+      observacao: entrada.observacao,
+      atualizadoEm: agora,
+    }
+    const corpo = agregarEntradas(
+      entrada.codProduto,
+      entrada.nomeProduto ?? anterior?.nomeProduto ?? null,
+      [unica],
+    )
+    const enviado = await uploadJsonComRetry(path, corpo)
+    if (!enviado.ok) return enviado
+    return { ok: true as const, total: qtd }
+  })
 }
 
 function alertaDe(raw: unknown, id: string): ApontamentoNuvemAlerta | null {
@@ -739,33 +788,52 @@ export async function mesclarEntradasApontamentoNuvem(
   }
 
   const path = caminhoItem(etapa, pedidoNorm, codProduto)
-  const baixa = await baixarJson(path)
-  if (baixa.status === 'error') {
-    return { ok: false, error: baixa.error }
-  }
-  const anterior = baixa.status === 'ok' ? lancamentoDe(baixa.data, trechoSeguro(codProduto)) : null
-  const entradasNuvem = anterior ? entradasDoLancamento(anterior) : []
-  const unidas = unirEntradas(entradasNuvem, entradasLocais)
-  const mudou =
-    unidas.length !== entradasNuvem.length ||
-    unidas.some((row) => {
-      const remoto = entradasNuvem.find((item) => item.excelRow === row.excelRow)
-      return !remoto || remoto.atualizadoEm < row.atualizadoEm
-    })
-  if (!mudou) return { ok: true, mudou: false }
+  return comTravaPath(path, async () => {
+    // Relê a nuvem a cada tentativa — evita perder o que o outro aparelho acabou de gravar.
+    let ultimoErro = 'Falha ao publicar lançamentos.'
+    for (let tentativa = 0; tentativa < 3; tentativa++) {
+      const baixa = await baixarJson(path)
+      if (baixa.status === 'error') {
+        ultimoErro = baixa.error
+        if (tentativa < 2 && erroTransitorio(baixa.error)) {
+          await sleep(120 * (tentativa + 1))
+          continue
+        }
+        return { ok: false, error: baixa.error }
+      }
+      const anterior =
+        baixa.status === 'ok' ? lancamentoDe(baixa.data, trechoSeguro(codProduto)) : null
+      const entradasNuvem = anterior ? entradasDoLancamento(anterior) : []
+      const unidas = unirEntradas(entradasNuvem, entradasLocais)
+      const mudou =
+        unidas.length !== entradasNuvem.length ||
+        unidas.some((row) => {
+          const remoto = entradasNuvem.find((item) => item.excelRow === row.excelRow)
+          if (!remoto) return true
+          if (remoto.atualizadoEm < row.atualizadoEm) return true
+          // Mesmo timestamp: ainda publica se aviso/obs/qtd divergirem (mobile ↔ desktop).
+          return (
+            remoto.avisoDataProducao !== row.avisoDataProducao ||
+            remoto.observacao !== row.observacao ||
+            remoto.qtdPecas !== row.qtdPecas ||
+            remoto.dataProducao !== row.dataProducao ||
+            remoto.responsavel !== row.responsavel ||
+            remoto.origem !== row.origem ||
+            remoto.oficina !== row.oficina
+          )
+        })
+      if (!mudou) return { ok: true, mudou: false }
 
-  const corpo = agregarEntradas(
-    codProduto,
-    nomeProduto ?? anterior?.nomeProduto ?? null,
-    unidas,
-  )
-  const { error } = await client.storage
-    .from(CARGA_BUCKET)
-    .upload(path, JSON.stringify(corpo), {
-      upsert: true,
-      contentType: 'application/json',
-      cacheControl: '0',
-    })
-  if (error) return { ok: false, error: error.message }
-  return { ok: true, mudou: true }
+      const corpo = agregarEntradas(
+        codProduto,
+        nomeProduto ?? anterior?.nomeProduto ?? null,
+        unidas,
+      )
+      const enviado = await uploadJsonComRetry(path, corpo, 2)
+      if (enviado.ok) return { ok: true, mudou: true }
+      ultimoErro = enviado.error
+      if (tentativa < 2) await sleep(150 * (tentativa + 1))
+    }
+    return { ok: false, error: ultimoErro }
+  })
 }

@@ -35,7 +35,6 @@ let lastResult: ApontamentoSyncResult = {
   costuraDia: {},
   revisaoDia: {},
 }
-let pushInFlight: Promise<number> | null = null
 let lastPushAt = 0
 
 function tabelaExiste(nome: string) {
@@ -138,11 +137,13 @@ function upsertLote(
       for (const grupo of porProduto.values()) {
         const unicos = [...new Set(grupo.rows)]
         const placeholders = unicos.map(() => '?').join(', ')
+        // Só remove órfãos estritamente mais antigos que a nuvem — nunca
+        // apaga lançamento local ainda não publicado (mesmo timestamp ou mais novo).
         db.prepare(
           `DELETE FROM ${tabela}
            WHERE pedido_norm = ? AND cod_produto = ?
              AND excel_row NOT IN (${placeholders})
-             AND atualizado_em <= ?`,
+             AND atualizado_em < ?`,
         ).run(grupo.pedidoNorm, grupo.codProduto, ...unicos, grupo.maxAtualizado)
       }
     }
@@ -150,6 +151,8 @@ function upsertLote(
   gravar()
   return { n, pecas, porDia }
 }
+
+let syncLimparOrfaos = true
 
 async function syncOnce(): Promise<ApontamentoSyncResult> {
   if (!isSupabaseConfigured()) return lastResult
@@ -160,8 +163,9 @@ async function syncOnce(): Promise<ApontamentoSyncResult> {
       listarTodosApontamentosNuvem('revisao'),
     ])
 
-    const costura = upsertLote('costura', costuraRows)
-    const revisao = upsertLote('revisao', revisaoRows)
+    const limparOrfaos = syncLimparOrfaos
+    const costura = upsertLote('costura', costuraRows, { limparOrfaos })
+    const revisao = upsertLote('revisao', revisaoRows, { limparOrfaos })
     syncDimPedidoApontamento()
 
     lastResult = {
@@ -187,16 +191,24 @@ async function syncOnce(): Promise<ApontamentoSyncResult> {
   }
 }
 
+/** Último pull global concluiu sem erro (para o desktop não marcar “já sincronizou” cedo). */
+export function apontamentoNuvemSyncOk() {
+  return lastOk
+}
+
 /**
  * Baixa lançamentos da nuvem (Costura Produção / Lançar revisão) para o SQLite
  * usado nos KPIs: planilha (fato_*) + tela (*_lancamento).
  */
 export async function ensureApontamentosNuvemNoSqlite(options?: {
   force?: boolean
+  /** Se false, não apaga excel_rows locais ausentes na nuvem (após push com falha). */
+  limparOrfaos?: boolean
 }): Promise<ApontamentoSyncResult> {
   if (!options?.force && lastOk && lastAt && Date.now() - lastAt < TTL_MS) {
     return lastResult
   }
+  syncLimparOrfaos = options?.limparOrfaos !== false
   if (!inFlight) {
     inFlight = syncOnce().finally(() => {
       inFlight = null
@@ -239,9 +251,11 @@ function lerLocaisParaPush(etapa: EtapaApontamento): LinhaLocalPush[] {
     .all() as LinhaLocalPush[]
 }
 
-async function pushEtapa(etapa: EtapaApontamento): Promise<number> {
+type PushEtapaResult = { publicados: number; falhas: number }
+
+async function pushEtapa(etapa: EtapaApontamento): Promise<PushEtapaResult> {
   const linhas = lerLocaisParaPush(etapa)
-  if (!linhas.length) return 0
+  if (!linhas.length) return { publicados: 0, falhas: 0 }
 
   const grupos = new Map<
     string,
@@ -271,6 +285,7 @@ async function pushEtapa(etapa: EtapaApontamento): Promise<number> {
   }
 
   let publicados = 0
+  let falhas = 0
   const lista = [...grupos.values()]
   const batchSize = 6
   for (let i = 0; i < lista.length; i += batchSize) {
@@ -289,26 +304,42 @@ async function pushEtapa(etapa: EtapaApontamento): Promise<number> {
     for (const result of resultados) {
       if (result.ok && result.mudou) publicados += 1
       else if (!result.ok) {
+        falhas += 1
         console.error('publicar apontamento local → nuvem falhou', etapa, result.error)
       }
     }
   }
-  return publicados
+  return { publicados, falhas }
 }
 
-async function pushOnce(): Promise<number> {
-  if (!isSupabaseWriteConfigured()) return 0
+export type PublicarApontamentosResult = { publicados: number; falhas: number }
+
+let lastPushFalhas = 0
+let pushInFlightResult: Promise<PublicarApontamentosResult> | null = null
+
+async function pushOnce(): Promise<PublicarApontamentosResult> {
+  if (!isSupabaseWriteConfigured()) return { publicados: 0, falhas: 0 }
   try {
     const [costura, revisao] = await Promise.all([
       pushEtapa('costura'),
       pushEtapa('revisao'),
     ])
-    lastPushAt = Date.now()
-    return costura + revisao
+    const publicados = costura.publicados + revisao.publicados
+    const falhas = costura.falhas + revisao.falhas
+    lastPushFalhas = falhas
+    // Só congela o TTL se tudo subiu — senão a próxima abertura tenta de novo.
+    lastPushAt = falhas === 0 ? Date.now() : 0
+    if (falhas > 0) {
+      setDataHealthWarning(
+        'Alguns lançamentos de costura/revisão não chegaram à nuvem. Abra de novo para sincronizar.',
+      )
+    }
+    return { publicados, falhas }
   } catch (error) {
     console.error('publicar apontamentos locais na nuvem falhou', error)
     lastPushAt = 0
-    return 0
+    lastPushFalhas = 1
+    return { publicados: 0, falhas: 1 }
   }
 }
 
@@ -318,16 +349,16 @@ async function pushOnce(): Promise<number> {
  */
 export async function publicarApontamentosLocaisNaNuvem(options?: {
   force?: boolean
-}): Promise<number> {
+}): Promise<PublicarApontamentosResult> {
   if (!options?.force && lastPushAt && Date.now() - lastPushAt < TTL_PUSH_MS) {
-    return 0
+    return { publicados: 0, falhas: lastPushFalhas }
   }
-  if (!pushInFlight) {
-    pushInFlight = pushOnce().finally(() => {
-      pushInFlight = null
+  if (!pushInFlightResult) {
+    pushInFlightResult = pushOnce().finally(() => {
+      pushInFlightResult = null
     })
   }
-  return pushInFlight
+  return pushInFlightResult
 }
 
 function lerLocaisPedidoProduto(
@@ -386,13 +417,15 @@ function totalPecasLocais(
 }
 
 /**
- * Publica TODAS as entradas locais do produto na nuvem (união) e devolve o total
- * depois de puxar a nuvem de volta — evita mobile com somas só no SQLite da instância.
+ * Publica TODAS as entradas locais do produto na nuvem (união) e devolve o total.
+ * Por padrão também puxa a nuvem de volta; em gravações quentes use `skipPull`
+ * para responder mais rápido (o total já está no SQLite local).
  */
 export async function sincronizarProdutoApontamento(
   etapa: EtapaApontamento,
   pedidoNorm: string,
   codProduto: string,
+  options?: { skipPull?: boolean },
 ): Promise<{ ok: true; total: number } | { ok: false; error: string }> {
   const linhas = lerLocaisPedidoProduto(etapa, pedidoNorm, codProduto)
   const entradas: ApontamentoNuvemEntrada[] = linhas.map((row) => ({
@@ -424,7 +457,7 @@ export async function sincronizarProdutoApontamento(
     }
   }
 
-  if (isSupabaseConfigured()) {
+  if (!options?.skipPull && isSupabaseConfigured()) {
     try {
       const nuvem = await lerApontamentoNuvem(etapa, pedidoNorm)
       const doc = nuvem.get(codProduto)
@@ -444,18 +477,38 @@ export async function sincronizarProdutoApontamento(
     }
   }
 
+  marcarPedidoApontamentoSyncado(etapa, pedidoNorm)
   return { ok: true, total: totalPecasLocais(etapa, pedidoNorm, codProduto) }
+}
+
+const PEDIDO_SYNC_TTL_MS = 8_000
+const pedidoSyncAt = new Map<string, number>()
+
+function chavePedidoSync(etapa: EtapaApontamento, pedidoNorm: string) {
+  return `${etapa}:${pedidoNorm}`
+}
+
+function marcarPedidoApontamentoSyncado(etapa: EtapaApontamento, pedidoNorm: string) {
+  pedidoSyncAt.set(chavePedidoSync(etapa, pedidoNorm), Date.now())
 }
 
 /**
  * Ao abrir o pedido: sobe o que só existia no SQLite local e baixa o que o outro
  * aparelho já publicou — costura e revisão (mobile ↔ desktop).
+ * TTL curto evita re-sync pesado logo após um lançamento na mesma instância.
  */
 export async function sincronizarPedidoApontamento(
   etapa: EtapaApontamento,
   pedidoNorm: string,
+  options?: { force?: boolean },
 ): Promise<void> {
   if (!pedidoNorm || !isSupabaseConfigured()) return
+
+  const chave = chavePedidoSync(etapa, pedidoNorm)
+  const ultimo = pedidoSyncAt.get(chave) ?? 0
+  if (!options?.force && ultimo && Date.now() - ultimo < PEDIDO_SYNC_TTL_MS) {
+    return
+  }
 
   const linhas = lerLocaisPedidoProduto(etapa, pedidoNorm)
   if (linhas.length && isSupabaseWriteConfigured()) {
@@ -482,27 +535,32 @@ export async function sincronizarPedidoApontamento(
       })
       porProduto.set(row.codProduto, grupo)
     }
-    await Promise.all(
-      [...porProduto.entries()].map(([codProduto, grupo]) =>
-        mesclarEntradasApontamentoNuvem(
-          etapa,
-          pedidoNorm,
-          codProduto,
-          grupo.entradas,
-          grupo.nomeProduto,
-        ).then((result) => {
-          if (!result.ok) {
-            console.error(
-              'push pedido apontamento falhou',
-              etapa,
-              pedidoNorm,
-              codProduto,
-              result.error,
-            )
-          }
-        }),
-      ),
-    )
+    const produtos = [...porProduto.entries()]
+    const batchSize = 6
+    for (let i = 0; i < produtos.length; i += batchSize) {
+      const batch = produtos.slice(i, i + batchSize)
+      await Promise.all(
+        batch.map(([codProduto, grupo]) =>
+          mesclarEntradasApontamentoNuvem(
+            etapa,
+            pedidoNorm,
+            codProduto,
+            grupo.entradas,
+            grupo.nomeProduto,
+          ).then((result) => {
+            if (!result.ok) {
+              console.error(
+                'push pedido apontamento falhou',
+                etapa,
+                pedidoNorm,
+                codProduto,
+                result.error,
+              )
+            }
+          }),
+        ),
+      )
+    }
   }
 
   try {
@@ -523,4 +581,5 @@ export async function sincronizarPedidoApontamento(
   } catch (error) {
     console.error('pull pedido apontamento falhou', etapa, pedidoNorm, error)
   }
+  marcarPedidoApontamentoSyncado(etapa, pedidoNorm)
 }

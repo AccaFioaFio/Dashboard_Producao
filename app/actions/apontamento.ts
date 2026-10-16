@@ -100,6 +100,12 @@ function semPermissao(etapa: EtapaApontamento) {
   return `Sem permissão para lançar em ${ETAPAS_APONTAMENTO[etapa].titulo}.`
 }
 
+/** Invalida só as rotas da etapa — a home atualiza na próxima navegação. */
+function revalidateApontamento(etapa: EtapaApontamento) {
+  revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
+  revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
+}
+
 export async function buscarProdutoApontamento(
   etapaInformada: string,
   pedidoNorm: string,
@@ -114,7 +120,7 @@ export async function buscarProdutoApontamento(
     return { ok: false, error: semPermissao(etapa) }
   }
 
-  await ensureCloudDatabase()
+  await ensureCloudDatabase({ light: true })
   const pedido = pedidoDigits(pedidoNorm)
   const resolvido = resolverProdutoParaIncluir(pedido, codInformado, descricaoInformada)
   if (!resolvido.ok || resolvido.precisaDescricao) return resolvido
@@ -167,9 +173,7 @@ export async function buscarProdutoApontamento(
     }
   }
   if (pedido) syncDimPedidoApontamento(pedido)
-  revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
-  revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
-  revalidatePath('/')
+  revalidateApontamento(etapa)
   return resolvido
 }
 
@@ -184,7 +188,7 @@ export async function salvarApontamento(
     return { ok: false, error: semPermissao(etapa) }
   }
 
-  await ensureCloudDatabase()
+  await ensureCloudDatabase({ light: true })
 
   const pedidoNorm = pedidoDigits(input.pedidoNorm)
   let codProduto = input.codProduto.trim()
@@ -297,9 +301,7 @@ export async function salvarApontamento(
         nomeProduto,
       })
       syncDimPedidoApontamento(pedidoNorm)
-      revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
-      revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
-      revalidatePath('/')
+      revalidateApontamento(etapa)
       if (!nuvem.ok) {
         return {
           ok: false,
@@ -314,9 +316,7 @@ export async function salvarApontamento(
     )
     const apagado = await apagarApontamentoNuvem(etapa, pedidoNorm, codProduto)
     syncDimPedidoApontamento(pedidoNorm)
-    revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
-    revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
-    revalidatePath('/')
+    revalidateApontamento(etapa)
     if (!apagado.ok) {
       return {
         ok: false,
@@ -393,12 +393,10 @@ export async function salvarApontamento(
     excelRow,
   })
   if (nuvem.ok) {
-    await sincronizarProdutoApontamento(etapa, pedidoNorm, codProduto)
+    await sincronizarProdutoApontamento(etapa, pedidoNorm, codProduto, { skipPull: true })
   }
   syncDimPedidoApontamento(pedidoNorm)
-  revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
-  revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
-  revalidatePath('/')
+  revalidateApontamento(etapa)
   if (!nuvem.ok) {
     return {
       ok: false,
@@ -423,7 +421,7 @@ export async function somarApontamento(
     return { ok: false, error: semPermissao(etapa) }
   }
 
-  await ensureCloudDatabase()
+  await ensureCloudDatabase({ light: true })
 
   const pedidoNorm = pedidoDigits(input.pedidoNorm)
   let codProduto = input.codProduto.trim()
@@ -550,12 +548,12 @@ export async function somarApontamento(
     )
   }
 
-  // Publica TODAS as entradas do produto (não só a soma nova) e puxa a nuvem de volta.
-  const sync = await sincronizarProdutoApontamento(etapa, pedidoNorm, codProduto)
+  // Publica na nuvem sem re-baixar o pedido (total já está no SQLite).
+  const sync = await sincronizarProdutoApontamento(etapa, pedidoNorm, codProduto, {
+    skipPull: true,
+  })
   syncDimPedidoApontamento(pedidoNorm)
-  revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
-  revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
-  revalidatePath('/')
+  revalidateApontamento(etapa)
   if (!sync.ok) {
     return {
       ok: false,
@@ -580,7 +578,7 @@ export async function corrigirApontamento(
     return { ok: false, error: semPermissao(etapa) }
   }
 
-  await ensureCloudDatabase()
+  await ensureCloudDatabase({ light: true })
 
   const pedidoNorm = pedidoDigits(input.pedidoNorm)
   let codProduto = input.codProduto.trim()
@@ -697,9 +695,7 @@ export async function corrigirApontamento(
       nomeProduto,
     })
     syncDimPedidoApontamento(pedidoNorm)
-    revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
-    revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
-    revalidatePath('/')
+    revalidateApontamento(etapa)
     if (!nuvem.ok) {
       return {
         ok: false,
@@ -772,13 +768,10 @@ export async function corrigirApontamento(
     nomeProduto,
   })
   if (nuvem.ok) {
-    // Garante SQLite local alinhado ao que ficou na nuvem (outros aparelhos).
-    await sincronizarProdutoApontamento(etapa, pedidoNorm, codProduto)
+    await sincronizarProdutoApontamento(etapa, pedidoNorm, codProduto, { skipPull: true })
   }
   syncDimPedidoApontamento(pedidoNorm)
-  revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
-  revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
-  revalidatePath('/')
+  revalidateApontamento(etapa)
   if (!nuvem.ok) {
     return {
       ok: false,
@@ -824,8 +817,8 @@ export async function salvarListaApontamento(
     return { ok: false, error: semPermissao(etapa) }
   }
 
-  await ensureCloudDatabase()
-  const consulta = await getApontamentoPedido(etapa, pedidoInformado)
+  await ensureCloudDatabase({ light: true })
+  const consulta = await getApontamentoPedido(etapa, pedidoInformado, 'local')
   const pedidoNorm = consulta.pedidoNorm
   if (!consulta.loaded || !pedidoNorm || !consulta.itens.length) {
     return { ok: false, error: 'Pedido sem itens para a lista.' }
@@ -1037,13 +1030,9 @@ export async function salvarListaApontamento(
   gravar()
 
   const falhasNuvem: string[] = []
-  for (const item of pendentes) {
-    const marcado = await marcarAvisoApontamentoNuvem(
-      etapa,
-      pedidoNorm,
-      item.codProduto,
-      item.dataProducao,
-      {
+  const avisosNuvem = await Promise.all(
+    pendentes.map((item) =>
+      marcarAvisoApontamentoNuvem(etapa, pedidoNorm, item.codProduto, item.dataProducao, {
         codProduto: item.codProduto,
         origem: item.origem,
         oficina: item.oficina ?? null,
@@ -1052,8 +1041,10 @@ export async function salvarListaApontamento(
         responsavel: item.responsavel,
         observacao: item.observacao,
         nomeProduto: item.nomeProduto,
-      },
-    )
+      }),
+    ),
+  )
+  for (const marcado of avisosNuvem) {
     if (!marcado.ok) falhasNuvem.push(marcado.error)
   }
   const alertaNuvem = await criarAlertaApontamentoNuvem(etapa, {
@@ -1077,9 +1068,7 @@ export async function salvarListaApontamento(
     }
   }
 
-  revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
-  revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
-  revalidatePath('/')
+  revalidateApontamento(etapa)
 
   const salvos = pendentes.length
   const base =
@@ -1119,7 +1108,7 @@ export async function marcarAlertaApontamentoVisto(
   if (!id || id.length > 80) {
     return { ok: false as const, error: 'Alerta inválido.' }
   }
-  await ensureCloudDatabase()
+  await ensureCloudDatabase({ light: true })
   const vistoEm = new Date().toISOString()
   const { alerta: tabelaAlerta } = tabelasAlerta(etapa)
   const db = getSqlite()
