@@ -1,6 +1,13 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type FormEvent,
+} from 'react'
 import { useRouter } from 'next/navigation'
 import { ListChecks, Plus } from 'lucide-react'
 import {
@@ -167,7 +174,14 @@ function Linha({
         ? 'Na lista'
         : 'Salvar na lista'
 
-  async function aplicarAdicao(): Promise<{ ok: boolean; somou: boolean }> {
+  // Ref estável: o pai chama o flush depois do re-render de “Salvando…”.
+  // Se o effect re-registrar a cada render, o cleanup zera o Map no meio do clique
+  // e a soma (qtd + observação) nunca chega ao servidor — some ao atualizar.
+  const aplicarAdicaoRef = useRef<() => Promise<{ ok: boolean; somou: boolean }>>(
+    async () => ({ ok: true, somou: false }),
+  )
+
+  aplicarAdicaoRef.current = async () => {
     const parsed = parseQtd(adicionarRef.current)
     if (parsed === 'invalida') {
       setErro('A quantidade precisa ser um número a partir de zero.')
@@ -225,9 +239,10 @@ function Linha({
   }, [item.qtdPecas, item.datasAvisadas])
 
   useEffect(() => {
-    onRegisterFlush(chave, aplicarAdicao)
+    const flush = () => aplicarAdicaoRef.current()
+    onRegisterFlush(chave, flush)
     return () => onRegisterFlush(chave, null)
-  })
+  }, [chave, onRegisterFlush])
 
   const campo =
     'h-8 w-full min-w-0 rounded-lg border border-input bg-background px-2 py-1 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 sm:h-7 sm:text-xs dark:bg-input/40'
@@ -577,27 +592,37 @@ export function ApontamentoLista({
     })
   }
 
-  function registerFlush(
-    chave: string,
-    flush: (() => Promise<{ ok: boolean; somou: boolean }>) | null,
-  ) {
-    if (flush) flushers.current.set(chave, flush)
-    else flushers.current.delete(chave)
-  }
+  const registerFlush = useCallback(
+    (
+      chave: string,
+      flush: (() => Promise<{ ok: boolean; somou: boolean }>) | null,
+    ) => {
+      if (flush) flushers.current.set(chave, flush)
+      else flushers.current.delete(chave)
+    },
+    [],
+  )
 
   async function flushAdicoes(codProduto?: string) {
     if (codProduto) {
       const flush = flushers.current.get(chaveCodigo(codProduto))
-      if (!flush) return { ok: true, somou: false }
-      return flush()
+      if (!flush) {
+        return {
+          ok: false,
+          somou: false,
+          erro: 'A tela ainda estava montando. Toque de novo em Salvar na lista.',
+        }
+      }
+      const result = await flush()
+      return { ...result, erro: null as string | null }
     }
     let somou = false
     for (const flush of flushers.current.values()) {
       const result = await flush()
-      if (!result.ok) return { ok: false, somou }
+      if (!result.ok) return { ok: false, somou, erro: null as string | null }
       if (result.somou) somou = true
     }
-    return { ok: true, somou }
+    return { ok: true, somou, erro: null as string | null }
   }
 
   function salvarLista(codProduto?: string) {
@@ -608,7 +633,9 @@ export function ApontamentoLista({
       if (!flush.ok) {
         setLista({
           ok: false,
-          texto: 'Não foi possível somar a quantidade pendente. Confira a Qtd a somar.',
+          texto:
+            flush.erro ??
+            'Não foi possível somar a quantidade pendente. Confira a Qtd a somar, data e responsável.',
         })
         setSalvandoCod(null)
         return
@@ -634,7 +661,8 @@ export function ApontamentoLista({
         })
       }
       setSalvandoCod(null)
-      if (result.ok || flush.somou) router.refresh()
+      // Só atualiza a página se gravou de verdade — senão o refresh apaga qtd/obs digitados.
+      if (flush.somou || (result.ok && result.salvos > 0)) router.refresh()
     })
   }
 
