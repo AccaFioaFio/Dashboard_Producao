@@ -153,12 +153,26 @@ async function lancamentosDoPedido(etapa: EtapaApontamento, pedidoNorm: string) 
 /**
  * Une entradas locais + nuvem por excel_row e soma — não usa Math.max dos totais
  * (isso perdia peças quando cada lado tinha datas/linhas diferentes).
+ *
+ * Se o local for mais novo que o documento na nuvem, usa só o local: depois de
+ * Corrigir o SQLite já tem o total certo; unir com nuvem atrasada somava de novo.
  */
 function mergeProduto(
   locais: Gravado[] | undefined,
   nuvem: ApontamentoNuvem | undefined,
 ): AgregadoProduto | undefined {
   if (!locais?.length && !nuvem) return undefined
+
+  if (locais?.length && nuvem?.atualizadoEm) {
+    let maxLocal = ''
+    for (const row of locais) {
+      if (row.atualizadoEm > maxLocal) maxLocal = row.atualizadoEm
+    }
+    if (maxLocal && nuvem.atualizadoEm < maxLocal) {
+      return agregarLinhas(locais) ?? undefined
+    }
+  }
+
   const entradas = unirEntradas(
     locais?.length ? gravadosParaEntradas(locais) : [],
     nuvem ? entradasDoLancamento(nuvem) : [],

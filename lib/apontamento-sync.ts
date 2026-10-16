@@ -164,8 +164,22 @@ async function syncOnce(): Promise<ApontamentoSyncResult> {
     ])
 
     const limparOrfaos = syncLimparOrfaos
-    const costura = upsertLote('costura', costuraRows, { limparOrfaos })
-    const revisao = upsertLote('revisao', revisaoRows, { limparOrfaos })
+    const costura = upsertLote(
+      'costura',
+      costuraRows.filter(
+        (row) =>
+          !apontamentoFoiSubstituidoRecentemente('costura', row.pedidoNorm, row.codProduto),
+      ),
+      { limparOrfaos },
+    )
+    const revisao = upsertLote(
+      'revisao',
+      revisaoRows.filter(
+        (row) =>
+          !apontamentoFoiSubstituidoRecentemente('revisao', row.pedidoNorm, row.codProduto),
+      ),
+      { limparOrfaos },
+    )
     syncDimPedidoApontamento()
 
     lastResult = {
@@ -291,15 +305,24 @@ async function pushEtapa(etapa: EtapaApontamento): Promise<PushEtapaResult> {
   for (let i = 0; i < lista.length; i += batchSize) {
     const batch = lista.slice(i, i + batchSize)
     const resultados = await Promise.all(
-      batch.map((grupo) =>
-        mesclarEntradasApontamentoNuvem(
+      batch.map((grupo) => {
+        if (
+          apontamentoFoiSubstituidoRecentemente(
+            etapa,
+            grupo.pedidoNorm,
+            grupo.codProduto,
+          )
+        ) {
+          return Promise.resolve({ ok: true as const, mudou: false })
+        }
+        return mesclarEntradasApontamentoNuvem(
           etapa,
           grupo.pedidoNorm,
           grupo.codProduto,
           grupo.entradas,
           grupo.nomeProduto,
-        ),
-      ),
+        )
+      }),
     )
     for (const result of resultados) {
       if (result.ok && result.mudou) publicados += 1
@@ -441,7 +464,9 @@ export async function sincronizarProdutoApontamento(
   }))
   const nomeProduto = linhas.find((row) => row.nomeProduto)?.nomeProduto ?? null
 
-  if (entradas.length && isSupabaseWriteConfigured()) {
+  const substituido = apontamentoFoiSubstituidoRecentemente(etapa, pedidoNorm, codProduto)
+
+  if (!substituido && entradas.length && isSupabaseWriteConfigured()) {
     const publicado = await mesclarEntradasApontamentoNuvem(
       etapa,
       pedidoNorm,
@@ -450,14 +475,14 @@ export async function sincronizarProdutoApontamento(
       nomeProduto,
     )
     if (!publicado.ok) return publicado
-  } else if (entradas.length && isSupabaseConfigured()) {
+  } else if (!substituido && entradas.length && isSupabaseConfigured()) {
     return {
       ok: false,
       error: 'Falta SUPABASE_SERVICE_ROLE_KEY. Sem ela o lançamento não chega no outro aparelho.',
     }
   }
 
-  if (!options?.skipPull && isSupabaseConfigured()) {
+  if (!substituido && !options?.skipPull && isSupabaseConfigured()) {
     try {
       const nuvem = await lerApontamentoNuvem(etapa, pedidoNorm)
       const doc = nuvem.get(codProduto)
@@ -484,12 +509,55 @@ export async function sincronizarProdutoApontamento(
 const PEDIDO_SYNC_TTL_MS = 8_000
 const pedidoSyncAt = new Map<string, number>()
 
+/** Evita mesclar/puxar de novo um produto logo após Corrigir (substituir total). */
+const SUBSTITUICAO_TTL_MS = 120_000
+const substituicaoAte = new Map<string, number>()
+
 function chavePedidoSync(etapa: EtapaApontamento, pedidoNorm: string) {
   return `${etapa}:${pedidoNorm}`
 }
 
+function chaveSubstituicao(
+  etapa: EtapaApontamento,
+  pedidoNorm: string,
+  codProduto: string,
+) {
+  return `${etapa}:${pedidoNorm}:${codProduto}`
+}
+
 function marcarPedidoApontamentoSyncado(etapa: EtapaApontamento, pedidoNorm: string) {
   pedidoSyncAt.set(chavePedidoSync(etapa, pedidoNorm), Date.now())
+}
+
+/**
+ * Após Corrigir/zerar: a nuvem já foi substituída. Por um tempo, não mesclar nem
+ * puxar esse produto — uma leitura atrasada da nuvem recriaria o total antigo.
+ */
+export function marcarSubstituicaoApontamento(
+  etapa: EtapaApontamento,
+  pedidoNorm: string,
+  codProduto: string,
+) {
+  substituicaoAte.set(
+    chaveSubstituicao(etapa, pedidoNorm, codProduto),
+    Date.now() + SUBSTITUICAO_TTL_MS,
+  )
+  marcarPedidoApontamentoSyncado(etapa, pedidoNorm)
+}
+
+export function apontamentoFoiSubstituidoRecentemente(
+  etapa: EtapaApontamento,
+  pedidoNorm: string,
+  codProduto: string,
+): boolean {
+  const chave = chaveSubstituicao(etapa, pedidoNorm, codProduto)
+  const ate = substituicaoAte.get(chave)
+  if (ate == null) return false
+  if (Date.now() > ate) {
+    substituicaoAte.delete(chave)
+    return false
+  }
+  return true
 }
 
 /**
@@ -540,8 +608,11 @@ export async function sincronizarPedidoApontamento(
     for (let i = 0; i < produtos.length; i += batchSize) {
       const batch = produtos.slice(i, i + batchSize)
       await Promise.all(
-        batch.map(([codProduto, grupo]) =>
-          mesclarEntradasApontamentoNuvem(
+        batch.map(([codProduto, grupo]) => {
+          if (apontamentoFoiSubstituidoRecentemente(etapa, pedidoNorm, codProduto)) {
+            return Promise.resolve()
+          }
+          return mesclarEntradasApontamentoNuvem(
             etapa,
             pedidoNorm,
             codProduto,
@@ -557,8 +628,8 @@ export async function sincronizarPedidoApontamento(
                 result.error,
               )
             }
-          }),
-        ),
+          })
+        }),
       )
     }
   }
@@ -567,6 +638,9 @@ export async function sincronizarPedidoApontamento(
     const nuvem = await lerApontamentoNuvem(etapa, pedidoNorm)
     const rows: ApontamentoNuvemComPedido[] = []
     for (const doc of nuvem.values()) {
+      if (apontamentoFoiSubstituidoRecentemente(etapa, pedidoNorm, doc.codProduto)) {
+        continue
+      }
       for (const entrada of entradasDoLancamento(doc)) {
         rows.push({
           ...doc,

@@ -24,7 +24,10 @@ import {
   marcarAvisoApontamentoNuvem,
   substituirTotalApontamentoNuvem,
 } from '@/lib/apontamento-nuvem'
-import { sincronizarProdutoApontamento } from '@/lib/apontamento-sync'
+import {
+  marcarSubstituicaoApontamento,
+  sincronizarProdutoApontamento,
+} from '@/lib/apontamento-sync'
 import { enviarAvisoApontamentoWhatsApp } from '@/lib/whatsapp/apontamento-finalizado'
 import { EXCEL_ROW_FORA_DA_CARGA } from '@/lib/corte-producao'
 import { getApontamentoPedido } from '@/data/apontamento'
@@ -694,6 +697,10 @@ export async function corrigirApontamento(
       observacao: null,
       nomeProduto,
     })
+    if (nuvem.ok) {
+      // Não mesclar depois: unir com leitura atrasada da nuvem recria o total antigo.
+      marcarSubstituicaoApontamento(etapa, pedidoNorm, codProduto)
+    }
     syncDimPedidoApontamento(pedidoNorm)
     revalidateApontamento(etapa)
     if (!nuvem.ok) {
@@ -756,6 +763,9 @@ export async function corrigirApontamento(
     )
   }
 
+  // Só substitui na nuvem — NÃO chamar sincronizarProduto/mesclar depois:
+  // unir entradas locais com uma leitura atrasada da nuvem somava o total
+  // antigo + a correção (ex.: 370 + 178 = 548).
   const nuvem = await substituirTotalApontamentoNuvem(etapa, pedidoNorm, {
     excelRow: excelRowNovo,
     codProduto,
@@ -768,7 +778,7 @@ export async function corrigirApontamento(
     nomeProduto,
   })
   if (nuvem.ok) {
-    await sincronizarProdutoApontamento(etapa, pedidoNorm, codProduto, { skipPull: true })
+    marcarSubstituicaoApontamento(etapa, pedidoNorm, codProduto)
   }
   syncDimPedidoApontamento(pedidoNorm)
   revalidateApontamento(etapa)
