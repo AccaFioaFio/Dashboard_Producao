@@ -8,7 +8,10 @@ loadLocalEnv()
 
 async function main() {
   const { getSqlite } = await import('../db')
-  const { ensureApontamentosNuvemNoSqlite } = await import('../lib/apontamento-sync')
+  const {
+    ensureApontamentosNuvemNoSqlite,
+    publicarApontamentosLocaisNaNuvem,
+  } = await import('../lib/apontamento-sync')
   const {
     somarPecasCosturaProducao,
     somarPecasRevisao,
@@ -17,6 +20,7 @@ async function main() {
   } = await import('../lib/apontamento-fatos')
 
   getSqlite()
+  const publicados = await publicarApontamentosLocaisNaNuvem({ force: true })
   const sync = await ensureApontamentosNuvemNoSqlite({ force: true })
   const db = getSqlite()
 
@@ -59,6 +63,7 @@ async function main() {
   console.log(
     JSON.stringify(
       {
+        publicadosNaNuvem: publicados,
         sync,
         kpiCosturaProd: somarPecasCosturaProducao(),
         kpiRevisao: somarPecasRevisao(),

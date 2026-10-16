@@ -167,16 +167,56 @@ function lancamentoDe(raw: unknown, codArquivo?: string): ApontamentoNuvem | nul
   }
 }
 
-async function baixarJson(path: string) {
+type BaixaJson =
+  | { status: 'ok'; data: unknown }
+  | { status: 'missing' }
+  | { status: 'error'; error: string }
+
+function erroStorageNaoEncontrado(error: {
+  message?: string
+  error?: string
+  statusCode?: string | number
+  status?: string | number
+}) {
+  const codigo = String(error.statusCode ?? error.status ?? '')
+  const textoErro = `${error.message ?? ''} ${error.error ?? ''} ${codigo}`.toLowerCase()
+  return (
+    codigo === '404' ||
+    textoErro.includes('not found') ||
+    textoErro.includes('object not found') ||
+    textoErro.includes('no such file')
+  )
+}
+
+/** Distingue arquivo ausente de falha de rede — erro não pode virar “documento vazio”. */
+async function baixarJson(path: string): Promise<BaixaJson> {
   const client = clienteLeitura()
-  if (!client) return null
+  if (!client) return { status: 'error', error: 'Supabase não configurado para leitura.' }
   const { data, error } = await client.storage.from(CARGA_BUCKET).download(path)
-  if (error || !data) return null
-  try {
-    return JSON.parse(await data.text()) as unknown
-  } catch {
-    return null
+  if (error) {
+    if (erroStorageNaoEncontrado(error)) return { status: 'missing' }
+    return { status: 'error', error: error.message || 'Falha ao baixar da nuvem.' }
   }
+  if (!data) return { status: 'missing' }
+  try {
+    return { status: 'ok', data: JSON.parse(await data.text()) as unknown }
+  } catch {
+    return { status: 'error', error: 'JSON inválido na nuvem.' }
+  }
+}
+
+function unirEntradas(
+  base: ApontamentoNuvemEntrada[],
+  extras: ApontamentoNuvemEntrada[],
+): ApontamentoNuvemEntrada[] {
+  const mapa = new Map<number, ApontamentoNuvemEntrada>()
+  for (const row of [...base, ...extras]) {
+    const atual = mapa.get(row.excelRow)
+    if (!atual || row.atualizadoEm >= atual.atualizadoEm) {
+      mapa.set(row.excelRow, row)
+    }
+  }
+  return [...mapa.values()]
 }
 
 export async function lerApontamentoNuvem(etapa: EtapaApontamento, pedidoNorm: string) {
@@ -196,10 +236,9 @@ export async function lerApontamentoNuvem(etapa: EtapaApontamento, pedidoNorm: s
       .filter((item) => item.name.endsWith('.json'))
       .map(async (item) => {
         const codArquivo = item.name.replace(/\.json$/, '')
-        const lancamento = lancamentoDe(
-          await baixarJson(`${prefixo}/${pedido}/${item.name}`),
-          codArquivo,
-        )
+        const baixa = await baixarJson(`${prefixo}/${pedido}/${item.name}`)
+        if (baixa.status !== 'ok') return
+        const lancamento = lancamentoDe(baixa.data, codArquivo)
         if (lancamento) mapa.set(lancamento.codProduto, lancamento)
       }),
   )
@@ -294,7 +333,11 @@ export async function gravarApontamentoNuvem(
   }
 
   const path = caminhoItem(etapa, pedidoNorm, lancamento.codProduto)
-  const anterior = lancamentoDe(await baixarJson(path))
+  const baixa = await baixarJson(path)
+  if (baixa.status === 'error') {
+    return { ok: false, error: `Não leu a nuvem antes de gravar (${baixa.error}).` }
+  }
+  const anterior = baixa.status === 'ok' ? lancamentoDe(baixa.data) : null
   const avisoInformado = Object.prototype.hasOwnProperty.call(
     lancamento,
     'avisoDataProducao',
@@ -364,7 +407,14 @@ export async function somarEntradaApontamentoNuvem(
   }
 
   const path = caminhoItem(etapa, pedidoNorm, entrada.codProduto)
-  const anterior = lancamentoDe(await baixarJson(path))
+  const baixa = await baixarJson(path)
+  if (baixa.status === 'error') {
+    return {
+      ok: false,
+      error: `Não leu a nuvem antes de somar (${baixa.error}). Tente de novo — o total na nuvem não foi alterado.`,
+    }
+  }
+  const anterior = baixa.status === 'ok' ? lancamentoDe(baixa.data) : null
   const agora = new Date().toISOString()
   const entradas = anterior ? entradasDoLancamento(anterior) : []
   const nova: ApontamentoNuvemEntrada = {
@@ -381,7 +431,7 @@ export async function somarEntradaApontamentoNuvem(
   const corpo = agregarEntradas(
     entrada.codProduto,
     entrada.nomeProduto ?? anterior?.nomeProduto ?? null,
-    [...entradas.filter((row) => row.excelRow !== nova.excelRow), nova],
+    unirEntradas(entradas, [nova]),
   )
   const { error } = await client.storage
     .from(CARGA_BUCKET)
@@ -410,7 +460,11 @@ export async function marcarAvisoApontamentoNuvem(
     }
   }
   const path = caminhoItem(etapa, pedidoNorm, codProduto)
-  const atual = lancamentoDe(await baixarJson(path))
+  const baixa = await baixarJson(path)
+  if (baixa.status === 'error') {
+    return { ok: false, error: `Não leu a nuvem para marcar o aviso (${baixa.error}).` }
+  }
+  const atual = baixa.status === 'ok' ? lancamentoDe(baixa.data) : null
   const agora = new Date().toISOString()
   let entradas = atual ? entradasDoLancamento(atual) : []
   if (!entradas.length && fallback) {
@@ -521,7 +575,9 @@ export async function listarAlertasApontamentoNuvem(
       .filter((item) => item.name.endsWith('.json'))
       .map(async (item) => {
         const id = item.name.replace(/\.json$/, '')
-        return alertaDe(await baixarJson(caminhoAlerta(etapa, id)), id)
+        const baixa = await baixarJson(caminhoAlerta(etapa, id))
+        if (baixa.status !== 'ok') return null
+        return alertaDe(baixa.data, id)
       }),
   )
   return alertas.filter((alerta): alerta is ApontamentoNuvemAlerta => Boolean(alerta))
@@ -551,7 +607,12 @@ export async function marcarAlertaApontamentoNuvemVisto(
   etapa: EtapaApontamento,
   id: string,
 ) {
-  const alerta = alertaDe(await baixarJson(caminhoAlerta(etapa, id)), id)
+  const baixa = await baixarJson(caminhoAlerta(etapa, id))
+  if (baixa.status === 'error') {
+    return { ok: false as const, error: baixa.error }
+  }
+  if (baixa.status === 'missing') return { ok: true as const }
+  const alerta = alertaDe(baixa.data, id)
   if (!alerta || alerta.vistoEm) return { ok: true as const }
   const client = clienteEscrita()
   if (!client) return { ok: true as const }
@@ -564,4 +625,57 @@ export async function marcarAlertaApontamentoNuvemVisto(
     )
   if (error) return { ok: false as const, error: error.message }
   return { ok: true as const }
+}
+
+/**
+ * Une entradas locais com o JSON da nuvem (por excel_row, fica a mais nova).
+ * Usado para o mobile publicar o que só existia no SQLite da instância.
+ */
+export async function mesclarEntradasApontamentoNuvem(
+  etapa: EtapaApontamento,
+  pedidoNorm: string,
+  codProduto: string,
+  entradasLocais: ApontamentoNuvemEntrada[],
+  nomeProduto: string | null,
+): Promise<{ ok: true; mudou: boolean } | { ok: false; error: string }> {
+  if (!entradasLocais.length) return { ok: true, mudou: false }
+  const client = clienteEscrita()
+  if (!client) {
+    if (!isSupabaseConfigured()) return { ok: true, mudou: false }
+    return {
+      ok: false,
+      error: 'Falta SUPABASE_SERVICE_ROLE_KEY para publicar lançamentos na nuvem.',
+    }
+  }
+
+  const path = caminhoItem(etapa, pedidoNorm, codProduto)
+  const baixa = await baixarJson(path)
+  if (baixa.status === 'error') {
+    return { ok: false, error: baixa.error }
+  }
+  const anterior = baixa.status === 'ok' ? lancamentoDe(baixa.data, trechoSeguro(codProduto)) : null
+  const entradasNuvem = anterior ? entradasDoLancamento(anterior) : []
+  const unidas = unirEntradas(entradasNuvem, entradasLocais)
+  const mudou =
+    unidas.length !== entradasNuvem.length ||
+    unidas.some((row) => {
+      const remoto = entradasNuvem.find((item) => item.excelRow === row.excelRow)
+      return !remoto || remoto.atualizadoEm < row.atualizadoEm
+    })
+  if (!mudou) return { ok: true, mudou: false }
+
+  const corpo = agregarEntradas(
+    codProduto,
+    nomeProduto ?? anterior?.nomeProduto ?? null,
+    unidas,
+  )
+  const { error } = await client.storage
+    .from(CARGA_BUCKET)
+    .upload(path, JSON.stringify(corpo), {
+      upsert: true,
+      contentType: 'application/json',
+      cacheControl: '0',
+    })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, mudou: true }
 }

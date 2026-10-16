@@ -11,7 +11,10 @@ import {
   somarPecasCosturaProducao,
   somarPecasRevisao,
 } from '@/lib/apontamento-fatos'
-import { ensureApontamentosNuvemNoSqlite } from '@/lib/apontamento-sync'
+import {
+  ensureApontamentosNuvemNoSqlite,
+  publicarApontamentosLocaisNaNuvem,
+} from '@/lib/apontamento-sync'
 import type {
   FunilKpis,
   HeaderKpis,
@@ -76,8 +79,9 @@ export async function applySnapshotPayload(
     header,
   })
 
-  // Tela grava na nuvem; recoloca no SQLite antes de somar os KPIs.
+  // Tela grava na nuvem; recoloca no SQLite e republica o que só estava local.
   await ensureApontamentosNuvemNoSqlite({ force: true })
+  await publicarApontamentosLocaisNaNuvem({ force: true })
 
   // KPIs ao vivo: planilha + lançamentos do dash (corte segue só planilha).
   const headerComLancamentos: HeaderKpis = {

@@ -6,7 +6,10 @@ import {
   captureApontamentoOperacao,
   mergeApontamentoOperacao,
 } from '@/lib/apontamento-operacao-local'
-import { ensureApontamentosNuvemNoSqlite } from '@/lib/apontamento-sync'
+import {
+  ensureApontamentosNuvemNoSqlite,
+  publicarApontamentosLocaisNaNuvem,
+} from '@/lib/apontamento-sync'
 import { captureCorteOperacao, mergeCorteOperacao } from '@/lib/corte-operacao-local'
 import {
   captureProgramacaoHistorico,
@@ -64,6 +67,8 @@ export async function ensureCloudDatabase(options?: { force?: boolean }) {
     await inFlight
   }
   await ensureApontamentosNuvemNoSqlite({ force: options?.force })
+  // Publica no Storage o que só existia no SQLite (ex.: lançamentos do mobile).
+  await publicarApontamentosLocaisNaNuvem({ force: options?.force })
   await ensureProgramacaoNuvemNoSqlite({ force: options?.force })
   await ensureProgramacaoHistoricoNuvemNoSqlite({ force: options?.force })
 }
@@ -295,6 +300,7 @@ export async function refreshFromSupabaseCarga(): Promise<
     mergeProgramacaoOperacao(backupProgramacao)
     mergeProgramacaoHistorico(backupHistorico)
     await ensureApontamentosNuvemNoSqlite({ force: true })
+    await publicarApontamentosLocaisNaNuvem({ force: true })
     await ensureProgramacaoNuvemNoSqlite({ force: true })
     await ensureProgramacaoHistoricoNuvemNoSqlite({ force: true })
   } catch (error) {
