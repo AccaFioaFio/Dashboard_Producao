@@ -38,20 +38,11 @@ function tabelaExiste(nome: string) {
   )
 }
 
-function excelRowLocal(tabela: string, pedidoNorm: string, codProduto: string) {
-  const row = getSqlite()
-    .prepare(
-      `SELECT excel_row as excelRow FROM ${tabela}
-       WHERE pedido_norm = ? AND cod_produto = ?
-       ORDER BY atualizado_em DESC LIMIT 1`,
-    )
-    .get(pedidoNorm, codProduto) as { excelRow: number } | undefined
-  return row?.excelRow ?? EXCEL_ROW_FORA_DA_CARGA
-}
-
 function upsertLote(etapa: EtapaApontamento, rows: ApontamentoNuvemComPedido[]) {
   const tabela = ETAPAS_APONTAMENTO[etapa].tabela
-  if (!tabelaExiste(tabela) || !rows.length) return { n: 0, pecas: 0, porDia: {} as Record<string, number> }
+  if (!tabelaExiste(tabela) || !rows.length) {
+    return { n: 0, pecas: 0, porDia: {} as Record<string, number> }
+  }
 
   const db = getSqlite()
   const colunasOrigem = etapa === 'costura' ? 'origem, ' : ''
@@ -77,9 +68,12 @@ function upsertLote(etapa: EtapaApontamento, rows: ApontamentoNuvemComPedido[]) 
   let n = 0
   let pecas = 0
   const porDia: Record<string, number> = {}
+  const porProduto = new Map<string, { pedidoNorm: string; codProduto: string; rows: number[] }>()
+
   const gravar = db.transaction(() => {
     for (const row of rows) {
-      const excelRow = excelRowLocal(tabela, row.pedidoNorm, row.codProduto)
+      const excelRow =
+        Number.isInteger(row.excelRow) ? row.excelRow : EXCEL_ROW_FORA_DA_CARGA
       const args = [
         row.pedidoNorm,
         row.codProduto,
@@ -94,15 +88,17 @@ function upsertLote(etapa: EtapaApontamento, rows: ApontamentoNuvemComPedido[]) 
         row.atualizadoEm,
       ]
       upsert.run(...args)
-      // Uma linha por produto no pedido (igual à tela).
-      db.prepare(
-        `DELETE FROM ${tabela}
-         WHERE pedido_norm = ? AND cod_produto = ? AND excel_row != ?`,
-      ).run(row.pedidoNorm, row.codProduto, excelRow)
+      const chave = `${row.pedidoNorm}\0${row.codProduto}`
+      const grupo = porProduto.get(chave) ?? {
+        pedidoNorm: row.pedidoNorm,
+        codProduto: row.codProduto,
+        rows: [] as number[],
+      }
+      grupo.rows.push(excelRow)
+      porProduto.set(chave, grupo)
       n += 1
       if (row.qtdPecas != null) {
-        const entraCostura =
-          etapa !== 'costura' || row.origem === 'Produção'
+        const entraCostura = etapa !== 'costura' || row.origem === 'Produção'
         if (entraCostura) {
           pecas += row.qtdPecas
           if (row.dataProducao) {
@@ -110,6 +106,16 @@ function upsertLote(etapa: EtapaApontamento, rows: ApontamentoNuvemComPedido[]) 
           }
         }
       }
+    }
+
+    // Mantém só as entradas que vieram da nuvem (várias datas do mesmo produto).
+    for (const grupo of porProduto.values()) {
+      const unicos = [...new Set(grupo.rows)]
+      const placeholders = unicos.map(() => '?').join(', ')
+      db.prepare(
+        `DELETE FROM ${tabela}
+         WHERE pedido_norm = ? AND cod_produto = ? AND excel_row NOT IN (${placeholders})`,
+      ).run(grupo.pedidoNorm, grupo.codProduto, ...unicos)
     }
   })
   gravar()

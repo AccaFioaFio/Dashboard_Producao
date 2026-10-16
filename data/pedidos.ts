@@ -9,7 +9,6 @@ import {
   lerLancamentosNuvem,
   type CorteNuvemLancamento,
 } from '@/lib/corte-nuvem'
-import { isProducaoOrigem } from '@/lib/keys'
 import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { leadTimeDays } from '@/lib/dates'
 import type { DashFilters } from '@/lib/filters'
@@ -481,35 +480,36 @@ function guardarNome(marca: MarcaItem, nome: string | null | undefined) {
   if (!marca.nomeProduto && nome?.trim()) marca.nomeProduto = nome.trim()
 }
 
-type ApontamentoLocal = {
-  codProduto: string
-  origem: string | null
-  qtdPecas: number | null
-  nomeProduto: string | null
-  atualizadoEm: string
-}
-
-/** Estado atual do lançamento por código. A linha mais nova, local ou nuvem, vence. */
+/** Soma das entradas do produto (várias datas). Nuvem e local: fica o maior total. */
 async function aplicarApontamento(
   marcas: Map<string, MarcaItem>,
   pedidoNorm: string,
   etapa: 'costura' | 'revisao',
 ) {
   const tabela = etapa === 'costura' ? 'costura_lancamento' : 'revisao_lancamento'
-  const origemSql = etapa === 'costura' ? 'origem' : 'NULL as origem'
-  const locais = new Map<string, ApontamentoLocal>()
+  const origemFiltro =
+    etapa === 'costura' ? `AND origem = 'Produção'` : ''
+  const locais = new Map<
+    string,
+    { codProduto: string; qtdPecas: number; nomeProduto: string | null; atualizadoEm: string }
+  >()
   for (const row of sqlite()
     .prepare(
-      `SELECT cod_produto as codProduto, ${origemSql},
-              qtd_pecas as qtdPecas, nome_produto as nomeProduto,
-              atualizado_em as atualizadoEm
+      `SELECT cod_produto as codProduto,
+              COALESCE(SUM(qtd_pecas), 0) as qtdPecas,
+              MAX(nome_produto) as nomeProduto,
+              MAX(atualizado_em) as atualizadoEm
        FROM ${tabela}
-       WHERE pedido_norm = ?
-       ORDER BY atualizado_em DESC`,
+       WHERE pedido_norm = ? AND qtd_pecas IS NOT NULL ${origemFiltro}
+       GROUP BY cod_produto`,
     )
-    .all(pedidoNorm) as ApontamentoLocal[]) {
-    const chave = chaveProduto(row.codProduto)
-    if (!locais.has(chave)) locais.set(chave, row)
+    .all(pedidoNorm) as {
+    codProduto: string
+    qtdPecas: number
+    nomeProduto: string | null
+    atualizadoEm: string
+  }[]) {
+    locais.set(chaveProduto(row.codProduto), row)
   }
 
   const nuvem = new Map<string, ApontamentoNuvem>()
@@ -525,20 +525,18 @@ async function aplicarApontamento(
   for (const chave of new Set([...locais.keys(), ...nuvem.keys()])) {
     const local = locais.get(chave)
     const remoto = nuvem.get(chave)
-    const escolhido = !local
-      ? remoto
-      : !remoto
-        ? local
-        : local.atualizadoEm >= remoto.atualizadoEm
-          ? local
-          : remoto
-    const marca = marcaDe(marcas, escolhido?.codProduto ?? local?.codProduto ?? remoto?.codProduto ?? chave)
+    const pecasNuvem = remoto?.qtdPecas ?? 0
+    const pecasLocal = local?.qtdPecas ?? 0
+    const total = Math.max(pecasLocal, pecasNuvem)
+    const marca = marcaDe(
+      marcas,
+      remoto?.codProduto ?? local?.codProduto ?? chave,
+    )
     guardarNome(marca, local?.nomeProduto)
     guardarNome(marca, remoto?.nomeProduto)
-    if (!escolhido || escolhido.qtdPecas == null) continue
-    if (etapa === 'costura' && !isProducaoOrigem(escolhido.origem)) continue
-    if (etapa === 'costura') marca.costurada = escolhido.qtdPecas
-    else marca.revisada = escolhido.qtdPecas
+    if (total <= 0) continue
+    if (etapa === 'costura') marca.costurada = total
+    else marca.revisada = total
   }
 }
 

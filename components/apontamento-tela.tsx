@@ -5,9 +5,18 @@ import { ApontamentoVoltarButton } from '@/components/apontamento-nav'
 import { KpiCard, KpiGrid } from '@/components/kpi-card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { getApontamentoPedido, listarOficinasApontamento } from '@/data/apontamento'
-import { ETAPAS_APONTAMENTO, type EtapaApontamento } from '@/lib/apontamento'
-import { formatInt } from '@/lib/format'
+import {
+  getApontamentoPedido,
+  listarOficinasApontamento,
+  listarPlanilhaPedido,
+  somarLancadoSoPlanilha,
+} from '@/data/apontamento'
+import {
+  ETAPAS_APONTAMENTO,
+  OBS_JA_LANCADO_PLANILHA,
+  type EtapaApontamento,
+} from '@/lib/apontamento'
+import { formatDate, formatInt } from '@/lib/format'
 
 function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value
@@ -24,17 +33,28 @@ export async function ApontamentoTela({
   const pedido = first(params.pedido)?.trim() ?? ''
   const consulta = pedido ? await getApontamentoPedido(etapa, pedido) : null
   const oficinas = etapa === 'costura' ? listarOficinasApontamento() : []
+  const planilha =
+    consulta?.pedidoNorm != null
+      ? listarPlanilhaPedido(etapa, consulta.pedidoNorm)
+      : []
   const config = ETAPAS_APONTAMENTO[etapa]
   const temQtdPedida = consulta?.itens.some((row) => row.qtdPedida != null) ?? false
   const totalPecas =
     consulta?.itens.reduce((sum, row) => sum + (row.qtdPedida ?? 0), 0) ?? 0
-  const totalLancado =
+  const totalNosCards =
     consulta?.itens.reduce((sum, row) => sum + (row.qtdPecas ?? 0), 0) ?? 0
+  const totalPlanilha = planilha.reduce((sum, row) => sum + row.pecas, 0)
+  const totalSoPlanilhaNoCard =
+    consulta?.pedidoNorm != null
+      ? somarLancadoSoPlanilha(etapa, consulta.pedidoNorm)
+      : 0
+  // Tela + planilha, sem duplicar o que já foi anotado no card como “já lançado na planilha”.
+  const totalLancado = totalNosCards + totalPlanilha - totalSoPlanilhaNoCard
   const mostrarLista = Boolean(consulta?.itens.length || consulta?.inclusaoManual)
   const descricao =
     etapa === 'costura'
-      ? 'Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código (descrição vem de Itens ou é digitada) ou só a descrição, sem código. Origem, qtd peças, data, responsável e observação gravam sozinhos. Em cada item, Salvar na lista envia WhatsApp e o alerta na Visão Geral só para aquele produto novo com origem Produção; o botão do topo salva todos os novos de uma vez.'
-      : 'Pesquise o número do pedido. Se ele já tem itens, a lista abre. Se o número não está na base, inclua o código (descrição vem de Itens ou é digitada) ou só a descrição, sem código. Qtd, data, responsável e observação gravam sozinhos. Em cada item, Salvar na lista envia WhatsApp e o alerta na Visão Geral só para aquele produto novo; o botão do topo salva todos os novos de uma vez.'
+      ? `Pesquise o pedido. Já lançado no card = total do produto. Se a planilha trouxe qtd sem descrição completa, some no produto certo e anote na observação “${OBS_JA_LANCADO_PLANILHA}” (não duplica no KPI). Soma nova = outra data/qtd.`
+      : `Pesquise o pedido. Já lançado no card = total do produto. Se a planilha trouxe qtd sem descrição completa, some no produto certo e anote na observação “${OBS_JA_LANCADO_PLANILHA}” (não duplica no KPI). Soma nova = outra data/qtd.`
 
   return (
     <PageShell
@@ -118,22 +138,62 @@ export async function ApontamentoTela({
             <KpiCard
               label="Qtd lançada"
               value={formatInt(totalLancado)}
-              hint="Soma do que foi preenchido nesta lista"
-              detail={
-                etapa === 'costura'
-                  ? 'Soma de Qtd peças preenchida nesta tela.'
-                  : 'Soma de Qtd preenchida nesta tela.'
+              hint={
+                totalPlanilha > 0
+                  ? `${formatInt(totalNosCards)} na tela + ${formatInt(totalPlanilha)} na planilha`
+                  : 'Soma já lançada neste pedido'
               }
+              detail={`Total = cards + planilha. Se a planilha veio sem descrição completa, some no produto certo e anote “${OBS_JA_LANCADO_PLANILHA}” (não duplica).`}
               tone="magenta"
             />
           </KpiGrid>
+
+          {planilha.length ? (
+            <section className="flex min-w-0 flex-col gap-2">
+              <h2 className="text-sm font-medium">Já na planilha (texto incompleto)</h2>
+              <p className="text-xs text-muted-foreground">
+                Use o produto certo no card abaixo, some a qtd e anote na observação:{' '}
+                <span className="font-medium text-foreground">{OBS_JA_LANCADO_PLANILHA}</span>.
+              </p>
+              <div className="card-surface table-surface min-w-0 overflow-x-auto">
+                <table className="w-full text-left text-xs leading-snug sm:text-[11px]">
+                  <thead className="bg-muted/50 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase sm:text-[9px]">
+                    <tr>
+                      <th className="px-1.5 py-1">Data</th>
+                      <th className="px-1.5 py-1 text-right">Peças</th>
+                      <th className="px-1.5 py-1">Produto (planilha)</th>
+                      <th className="px-1.5 py-1">Responsável</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {planilha.map((row, index) => (
+                      <tr key={`${row.dataProducao}-${index}`} className="border-t border-border/80">
+                        <td className="px-1.5 py-1.5 whitespace-nowrap">
+                          {formatDate(row.dataProducao)}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-right font-medium tabular-nums">
+                          {formatInt(row.pecas)}
+                        </td>
+                        <td className="px-1.5 py-1.5 break-words">
+                          {row.produto?.trim() || '—'}
+                        </td>
+                        <td className="px-1.5 py-1.5 whitespace-nowrap">
+                          {row.responsavel?.trim() || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
 
           <section className="flex min-w-0 flex-col gap-2">
             <h2 className="text-sm font-medium">Itens do pedido</h2>
             <p className="text-xs text-muted-foreground">
               {consulta.inclusaoManual
-                ? 'Informe o código do produto (a descrição vem do cadastro quando existir) ou só a descrição, sem código. A quantidade pedida fica em branco.'
-                : `Itens.xlsx · ${formatInt(consulta.itens.length)} produto${consulta.itens.length === 1 ? '' : 's'}. A qtd pedida é fixa. O que já foi preenchido continua neste pedido.`}
+                ? `Já lançado no card = total. Se veio da planilha sem descrição completa, some aqui e anote “${OBS_JA_LANCADO_PLANILHA}”.`
+                : `Itens.xlsx · ${formatInt(consulta.itens.length)} produto${consulta.itens.length === 1 ? '' : 's'}. Já lançado = total do card; Qtd a somar + Data = esta entrada.`}
             </p>
             <ApontamentoLista
               key={consulta.pedidoNorm ?? pedido}

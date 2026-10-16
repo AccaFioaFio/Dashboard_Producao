@@ -2,6 +2,19 @@ import { createAdminClient, createAnonClient, isSupabaseConfigured } from '@/lib
 import { CARGA_BUCKET } from '@/lib/supabase/constants'
 import { ETAPAS_APONTAMENTO, type EtapaApontamento } from '@/lib/apontamento'
 
+/** Uma soma parcial (pode ser em datas diferentes do mesmo produto). */
+export type ApontamentoNuvemEntrada = {
+  excelRow: number
+  origem: string | null
+  oficina: string | null
+  qtdPecas: number | null
+  dataProducao: string | null
+  responsavel: string | null
+  avisoDataProducao: string | null
+  observacao: string | null
+  atualizadoEm: string
+}
+
 export type ApontamentoNuvem = {
   codProduto: string
   origem: string | null
@@ -13,6 +26,8 @@ export type ApontamentoNuvem = {
   observacao: string | null
   nomeProduto: string | null
   atualizadoEm: string
+  /** Entradas parciais; se ausente, o documento legado conta como uma entrada. */
+  entradas?: ApontamentoNuvemEntrada[]
 }
 
 export type ApontamentoNuvemAlertaItem = {
@@ -63,12 +78,81 @@ function numero(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+function entradaDe(raw: unknown): ApontamentoNuvemEntrada | null {
+  if (!raw || typeof raw !== 'object') return null
+  const row = raw as Record<string, unknown>
+  const atualizadoEm = texto(row.atualizadoEm)
+  const excelRow = numero(row.excelRow)
+  if (!atualizadoEm || excelRow == null || !Number.isInteger(excelRow)) return null
+  return {
+    excelRow,
+    origem: texto(row.origem),
+    oficina: texto(row.oficina),
+    qtdPecas: numero(row.qtdPecas),
+    dataProducao: texto(row.dataProducao),
+    responsavel: texto(row.responsavel),
+    avisoDataProducao: texto(row.avisoDataProducao),
+    observacao: texto(row.observacao),
+    atualizadoEm,
+  }
+}
+
+function agregarEntradas(
+  codProduto: string,
+  nomeProduto: string | null,
+  entradas: ApontamentoNuvemEntrada[],
+): ApontamentoNuvem {
+  const ordenadas = [...entradas].sort((a, b) =>
+    a.atualizadoEm < b.atualizadoEm ? 1 : a.atualizadoEm > b.atualizadoEm ? -1 : 0,
+  )
+  const recente = ordenadas[0]
+  const pecas = ordenadas.reduce((sum, row) => sum + (row.qtdPecas ?? 0), 0)
+  return {
+    codProduto,
+    origem: recente?.origem ?? null,
+    oficina: recente?.oficina ?? null,
+    qtdPecas: pecas > 0 ? pecas : recente?.qtdPecas ?? null,
+    dataProducao: recente?.dataProducao ?? null,
+    responsavel: recente?.responsavel ?? null,
+    avisoDataProducao: recente?.avisoDataProducao ?? null,
+    observacao: recente?.observacao ?? null,
+    nomeProduto,
+    atualizadoEm: recente?.atualizadoEm ?? new Date().toISOString(),
+    entradas: ordenadas,
+  }
+}
+
+export function entradasDoLancamento(doc: ApontamentoNuvem): ApontamentoNuvemEntrada[] {
+  if (doc.entradas?.length) return doc.entradas
+  return [
+    {
+      excelRow: 0,
+      origem: doc.origem,
+      oficina: doc.oficina,
+      qtdPecas: doc.qtdPecas,
+      dataProducao: doc.dataProducao,
+      responsavel: doc.responsavel,
+      avisoDataProducao: doc.avisoDataProducao,
+      observacao: doc.observacao,
+      atualizadoEm: doc.atualizadoEm,
+    },
+  ]
+}
+
 function lancamentoDe(raw: unknown, codArquivo?: string): ApontamentoNuvem | null {
   if (!raw || typeof raw !== 'object') return null
   const row = raw as Record<string, unknown>
   const atualizadoEm = texto(row.atualizadoEm)
   const codProduto = texto(row.codProduto) ?? codArquivo ?? null
   if (!atualizadoEm || !codProduto) return null
+  const nomeProduto = texto(row.nomeProduto)
+  const entradasBrutas = Array.isArray(row.entradas) ? row.entradas : null
+  if (entradasBrutas?.length) {
+    const entradas = entradasBrutas
+      .map((item) => entradaDe(item))
+      .filter((item): item is ApontamentoNuvemEntrada => Boolean(item))
+    if (entradas.length) return agregarEntradas(codProduto, nomeProduto, entradas)
+  }
   return {
     codProduto,
     origem: texto(row.origem),
@@ -78,7 +162,7 @@ function lancamentoDe(raw: unknown, codArquivo?: string): ApontamentoNuvem | nul
     responsavel: texto(row.responsavel),
     avisoDataProducao: texto(row.avisoDataProducao),
     observacao: texto(row.observacao),
-    nomeProduto: texto(row.nomeProduto),
+    nomeProduto,
     atualizadoEm,
   }
 }
@@ -122,7 +206,10 @@ export async function lerApontamentoNuvem(etapa: EtapaApontamento, pedidoNorm: s
   return mapa
 }
 
-export type ApontamentoNuvemComPedido = ApontamentoNuvem & { pedidoNorm: string }
+export type ApontamentoNuvemComPedido = ApontamentoNuvem & {
+  pedidoNorm: string
+  excelRow: number
+}
 
 /** Lista pastas de pedido em costura-operacao / revisao-operacao (sem _alertas). */
 async function listarPastasPedidoNuvem(etapa: EtapaApontamento): Promise<string[]> {
@@ -168,7 +255,16 @@ export async function listarTodosApontamentosNuvem(
     for (let j = 0; j < batch.length; j += 1) {
       const pedidoNorm = batch[j]
       for (const lancamento of mapas[j].values()) {
-        out.push({ ...lancamento, pedidoNorm })
+        for (const entrada of entradasDoLancamento(lancamento)) {
+          out.push({
+            ...lancamento,
+            ...entrada,
+            nomeProduto: lancamento.nomeProduto,
+            pedidoNorm,
+            excelRow: entrada.excelRow,
+            entradas: undefined,
+          })
+        }
       }
     }
   }
@@ -177,9 +273,10 @@ export async function listarTodosApontamentosNuvem(
 
 export type ApontamentoNuvemGravacao = Omit<
   ApontamentoNuvem,
-  'atualizadoEm' | 'avisoDataProducao'
+  'atualizadoEm' | 'avisoDataProducao' | 'entradas'
 > & {
   avisoDataProducao?: string | null
+  excelRow?: number
 }
 
 export async function gravarApontamentoNuvem(
@@ -202,12 +299,18 @@ export async function gravarApontamentoNuvem(
     lancamento,
     'avisoDataProducao',
   )
+  const agora = new Date().toISOString()
   const avisoDataProducao: string | null = avisoInformado
     ? (lancamento.avisoDataProducao ?? null)
     : (anterior?.avisoDataProducao ?? null)
-
-  const corpo: ApontamentoNuvem = {
-    codProduto: lancamento.codProduto,
+  const excelRow =
+    typeof lancamento.excelRow === 'number' && Number.isInteger(lancamento.excelRow)
+      ? lancamento.excelRow
+      : 0
+  const entradasAnteriores = anterior ? entradasDoLancamento(anterior) : []
+  const demais = entradasAnteriores.filter((row) => row.excelRow !== excelRow)
+  const entrada: ApontamentoNuvemEntrada = {
+    excelRow,
     origem: lancamento.origem,
     oficina: lancamento.oficina ?? null,
     qtdPecas: lancamento.qtdPecas,
@@ -215,9 +318,13 @@ export async function gravarApontamentoNuvem(
     responsavel: lancamento.responsavel,
     avisoDataProducao,
     observacao: lancamento.observacao ?? null,
-    nomeProduto: lancamento.nomeProduto ?? anterior?.nomeProduto ?? null,
-    atualizadoEm: new Date().toISOString(),
+    atualizadoEm: agora,
   }
+  const corpo = agregarEntradas(
+    lancamento.codProduto,
+    lancamento.nomeProduto ?? anterior?.nomeProduto ?? null,
+    [...demais, entrada],
+  )
   const { error } = await client.storage
     .from(CARGA_BUCKET)
     .upload(path, JSON.stringify(corpo), {
@@ -229,6 +336,64 @@ export async function gravarApontamentoNuvem(
   return { ok: true }
 }
 
+/** Acrescenta uma entrada parcial (outra data / outra soma) sem apagar as anteriores. */
+export async function somarEntradaApontamentoNuvem(
+  etapa: EtapaApontamento,
+  pedidoNorm: string,
+  entrada: {
+    excelRow: number
+    codProduto: string
+    origem: string | null
+    oficina: string | null
+    qtdPecas: number
+    dataProducao: string
+    responsavel: string
+    observacao: string | null
+    nomeProduto: string | null
+  },
+): Promise<{ ok: true; total: number } | { ok: false; error: string }> {
+  const client = clienteEscrita()
+  if (!client) {
+    if (!isSupabaseConfigured()) {
+      return { ok: true, total: entrada.qtdPecas }
+    }
+    return {
+      ok: false,
+      error: 'Falta SUPABASE_SERVICE_ROLE_KEY. Sem ela o lançamento some ao reabrir a tela.',
+    }
+  }
+
+  const path = caminhoItem(etapa, pedidoNorm, entrada.codProduto)
+  const anterior = lancamentoDe(await baixarJson(path))
+  const agora = new Date().toISOString()
+  const entradas = anterior ? entradasDoLancamento(anterior) : []
+  const nova: ApontamentoNuvemEntrada = {
+    excelRow: entrada.excelRow,
+    origem: entrada.origem,
+    oficina: entrada.oficina,
+    qtdPecas: entrada.qtdPecas,
+    dataProducao: entrada.dataProducao,
+    responsavel: entrada.responsavel,
+    avisoDataProducao: null,
+    observacao: entrada.observacao,
+    atualizadoEm: agora,
+  }
+  const corpo = agregarEntradas(
+    entrada.codProduto,
+    entrada.nomeProduto ?? anterior?.nomeProduto ?? null,
+    [...entradas.filter((row) => row.excelRow !== nova.excelRow), nova],
+  )
+  const { error } = await client.storage
+    .from(CARGA_BUCKET)
+    .upload(path, JSON.stringify(corpo), {
+      upsert: true,
+      contentType: 'application/json',
+      cacheControl: '0',
+    })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, total: corpo.qtdPecas ?? entrada.qtdPecas }
+}
+
 export async function marcarAvisoApontamentoNuvem(
   etapa: EtapaApontamento,
   pedidoNorm: string,
@@ -236,20 +401,53 @@ export async function marcarAvisoApontamentoNuvem(
   dataProducao: string,
   fallback?: ApontamentoNuvemGravacao,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const atual = lancamentoDe(await baixarJson(caminhoItem(etapa, pedidoNorm, codProduto)))
-  const base = atual ?? fallback
-  if (!base) return { ok: true }
-  return gravarApontamentoNuvem(etapa, pedidoNorm, {
-    codProduto: base.codProduto,
-    origem: base.origem,
-    oficina: base.oficina,
-    qtdPecas: base.qtdPecas,
-    dataProducao,
-    responsavel: base.responsavel,
-    observacao: base.observacao,
-    nomeProduto: base.nomeProduto,
-    avisoDataProducao: dataProducao,
-  })
+  const client = clienteEscrita()
+  if (!client) {
+    if (!isSupabaseConfigured()) return { ok: true }
+    return {
+      ok: false,
+      error: 'Falta SUPABASE_SERVICE_ROLE_KEY para marcar o aviso na nuvem.',
+    }
+  }
+  const path = caminhoItem(etapa, pedidoNorm, codProduto)
+  const atual = lancamentoDe(await baixarJson(path))
+  const agora = new Date().toISOString()
+  let entradas = atual ? entradasDoLancamento(atual) : []
+  if (!entradas.length && fallback) {
+    entradas = [
+      {
+        excelRow: 0,
+        origem: fallback.origem,
+        oficina: fallback.oficina ?? null,
+        qtdPecas: fallback.qtdPecas,
+        dataProducao: fallback.dataProducao,
+        responsavel: fallback.responsavel,
+        avisoDataProducao: null,
+        observacao: fallback.observacao ?? null,
+        atualizadoEm: agora,
+      },
+    ]
+  }
+  if (!entradas.length) return { ok: true }
+  const marcadas = entradas.map((row) =>
+    row.dataProducao === dataProducao
+      ? { ...row, avisoDataProducao: dataProducao, atualizadoEm: agora }
+      : row,
+  )
+  const corpo = agregarEntradas(
+    codProduto,
+    atual?.nomeProduto ?? fallback?.nomeProduto ?? null,
+    marcadas,
+  )
+  const { error } = await client.storage
+    .from(CARGA_BUCKET)
+    .upload(path, JSON.stringify(corpo), {
+      upsert: true,
+      contentType: 'application/json',
+      cacheControl: '0',
+    })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
 }
 
 export async function apagarApontamentoNuvem(

@@ -21,6 +21,7 @@ import {
   gravarApontamentoNuvem,
   marcarAlertaApontamentoNuvemVisto,
   marcarAvisoApontamentoNuvem,
+  somarEntradaApontamentoNuvem,
 } from '@/lib/apontamento-nuvem'
 import { enviarAvisoApontamentoWhatsApp } from '@/lib/whatsapp/apontamento-finalizado'
 import { isProducaoOrigem } from '@/lib/keys'
@@ -48,6 +49,10 @@ export type SalvarApontamentoInput = {
 }
 
 export type SalvarApontamentoResult = { ok: true } | { ok: false; error: string }
+
+export type SomarApontamentoResult =
+  | { ok: true; total: number }
+  | { ok: false; error: string }
 
 export type BuscarProdutoApontamentoResult =
   | {
@@ -371,11 +376,6 @@ export async function salvarApontamento(
     )
   }
 
-  db.prepare(
-    `DELETE FROM ${tabela}
-     WHERE pedido_norm = ? AND cod_produto = ? AND excel_row != ?`,
-  ).run(pedidoNorm, codProduto, excelRow)
-
   const nuvem = await gravarApontamentoNuvem(etapa, pedidoNorm, {
     codProduto,
     origem: origem || null,
@@ -385,6 +385,7 @@ export async function salvarApontamento(
     responsavel: responsavel || null,
     observacao,
     nomeProduto,
+    excelRow,
   })
   syncDimPedidoApontamento(pedidoNorm)
   revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
@@ -397,6 +398,179 @@ export async function salvarApontamento(
     }
   }
   return { ok: true }
+}
+
+/**
+ * Soma uma quantidade nova no produto, com a data informada (pode ser outro dia).
+ * Não substitui lançamentos anteriores do mesmo código.
+ */
+export async function somarApontamento(
+  input: SalvarApontamentoInput,
+): Promise<SomarApontamentoResult> {
+  const etapa = etapaApontamento(input.etapa)
+  if (!etapa) return { ok: false, error: 'Etapa inválida.' }
+
+  const session = await readSession()
+  if (!session || !canAccessPath(ETAPAS_APONTAMENTO[etapa].acesso, session.acessos)) {
+    return { ok: false, error: semPermissao(etapa) }
+  }
+
+  await ensureCloudDatabase()
+
+  const pedidoNorm = pedidoDigits(input.pedidoNorm)
+  let codProduto = input.codProduto.trim()
+  if (!pedidoNorm || !codProduto) {
+    return { ok: false, error: 'Item do pedido inválido.' }
+  }
+
+  const qtdPecas = quantidade(input.qtdPecas)
+  if (qtdPecas === 'invalida' || qtdPecas == null || qtdPecas <= 0) {
+    return { ok: false, error: 'Informe a quantidade a somar (maior que zero).' }
+  }
+
+  const dataProducao = input.dataProducao.trim()
+  if (!dataProducao || !dataValida(dataProducao)) {
+    return { ok: false, error: 'Informe a data de produção deste lançamento.' }
+  }
+
+  const responsavel = input.responsavel.trim()
+  if (!responsavel || !responsavelApontamentoValido(etapa, responsavel)) {
+    return { ok: false, error: 'Escolha um responsável da lista.' }
+  }
+
+  const origem = etapa === 'costura' ? input.origem.trim() : ''
+  if (etapa === 'costura' && !origemCosturaValida(origem)) {
+    return { ok: false, error: 'Escolha a origem antes de somar.' }
+  }
+  const conserto = etapa === 'costura' && origemCosturaConserto(origem)
+  const oficina = conserto ? (input.oficina?.trim() ?? '') : ''
+  if (conserto && !oficinaCadastrada(oficina)) {
+    return { ok: false, error: 'Em Conserto, escolha a oficina antes de somar.' }
+  }
+  if (etapa === 'costura' && !origem) {
+    return { ok: false, error: 'Escolha a origem antes de somar.' }
+  }
+
+  const observacao = clipObs(input.observacao, 500)
+  const excelRowBase = Number(input.excelRow)
+  const foraDaCarga = excelRowBase === EXCEL_ROW_FORA_DA_CARGA
+  let nomeProduto: string | null = null
+  if (foraDaCarga) {
+    const produto = produtoNaBaseItens(codProduto)
+    const nomeInformado = input.nomeProduto?.trim() || null
+    if (produto) {
+      codProduto = produto.codProduto
+      nomeProduto = produto.nomeProduto ?? nomeInformado
+    } else {
+      nomeProduto = nomeInformado
+      if (!nomeProduto) {
+        const guardado = getSqlite()
+          .prepare(
+            `SELECT nome_produto as nomeProduto FROM ${ETAPAS_APONTAMENTO[etapa].tabela}
+             WHERE pedido_norm = ? AND cod_produto = ?
+             ORDER BY atualizado_em DESC LIMIT 1`,
+          )
+          .get(pedidoNorm, codProduto) as { nomeProduto: string | null } | undefined
+        nomeProduto = guardado?.nomeProduto ?? null
+      }
+      if (!nomeProduto) {
+        return { ok: false, error: 'Informe a descrição do produto.' }
+      }
+    }
+  } else {
+    const existe = getSqlite()
+      .prepare(
+        `SELECT 1 as v FROM fato_pedido_item
+         WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
+      )
+      .get(pedidoNorm, codProduto, excelRowBase)
+    if (!existe) {
+      return { ok: false, error: 'Este item não está na carga do pedido.' }
+    }
+  }
+
+  const tabela = ETAPAS_APONTAMENTO[etapa].tabela
+  const db = getSqlite()
+  const agora = new Date().toISOString()
+  let excelRowNovo = -Date.now()
+  while (
+    db
+      .prepare(
+        `SELECT 1 as v FROM ${tabela}
+         WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
+      )
+      .get(pedidoNorm, codProduto, excelRowNovo)
+  ) {
+    excelRowNovo -= 1
+  }
+
+  if (etapa === 'costura') {
+    db.prepare(
+      `INSERT INTO ${tabela} (
+         pedido_norm, cod_produto, excel_row, origem, oficina, qtd_pecas, data_producao,
+         responsavel, observacao, nome_produto, atualizado_em
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      pedidoNorm,
+      codProduto,
+      excelRowNovo,
+      origem || null,
+      oficina || null,
+      qtdPecas,
+      dataProducao,
+      responsavel,
+      observacao,
+      nomeProduto,
+      agora,
+    )
+  } else {
+    db.prepare(
+      `INSERT INTO ${tabela} (
+         pedido_norm, cod_produto, excel_row, qtd_pecas, data_producao,
+         responsavel, observacao, nome_produto, atualizado_em
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      pedidoNorm,
+      codProduto,
+      excelRowNovo,
+      qtdPecas,
+      dataProducao,
+      responsavel,
+      observacao,
+      nomeProduto,
+      agora,
+    )
+  }
+
+  const totalRow = db
+    .prepare(
+      `SELECT COALESCE(SUM(qtd_pecas), 0) as v FROM ${tabela}
+       WHERE pedido_norm = ? AND cod_produto = ? AND qtd_pecas IS NOT NULL`,
+    )
+    .get(pedidoNorm, codProduto) as { v: number }
+
+  const nuvem = await somarEntradaApontamentoNuvem(etapa, pedidoNorm, {
+    excelRow: excelRowNovo,
+    codProduto,
+    origem: origem || null,
+    oficina: oficina || null,
+    qtdPecas,
+    dataProducao,
+    responsavel,
+    observacao,
+    nomeProduto,
+  })
+  syncDimPedidoApontamento(pedidoNorm)
+  revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
+  revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
+  revalidatePath('/')
+  if (!nuvem.ok) {
+    return {
+      ok: false,
+      error: `Somou nesta tela, mas a nuvem não atualizou (${nuvem.error}). Ao reabrir, o total pode ficar incompleto.`,
+    }
+  }
+  return { ok: true, total: totalRow.v }
 }
 
 export type SalvarListaApontamentoResult =
@@ -443,6 +617,34 @@ export async function salvarListaApontamento(
   }
 
   const codFiltro = codProdutoInformado?.trim().replaceAll(' ', '').toLocaleLowerCase('pt-BR') || ''
+  const tabelaLanc = ETAPAS_APONTAMENTO[etapa].tabela
+  const origemSql = etapa === 'costura' ? 'origem' : 'NULL as origem'
+  const oficinaSql = etapa === 'costura' ? 'oficina' : 'NULL as oficina'
+  const linhasPendentes = getSqlite()
+    .prepare(
+      `SELECT excel_row as excelRow, cod_produto as codProduto,
+              nome_produto as nomeProduto, ${origemSql}, ${oficinaSql},
+              qtd_pecas as qtdPecas, data_producao as dataProducao,
+              responsavel, observacao
+       FROM ${tabelaLanc}
+       WHERE pedido_norm = ?
+         AND qtd_pecas IS NOT NULL
+         AND data_producao IS NOT NULL
+         AND responsavel IS NOT NULL
+         AND (aviso_data_producao IS NULL OR aviso_data_producao != data_producao)
+       ORDER BY atualizado_em DESC`,
+    )
+    .all(pedidoNorm) as {
+    excelRow: number
+    codProduto: string
+    nomeProduto: string | null
+    origem: string | null
+    oficina: string | null
+    qtdPecas: number | null
+    dataProducao: string
+    responsavel: string | null
+    observacao: string | null
+  }[]
 
   const pendentes: {
     excelRow: number
@@ -457,28 +659,23 @@ export async function salvarListaApontamento(
   }[] = []
   const vistos = new Set<string>()
 
-  for (const item of consulta.itens) {
+  for (const item of linhasPendentes) {
     if (codFiltro) {
       const chave = item.codProduto.trim().replaceAll(' ', '').toLocaleLowerCase('pt-BR')
       if (chave !== codFiltro) continue
     }
-    if (!item.dataProducao || item.qtdPecas == null || !item.responsavel) continue
-    if (item.avisoDataProducao === item.dataProducao) continue
-    if (etapa === 'costura') {
-      if (!isProducaoOrigem(item.origem)) continue
-    }
-    if (vistos.has(item.codProduto)) continue
-    vistos.add(item.codProduto)
+    if (etapa === 'costura' && !isProducaoOrigem(item.origem)) continue
+    // Um aviso por produto+data (várias somas no mesmo dia entram juntas).
+    const chaveAviso = `${item.codProduto}\0${item.dataProducao}`
+    if (vistos.has(chaveAviso)) continue
+    vistos.add(chaveAviso)
+    const nomeLista =
+      item.nomeProduto ??
+      consulta.itens.find((row) => row.codProduto === item.codProduto)?.nomeProduto ??
+      null
     pendentes.push({
-      excelRow: item.excelRow,
-      codProduto: item.codProduto,
-      nomeProduto: item.nomeProduto,
-      origem: item.origem,
-      oficina: item.oficina,
-      qtdPecas: item.qtdPecas,
-      dataProducao: item.dataProducao,
-      responsavel: item.responsavel,
-      observacao: item.observacao,
+      ...item,
+      nomeProduto: nomeLista,
     })
   }
 
@@ -518,7 +715,7 @@ export async function salvarListaApontamento(
   const marcar = db.prepare(
     `UPDATE ${tabela}
      SET aviso_data_producao = ?, atualizado_em = ?
-     WHERE pedido_norm = ? AND cod_produto = ?`,
+     WHERE pedido_norm = ? AND cod_produto = ? AND data_producao = ?`,
   )
   const garantir =
     etapa === 'costura'
@@ -564,6 +761,7 @@ export async function salvarListaApontamento(
         enviadoEm,
         pedidoNorm,
         item.codProduto,
+        item.dataProducao,
       )
       if (atualizado.changes === 0) {
         if (etapa === 'costura') {

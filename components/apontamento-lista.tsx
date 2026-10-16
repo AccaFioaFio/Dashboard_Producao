@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation'
 import { ListChecks, Plus } from 'lucide-react'
 import {
   buscarProdutoApontamento,
-  salvarApontamento,
   salvarListaApontamento,
+  somarApontamento,
 } from '@/app/actions/apontamento'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  OBS_JA_LANCADO_PLANILHA,
   ORIGENS_COSTURA,
   RESPONSAVEIS_COSTURA,
   RESPONSAVEIS_REVISAO,
@@ -33,6 +34,7 @@ export type ItemApontamentoLista = {
   dataProducao: string | null
   responsavel: string | null
   avisoDataProducao: string | null
+  datasAvisadas?: string[]
   observacao: string | null
 }
 
@@ -40,26 +42,17 @@ function chaveCodigo(cod: string) {
   return cod.trim().replaceAll(' ', '').toLocaleLowerCase('pt-BR')
 }
 
-type Lancamento = {
-  origem: string
-  oficina: string
-  qtdPecas: string
-  dataProducao: string
-  responsavel: string
-  observacao: string
-}
-
 function AvisoStatus({
   dataProducao,
-  avisoDataProducao,
+  datasAvisadas,
   dataConfirmada,
 }: {
   dataProducao: string
-  avisoDataProducao: string | null
+  datasAvisadas: string[]
   dataConfirmada?: string
 }) {
   if (!dataProducao) return <span className="text-muted-foreground">—</span>
-  if (avisoDataProducao === dataProducao || dataConfirmada === dataProducao) {
+  if (datasAvisadas.includes(dataProducao) || dataConfirmada === dataProducao) {
     return (
       <span className="font-medium text-emerald-700 dark:text-emerald-400">Na lista</span>
     )
@@ -69,20 +62,12 @@ function AvisoStatus({
   )
 }
 
-function textoQtd(value: number | null) {
-  if (value == null) return ''
-  return String(value)
-}
-
-function lancamentoIgual(a: Lancamento, b: Lancamento) {
-  return (
-    a.origem === b.origem &&
-    a.oficina === b.oficina &&
-    a.qtdPecas.trim() === b.qtdPecas.trim() &&
-    a.dataProducao === b.dataProducao &&
-    a.responsavel === b.responsavel &&
-    a.observacao.trim() === b.observacao.trim()
-  )
+function parseQtd(value: string): number | null | 'invalida' {
+  const texto = value.trim().replace(',', '.')
+  if (!texto) return null
+  const numero = Number(texto)
+  if (!Number.isFinite(numero) || numero < 0) return 'invalida'
+  return numero
 }
 
 function CampoSelect({
@@ -127,6 +112,7 @@ function Linha({
   salvandoItem,
   onOcupada,
   onSalvarItem,
+  onRegisterFlush,
 }: {
   etapa: EtapaApontamento
   pedidoNorm: string
@@ -139,136 +125,109 @@ function Linha({
   salvandoItem: boolean
   onOcupada: (ocupada: boolean) => void
   onSalvarItem: () => void
+  onRegisterFlush: (
+    chave: string,
+    flush: (() => Promise<{ ok: boolean; somou: boolean }>) | null,
+  ) => void
 }) {
-  const inicial: Lancamento = {
-    origem: item.origem ?? '',
-    oficina: origemCosturaConserto(item.origem ?? '') ? (item.oficina ?? '') : '',
-    qtdPecas: textoQtd(item.qtdPecas),
-    dataProducao: item.dataProducao ?? '',
-    responsavel: item.responsavel ?? '',
-    observacao: item.observacao ?? '',
-  }
-  const [origem, setOrigem] = useState(inicial.origem)
-  const [oficina, setOficina] = useState(inicial.oficina)
-  const [qtdPecas, setQtdPecas] = useState(inicial.qtdPecas)
-  const [dataProducao, setDataProducao] = useState(inicial.dataProducao)
-  const [responsavel, setResponsavel] = useState(inicial.responsavel)
-  const [observacao, setObservacao] = useState(inicial.observacao)
-  const valores = useRef(inicial)
-  const gravado = useRef(inicial)
-  const espera = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const fila = useRef(Promise.resolve())
-  const geracao = useRef(0)
-  const viva = useRef(true)
+  const jaLancadoInicial = item.qtdPecas ?? 0
+  const [origem, setOrigem] = useState('')
+  const [oficina, setOficina] = useState('')
+  const [jaLancado, setJaLancado] = useState(jaLancadoInicial)
+  const [adicionar, setAdicionar] = useState('')
+  const [dataProducao, setDataProducao] = useState('')
+  const [responsavel, setResponsavel] = useState('')
+  const [observacao, setObservacao] = useState('')
+  const [datasAvisadas, setDatasAvisadas] = useState<string[]>(
+    item.datasAvisadas ?? [],
+  )
+  const jaLancadoRef = useRef(jaLancadoInicial)
+  const adicionarRef = useRef('')
+  const origemRef = useRef('')
+  const oficinaRef = useRef('')
+  const dataRef = useRef('')
+  const responsavelRef = useRef('')
+  const observacaoRef = useRef('')
   const [erro, setErro] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const descricao = item.nomeProduto?.replace(/\s+/g, ' ').trim() || '—'
-  const colunas = temOrigem ? 10 : 8
+  const chave = chaveCodigo(item.codProduto)
+  const colunas = temOrigem ? 11 : 9
   const mostraOficina = temOrigem && origemCosturaConserto(origem)
   const naLista =
     Boolean(dataProducao) &&
-    (item.avisoDataProducao === dataProducao || dataConfirmada === dataProducao)
+    (datasAvisadas.includes(dataProducao) || dataConfirmada === dataProducao)
+  const temAdicao = Boolean(adicionar.trim())
+  const botaoDesabilitado = salvandoItem || (naLista && !temAdicao)
+  const rotuloBotao = salvandoItem
+    ? 'Salvando…'
+    : temAdicao && jaLancado > 0
+      ? 'Adicionar'
+      : naLista && !temAdicao
+        ? 'Na lista'
+        : 'Salvar na lista'
 
-  function gravar(next: Lancamento) {
-    if (lancamentoIgual(next, gravado.current)) {
-      onOcupada(false)
-      return
+  async function aplicarAdicao(): Promise<{ ok: boolean; somou: boolean }> {
+    const parsed = parseQtd(adicionarRef.current)
+    if (parsed === 'invalida') {
+      setErro('A quantidade precisa ser um número a partir de zero.')
+      return { ok: false, somou: false }
     }
-    const ticket = ++geracao.current
-    onOcupada(true)
-    fila.current = fila.current
-      .then(async () => {
-        const atual = valores.current
-        if (ticket !== geracao.current || lancamentoIgual(atual, gravado.current)) {
-          if (ticket === geracao.current) onOcupada(false)
-          return
-        }
-        try {
-          const result = await salvarApontamento({
-            etapa,
-            pedidoNorm,
-            codProduto: item.codProduto,
-            excelRow: item.excelRow,
-            origem: atual.origem,
-            oficina: atual.oficina,
-            qtdPecas: atual.qtdPecas,
-            dataProducao: atual.dataProducao,
-            responsavel: atual.responsavel,
-            observacao: atual.observacao,
-            nomeProduto: item.nomeProduto,
-          })
-          if (!viva.current || ticket !== geracao.current) return
-          if (result.ok) gravado.current = atual
-          const preenchido =
-            Boolean(
-              atual.origem ||
-                atual.oficina ||
-                atual.dataProducao ||
-                atual.responsavel ||
-                atual.observacao.trim(),
-            ) || atual.qtdPecas.trim() !== ''
-          setErro(result.ok ? null : result.error)
-          setAviso(result.ok && preenchido ? 'Gravado neste pedido.' : null)
-        } catch {
-          if (viva.current && ticket === geracao.current) {
-            setErro('Não foi possível gravar agora.')
-          }
-        } finally {
-          if (viva.current && ticket === geracao.current) onOcupada(false)
-        }
-      })
-      .catch(() => {
-        /* mantém a fila viva após falha inesperada */
-      })
-  }
-
-  function agendar(next: Lancamento) {
-    valores.current = next
-    onOcupada(true)
-    if (espera.current) clearTimeout(espera.current)
-    espera.current = setTimeout(() => {
-      espera.current = null
-      gravar(valores.current)
-    }, 300)
-  }
-
-  async function salvarNaLista() {
-    if (salvandoItem) return
-    if (espera.current) {
-      clearTimeout(espera.current)
-      espera.current = null
+    if (parsed == null || parsed <= 0) {
+      return { ok: true, somou: false }
     }
-    gravar(valores.current)
-    await fila.current
-    onSalvarItem()
-  }
-
-  useEffect(() => {
-    viva.current = true
-    return () => {
-      viva.current = false
-      if (!espera.current) return
-      clearTimeout(espera.current)
-      espera.current = null
-      const next = valores.current
-      if (lancamentoIgual(next, gravado.current)) return
-      void salvarApontamento({
+    onOcupada(true)
+    try {
+      const result = await somarApontamento({
         etapa,
         pedidoNorm,
         codProduto: item.codProduto,
         excelRow: item.excelRow,
-        origem: next.origem,
-        oficina: next.oficina,
-        qtdPecas: next.qtdPecas,
-        dataProducao: next.dataProducao,
-        responsavel: next.responsavel,
-        observacao: next.observacao,
+        origem: origemRef.current,
+        oficina: oficinaRef.current,
+        qtdPecas: adicionarRef.current,
+        dataProducao: dataRef.current,
+        responsavel: responsavelRef.current,
+        observacao: observacaoRef.current,
         nomeProduto: item.nomeProduto,
-      }).catch(() => {
-        /* unmount: evita rejection não tratada */
       })
+      if (!result.ok) {
+        setErro(result.error)
+        return { ok: false, somou: false }
+      }
+      jaLancadoRef.current = result.total
+      setJaLancado(result.total)
+      adicionarRef.current = ''
+      setAdicionar('')
+      setErro(null)
+      setAviso(
+        `Somou nesta data. Total do produto: ${formatNumber(result.total, result.total % 1 ? 2 : 0)} peças.`,
+      )
+      return { ok: true, somou: true }
+    } catch {
+      setErro('Não foi possível somar a quantidade agora.')
+      return { ok: false, somou: false }
+    } finally {
+      onOcupada(false)
     }
-  }, [etapa, item.codProduto, item.excelRow, pedidoNorm, item.nomeProduto])
+  }
+
+  function salvarNaLista() {
+    if (salvandoItem || botaoDesabilitado) return
+    onSalvarItem()
+  }
+
+  useEffect(() => {
+    const total = item.qtdPecas ?? 0
+    jaLancadoRef.current = total
+    setJaLancado(total)
+    setDatasAvisadas(item.datasAvisadas ?? [])
+  }, [item.qtdPecas, item.datasAvisadas])
+
+  useEffect(() => {
+    onRegisterFlush(chave, aplicarAdicao)
+    return () => onRegisterFlush(chave, null)
+  })
 
   const campo =
     'h-8 w-full min-w-0 rounded-lg border border-input bg-background px-2 py-1 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 sm:h-7 sm:text-xs dark:bg-input/40'
@@ -308,9 +267,10 @@ function Linha({
               className={campo}
               onChange={(next) => {
                 const proximaOficina = origemCosturaConserto(next) ? oficina : ''
+                origemRef.current = next
+                oficinaRef.current = proximaOficina
                 setOrigem(next)
                 setOficina(proximaOficina)
-                agendar({ ...valores.current, origem: next, oficina: proximaOficina })
               }}
             />
           </td>
@@ -324,8 +284,8 @@ function Linha({
                 items={oficinas}
                 className={campo}
                 onChange={(next) => {
+                  oficinaRef.current = next
                   setOficina(next)
-                  agendar({ ...valores.current, oficina: next })
                 }}
               />
             ) : (
@@ -340,44 +300,42 @@ function Linha({
             items={responsaveis}
             className={campo}
             onChange={(next) => {
+              responsavelRef.current = next
               setResponsavel(next)
-              agendar({ ...valores.current, responsavel: next })
             }}
           />
+        </td>
+        <td
+          data-label="Já lançado"
+          className="w-28 px-1.5 py-1.5 text-right font-medium whitespace-nowrap tabular-nums"
+        >
+          {formatNumber(jaLancado, jaLancado % 1 ? 2 : 0)}
         </td>
         <td data-label={qtdLabel} className="w-28 px-1.5 py-1.5">
           <input
             aria-label={`${qtdLabel} de ${descricao}`}
             inputMode="decimal"
-            value={qtdPecas}
+            value={adicionar}
+            placeholder="Somar"
             className={cn(campo, 'text-right tabular-nums')}
             onChange={(event) => {
               const next = event.currentTarget.value
-              setQtdPecas(next)
-              agendar({ ...valores.current, qtdPecas: next })
-            }}
-            onBlur={(event) => {
-              const next = event.currentTarget.value
-              setQtdPecas(next)
-              agendar({ ...valores.current, qtdPecas: next })
+              adicionarRef.current = next
+              setAdicionar(next)
+              setErro(null)
             }}
           />
         </td>
         <td data-label="Data produção" className="w-36 px-1.5 py-1.5">
           <input
-            aria-label={`Data produção de ${descricao}`}
+            aria-label={`Data desta soma de ${descricao}`}
             type="date"
             value={dataProducao}
             className={campo}
             onChange={(event) => {
               const next = event.currentTarget.value
+              dataRef.current = next
               setDataProducao(next)
-              agendar({ ...valores.current, dataProducao: next })
-            }}
-            onBlur={(event) => {
-              const next = event.currentTarget.value
-              setDataProducao(next)
-              agendar({ ...valores.current, dataProducao: next })
             }}
           />
         </td>
@@ -387,17 +345,12 @@ function Linha({
             value={observacao}
             rows={2}
             maxLength={500}
-            placeholder="Opcional"
+            placeholder={`Ex.: ${OBS_JA_LANCADO_PLANILHA}`}
             className={area}
             onChange={(event) => {
               const next = event.currentTarget.value
+              observacaoRef.current = next
               setObservacao(next)
-              agendar({ ...valores.current, observacao: next })
-            }}
-            onBlur={(event) => {
-              const next = event.currentTarget.value
-              setObservacao(next)
-              agendar({ ...valores.current, observacao: next })
             }}
           />
         </td>
@@ -405,20 +358,18 @@ function Linha({
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
             <AvisoStatus
               dataProducao={dataProducao}
-              avisoDataProducao={item.avisoDataProducao}
+              datasAvisadas={datasAvisadas}
               dataConfirmada={dataConfirmada}
             />
             <Button
               type="button"
               size="sm"
-              disabled={salvandoItem || naLista}
-              onClick={() => {
-                void salvarNaLista()
-              }}
+              disabled={botaoDesabilitado}
+              onClick={salvarNaLista}
               className="h-10 w-full sm:h-8 sm:w-auto"
             >
               <ListChecks />
-              {salvandoItem ? 'Salvando…' : naLista ? 'Na lista' : 'Salvar na lista'}
+              {rotuloBotao}
             </Button>
           </div>
         </td>
@@ -511,6 +462,7 @@ function IncluirProduto({
         dataProducao: null,
         responsavel: null,
         avisoDataProducao: null,
+        datasAvisadas: [],
         observacao: null,
       })
     })
@@ -598,6 +550,9 @@ export function ApontamentoLista({
   const [confirmadas, setConfirmadas] = useState<Record<string, string>>({})
   const [salvandoCod, setSalvandoCod] = useState<string | null>(null)
   const [salvando, startSalvar] = useTransition()
+  const flushers = useRef(
+    new Map<string, () => Promise<{ ok: boolean; somou: boolean }>>(),
+  )
   const router = useRouter()
   const responsaveis = etapa === 'costura' ? RESPONSAVEIS_COSTURA : RESPONSAVEIS_REVISAO
   const gravando = Object.values(ocupadas).some(Boolean)
@@ -609,8 +564,8 @@ export function ApontamentoLista({
   const chaves = new Set(visiveis.map((item) => chaveCodigo(item.codProduto)))
   const dica =
     etapa === 'costura'
-      ? 'O que já entrou na lista fica neste pedido. Em cada item, Salvar na lista leva só aquele produto (origem Produção, qtd, data e responsável). Em Conserto, escolha também a oficina. O botão do topo salva todos os novos de uma vez.'
-      : 'O que já entrou na lista fica neste pedido. Em cada item, Salvar na lista leva só aquele produto (qtd, data e responsável). O botão do topo salva todos os novos de uma vez.'
+      ? `Já lançado = total do card (todas as datas). Se a qtd já existia na planilha (descrição incompleta), some no produto certo e anote na observação: “${OBS_JA_LANCADO_PLANILHA}” — assim não duplica no KPI. Cada soma nova leva a própria data.`
+      : `Já lançado = total do card (todas as datas). Se a qtd já existia na planilha (descrição incompleta), some no produto certo e anote na observação: “${OBS_JA_LANCADO_PLANILHA}” — assim não duplica no KPI. Cada soma nova leva a própria data.`
 
   function marcarOcupada(chave: string, ocupada: boolean) {
     setOcupadas((atual) => {
@@ -622,14 +577,52 @@ export function ApontamentoLista({
     })
   }
 
+  function registerFlush(
+    chave: string,
+    flush: (() => Promise<{ ok: boolean; somou: boolean }>) | null,
+  ) {
+    if (flush) flushers.current.set(chave, flush)
+    else flushers.current.delete(chave)
+  }
+
+  async function flushAdicoes(codProduto?: string) {
+    if (codProduto) {
+      const flush = flushers.current.get(chaveCodigo(codProduto))
+      if (!flush) return { ok: true, somou: false }
+      return flush()
+    }
+    let somou = false
+    for (const flush of flushers.current.values()) {
+      const result = await flush()
+      if (!result.ok) return { ok: false, somou }
+      if (result.somou) somou = true
+    }
+    return { ok: true, somou }
+  }
+
   function salvarLista(codProduto?: string) {
     setLista(null)
     setSalvandoCod(codProduto ?? '')
     startSalvar(async () => {
+      const flush = await flushAdicoes(codProduto)
+      if (!flush.ok) {
+        setLista({
+          ok: false,
+          texto: 'Não foi possível somar a quantidade pendente. Confira a Qtd a somar.',
+        })
+        setSalvandoCod(null)
+        return
+      }
       const result = await salvarListaApontamento(etapa, pedidoNorm, codProduto)
+      const textoOk =
+        result.ok && result.salvos === 0 && flush.somou
+          ? 'Quantidade somada. O total aparece em Já lançado.'
+          : result.ok
+            ? result.aviso
+            : result.error
       setLista({
         ok: result.ok,
-        texto: result.ok ? result.aviso : result.error,
+        texto: textoOk,
       })
       if (result.ok && result.itens.length) {
         setConfirmadas((atual) => {
@@ -641,7 +634,7 @@ export function ApontamentoLista({
         })
       }
       setSalvandoCod(null)
-      if (result.ok) router.refresh()
+      if (result.ok || flush.somou) router.refresh()
     })
   }
 
@@ -695,6 +688,7 @@ export function ApontamentoLista({
                 {temOrigem ? <th className="px-1.5 py-1">Origem</th> : null}
                 {temOrigem ? <th className="px-1.5 py-1">Oficina</th> : null}
                 <th className="px-1.5 py-1">Responsável</th>
+                <th className="w-28 px-1.5 py-1 text-right whitespace-nowrap">Já lançado</th>
                 <th className="px-1.5 py-1">{qtdLabel}</th>
                 <th className="px-1.5 py-1">Data produção</th>
                 <th className="px-1.5 py-1">Observação</th>
@@ -719,6 +713,7 @@ export function ApontamentoLista({
                     onOcupada={(ocupada) =>
                       marcarOcupada(`${item.codProduto}:${item.excelRow}`, ocupada)
                     }
+                    onRegisterFlush={registerFlush}
                     onSalvarItem={() => {
                       if (salvando) return
                       salvarLista(item.codProduto)

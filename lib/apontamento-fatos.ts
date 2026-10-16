@@ -8,6 +8,9 @@ import { getSqlite } from '@/db'
 /** Origem Produção no formulário de Costura Produção. */
 export const SQL_ORIGEM_PRODUCAO_LANC = `origem = 'Produção'`
 
+/** SQL: lançamento da tela que só documenta volume já presente na planilha. */
+export const SQL_LANC_SO_PLANILHA = `lower(replace(coalesce(observacao, ''), 'ç', 'c')) LIKE '%ja lancado na planilha%'`
+
 function tabelaExiste(nome: string) {
   return Boolean(
     getSqlite()
@@ -36,6 +39,7 @@ export function sqlCosturaUnion(alias = 'c') {
            excel_row
     FROM costura_lancamento
     WHERE qtd_pecas IS NOT NULL AND origem IS NOT NULL
+      AND NOT (${SQL_LANC_SO_PLANILHA})
   ) ${alias}`
 }
 
@@ -52,6 +56,7 @@ export function sqlCosturaProducaoUnion(alias = 'c') {
            origem, 'Producao' as origem_norm, excel_row
     FROM costura_lancamento
     WHERE qtd_pecas IS NOT NULL AND ${SQL_ORIGEM_PRODUCAO_LANC}
+      AND NOT (${SQL_LANC_SO_PLANILHA})
   ) ${alias}`
 }
 
@@ -65,6 +70,7 @@ export function sqlRevisaoUnion(alias = 'r') {
            COALESCE(nome_produto, cod_produto) as produto, excel_row
     FROM revisao_lancamento
     WHERE qtd_pecas IS NOT NULL
+      AND NOT (${SQL_LANC_SO_PLANILHA})
   ) ${alias}`
 }
 

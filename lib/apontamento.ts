@@ -10,7 +10,7 @@ export const ETAPAS_APONTAMENTO = {
     tabela: 'costura_lancamento',
     nuvem: 'costura-operacao',
     temOrigem: true,
-    qtdLabel: 'Qtd peças',
+    qtdLabel: 'Qtd a somar',
   },
   revisao: {
     titulo: 'Lançamento de revisão',
@@ -21,7 +21,7 @@ export const ETAPAS_APONTAMENTO = {
     tabela: 'revisao_lancamento',
     nuvem: 'revisao-operacao',
     temOrigem: false,
-    qtdLabel: 'Qtd',
+    qtdLabel: 'Qtd a somar',
   },
 } as const
 
@@ -40,6 +40,22 @@ export const RESPONSAVEIS_COSTURA = ['Luiz Eduardo', 'Miriam', 'Elaine'] as cons
 
 /** Responsáveis que já lançam no relatório de Revisão. */
 export const RESPONSAVEIS_REVISAO = ['Jô', 'Jeniffer', 'Vanessa'] as const
+
+/**
+ * Observação ao registrar no card uma qtd que já existia na planilha
+ * (descrição incompleta no Excel). Entra no “Já lançado” do card; o KPI
+ * não soma de novo (a planilha já conta).
+ */
+export const OBS_JA_LANCADO_PLANILHA = 'já lançado na planilha'
+
+export function observacaoJaNaPlanilha(value: string | null | undefined) {
+  if (!value) return false
+  const fold = value
+    .toLocaleLowerCase('pt-BR')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+  return fold.includes('ja lancado na planilha')
+}
 
 export function etapaApontamento(value: string): EtapaApontamento | null {
   if (value === 'costura' || value === 'revisao') return value
