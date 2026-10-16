@@ -8,8 +8,11 @@ import {
 import {
   entradasDoLancamento,
   lerApontamentoNuvem,
+  unirEntradas,
   type ApontamentoNuvem,
+  type ApontamentoNuvemEntrada,
 } from '@/lib/apontamento-nuvem'
+import { sincronizarPedidoApontamento } from '@/lib/apontamento-sync'
 import { collapseItensCorte, EXCEL_ROW_FORA_DA_CARGA } from '@/lib/corte-producao'
 import { parsePedidoParam, pedidoDigits } from '@/lib/pedido'
 import { cabecaPedidoCorte, produtoNaBaseItens } from '@/data/pedidos'
@@ -102,6 +105,20 @@ function agregarLinhas(rows: Gravado[]): AgregadoProduto | null {
   }
 }
 
+function gravadosParaEntradas(rows: Gravado[]): ApontamentoNuvemEntrada[] {
+  return rows.map((row) => ({
+    excelRow: row.excelRow,
+    origem: row.origem,
+    oficina: row.oficina,
+    qtdPecas: row.qtdPecas,
+    dataProducao: row.dataProducao,
+    responsavel: row.responsavel,
+    avisoDataProducao: row.avisoDataProducao,
+    observacao: row.observacao,
+    atualizadoEm: row.atualizadoEm,
+  }))
+}
+
 async function lancamentosDoPedido(etapa: EtapaApontamento, pedidoNorm: string) {
   const tabela = ETAPAS_APONTAMENTO[etapa].tabela
   const origem = etapa === 'costura' ? 'origem' : 'NULL as origem'
@@ -124,65 +141,45 @@ async function lancamentosDoPedido(etapa: EtapaApontamento, pedidoNorm: string) 
     porCodigo.set(row.codProduto, lista)
   }
 
-  const locais = new Map<string, AgregadoProduto>()
-  for (const [cod, rows] of porCodigo) {
-    const agregado = agregarLinhas(rows)
-    if (agregado) locais.set(cod, agregado)
-  }
-
   let nuvem = new Map<string, ApontamentoNuvem>()
   try {
     nuvem = await lerApontamentoNuvem(etapa, pedidoNorm)
   } catch (error) {
     console.error('leitura do lançamento na nuvem falhou', etapa, pedidoNorm, error)
   }
-  return { locais, nuvem }
+  return { porCodigo, nuvem }
 }
 
-function mergeAgregado(
-  local: AgregadoProduto | undefined,
+/**
+ * Une entradas locais + nuvem por excel_row e soma — não usa Math.max dos totais
+ * (isso perdia peças quando cada lado tinha datas/linhas diferentes).
+ */
+function mergeProduto(
+  locais: Gravado[] | undefined,
   nuvem: ApontamentoNuvem | undefined,
 ): AgregadoProduto | undefined {
-  if (!local && !nuvem) return undefined
-  if (!nuvem) return local
-  const entradasNuvem = entradasDoLancamento(nuvem)
-  const pecasNuvem = entradasNuvem.reduce((sum, row) => sum + (row.qtdPecas ?? 0), 0)
-  const datasNuvem = [
-    ...new Set(
-      entradasNuvem
-        .filter(
-          (row) =>
-            row.dataProducao &&
-            row.avisoDataProducao &&
-            row.avisoDataProducao === row.dataProducao,
-        )
-        .map((row) => row.dataProducao as string),
-    ),
-  ]
-  if (!local) {
-    return {
-      excelRow: EXCEL_ROW_FORA_DA_CARGA,
-      origem: null,
-      oficina: null,
-      qtdPecas: pecasNuvem,
-      dataProducao: null,
-      responsavel: null,
-      avisoDataProducao: null,
-      datasAvisadas: datasNuvem,
-      observacao: null,
-      nomeProduto: nuvem.nomeProduto,
-      atualizadoEm: nuvem.atualizadoEm,
-    }
-  }
-  // Preferir o maior total (local já sincronizado ou nuvem à frente).
-  const usarNuvem = pecasNuvem > local.qtdPecas || nuvem.atualizadoEm > local.atualizadoEm
-  return {
-    ...local,
-    qtdPecas: Math.max(local.qtdPecas, pecasNuvem),
-    datasAvisadas: [...new Set([...local.datasAvisadas, ...datasNuvem])],
-    nomeProduto: local.nomeProduto ?? nuvem.nomeProduto,
-    atualizadoEm: usarNuvem ? nuvem.atualizadoEm : local.atualizadoEm,
-  }
+  if (!locais?.length && !nuvem) return undefined
+  const entradas = unirEntradas(
+    locais?.length ? gravadosParaEntradas(locais) : [],
+    nuvem ? entradasDoLancamento(nuvem) : [],
+  )
+  if (!entradas.length) return undefined
+  const nomeProduto =
+    locais?.find((row) => row.nomeProduto)?.nomeProduto ?? nuvem?.nomeProduto ?? null
+  const comoGravado: Gravado[] = entradas.map((row) => ({
+    codProduto: nuvem?.codProduto ?? locais?.[0]?.codProduto ?? '',
+    excelRow: row.excelRow,
+    origem: row.origem,
+    oficina: row.oficina,
+    qtdPecas: row.qtdPecas,
+    dataProducao: row.dataProducao,
+    responsavel: row.responsavel,
+    avisoDataProducao: row.avisoDataProducao,
+    observacao: row.observacao,
+    nomeProduto,
+    atualizadoEm: row.atualizadoEm,
+  }))
+  return agregarLinhas(comoGravado) ?? undefined
 }
 
 function itemDe(
@@ -293,6 +290,9 @@ export const getApontamentoPedido = cache(
     const pedidoNorm = pedidoDigits(pedidoInformado)
     if (!pedidoNorm) return vazio
 
+    // Mobile ↔ desktop: sobe o que só estava no SQLite e baixa o que já está na nuvem.
+    await sincronizarPedidoApontamento(etapa, pedidoNorm)
+
     const rows = getSqlite()
       .prepare(
         `SELECT pedido_raw as pedidoRaw, tipo_comercializacao as tipo, cliente, canal, status,
@@ -314,13 +314,13 @@ export const getApontamentoPedido = cache(
       excelRow: number
     }[]
 
-    const { locais, nuvem } = await lancamentosDoPedido(etapa, pedidoNorm)
+    const { porCodigo, nuvem } = await lancamentosDoPedido(etapa, pedidoNorm)
     const cabeca = rows[0]
     if (!cabeca) {
       const corte = cabecaPedidoCorte(pedidoNorm)
-      const codigos = new Set<string>([...locais.keys(), ...nuvem.keys()])
+      const codigos = new Set<string>([...porCodigo.keys(), ...nuvem.keys()])
       const itens = [...codigos].map((codProduto) => {
-        const lancamento = mergeAgregado(locais.get(codProduto), nuvem.get(codProduto))
+        const lancamento = mergeProduto(porCodigo.get(codProduto), nuvem.get(codProduto))
         const produto = produtoNaBaseItens(codProduto)
         return itemDe(
           produto?.codProduto ?? codProduto,
@@ -371,7 +371,7 @@ export const getApontamentoPedido = cache(
           row.excelRow,
           row.nomeProduto,
           row.qtdPedida,
-          mergeAgregado(locais.get(row.codProduto), nuvem.get(row.codProduto)),
+          mergeProduto(porCodigo.get(row.codProduto), nuvem.get(row.codProduto)),
         ),
       ),
     }

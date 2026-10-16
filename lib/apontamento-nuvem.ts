@@ -1,6 +1,22 @@
 import { createAdminClient, createAnonClient, isSupabaseConfigured } from '@/lib/supabase/admin'
 import { CARGA_BUCKET } from '@/lib/supabase/constants'
 import { ETAPAS_APONTAMENTO, type EtapaApontamento } from '@/lib/apontamento'
+import { IS_CLOUD } from '@/lib/paths'
+
+/**
+ * Sem client de escrita:
+ * - PC local sem Supabase → modo só-local (ok, sem sync entre aparelhos)
+ * - Vercel ou Supabase configurado sem SERVICE_ROLE → erro explícito
+ */
+function semEscritaNuvem(
+  contexto: string,
+): { modo: 'local' } | { modo: 'erro'; error: string } {
+  if (!isSupabaseConfigured() && !IS_CLOUD) return { modo: 'local' }
+  return {
+    modo: 'erro',
+    error: `${contexto}: falta SUPABASE_SERVICE_ROLE_KEY. Sem ela o lançamento não chega no outro aparelho.`,
+  }
+}
 
 /** Uma soma parcial (pode ser em datas diferentes do mesmo produto). */
 export type ApontamentoNuvemEntrada = {
@@ -205,7 +221,8 @@ async function baixarJson(path: string): Promise<BaixaJson> {
   }
 }
 
-function unirEntradas(
+/** Une entradas por excel_row; em empate fica a mais nova (atualizadoEm). */
+export function unirEntradas(
   base: ApontamentoNuvemEntrada[],
   extras: ApontamentoNuvemEntrada[],
 ): ApontamentoNuvemEntrada[] {
@@ -229,7 +246,11 @@ export async function lerApontamentoNuvem(etapa: EtapaApontamento, pedidoNorm: s
   const { data, error } = await client.storage.from(CARGA_BUCKET).list(`${prefixo}/${pedido}`, {
     limit: 200,
   })
-  if (error || !data?.length) return mapa
+  if (error) {
+    console.error('listar lançamentos na nuvem falhou', etapa, pedidoNorm, error.message)
+    return mapa
+  }
+  if (!data?.length) return mapa
 
   await Promise.all(
     data
@@ -237,6 +258,16 @@ export async function lerApontamentoNuvem(etapa: EtapaApontamento, pedidoNorm: s
       .map(async (item) => {
         const codArquivo = item.name.replace(/\.json$/, '')
         const baixa = await baixarJson(`${prefixo}/${pedido}/${item.name}`)
+        if (baixa.status === 'error') {
+          console.error(
+            'baixar lançamento na nuvem falhou',
+            etapa,
+            pedidoNorm,
+            item.name,
+            baixa.error,
+          )
+          return
+        }
         if (baixa.status !== 'ok') return
         const lancamento = lancamentoDe(baixa.data, codArquivo)
         if (lancamento) mapa.set(lancamento.codProduto, lancamento)
@@ -325,11 +356,9 @@ export async function gravarApontamentoNuvem(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const client = clienteEscrita()
   if (!client) {
-    if (!isSupabaseConfigured()) return { ok: true }
-    return {
-      ok: false,
-      error: 'Falta SUPABASE_SERVICE_ROLE_KEY. Sem ela o lançamento some ao reabrir a tela.',
-    }
+    const gate = semEscritaNuvem('Gravar lançamento')
+    if (gate.modo === 'local') return { ok: true }
+    return { ok: false, error: gate.error }
   }
 
   const path = caminhoItem(etapa, pedidoNorm, lancamento.codProduto)
@@ -397,13 +426,9 @@ export async function somarEntradaApontamentoNuvem(
 ): Promise<{ ok: true; total: number } | { ok: false; error: string }> {
   const client = clienteEscrita()
   if (!client) {
-    if (!isSupabaseConfigured()) {
-      return { ok: true, total: entrada.qtdPecas }
-    }
-    return {
-      ok: false,
-      error: 'Falta SUPABASE_SERVICE_ROLE_KEY. Sem ela o lançamento some ao reabrir a tela.',
-    }
+    const gate = semEscritaNuvem('Somar lançamento')
+    if (gate.modo === 'local') return { ok: true, total: entrada.qtdPecas }
+    return { ok: false, error: gate.error }
   }
 
   const path = caminhoItem(etapa, pedidoNorm, entrada.codProduto)
@@ -453,11 +478,9 @@ export async function marcarAvisoApontamentoNuvem(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const client = clienteEscrita()
   if (!client) {
-    if (!isSupabaseConfigured()) return { ok: true }
-    return {
-      ok: false,
-      error: 'Falta SUPABASE_SERVICE_ROLE_KEY para marcar o aviso na nuvem.',
-    }
+    const gate = semEscritaNuvem('Marcar aviso')
+    if (gate.modo === 'local') return { ok: true }
+    return { ok: false, error: gate.error }
   }
   const path = caminhoItem(etapa, pedidoNorm, codProduto)
   const baixa = await baixarJson(path)
@@ -511,11 +534,9 @@ export async function apagarApontamentoNuvem(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const client = clienteEscrita()
   if (!client) {
-    if (!isSupabaseConfigured()) return { ok: true }
-    return {
-      ok: false,
-      error: 'Falta SUPABASE_SERVICE_ROLE_KEY para apagar o lançamento na nuvem.',
-    }
+    const gate = semEscritaNuvem('Apagar lançamento')
+    if (gate.modo === 'local') return { ok: true }
+    return { ok: false, error: gate.error }
   }
   const { error } = await client.storage
     .from(CARGA_BUCKET)
@@ -552,11 +573,9 @@ export async function substituirTotalApontamentoNuvem(
 
   const client = clienteEscrita()
   if (!client) {
-    if (!isSupabaseConfigured()) return { ok: true, total: qtd }
-    return {
-      ok: false,
-      error: 'Falta SUPABASE_SERVICE_ROLE_KEY. Sem ela a correção some ao reabrir a tela.',
-    }
+    const gate = semEscritaNuvem('Corrigir lançamento')
+    if (gate.modo === 'local') return { ok: true, total: qtd }
+    return { ok: false, error: gate.error }
   }
 
   const path = caminhoItem(etapa, pedidoNorm, entrada.codProduto)
@@ -661,8 +680,9 @@ export async function criarAlertaApontamentoNuvem(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const client = clienteEscrita()
   if (!client) {
-    if (!isSupabaseConfigured()) return { ok: true }
-    return { ok: false, error: 'Falta SUPABASE_SERVICE_ROLE_KEY para gravar o alerta.' }
+    const gate = semEscritaNuvem('Gravar alerta')
+    if (gate.modo === 'local') return { ok: true }
+    return { ok: false, error: gate.error }
   }
   const { error } = await client.storage
     .from(CARGA_BUCKET)
@@ -713,11 +733,9 @@ export async function mesclarEntradasApontamentoNuvem(
   if (!entradasLocais.length) return { ok: true, mudou: false }
   const client = clienteEscrita()
   if (!client) {
-    if (!isSupabaseConfigured()) return { ok: true, mudou: false }
-    return {
-      ok: false,
-      error: 'Falta SUPABASE_SERVICE_ROLE_KEY para publicar lançamentos na nuvem.',
-    }
+    const gate = semEscritaNuvem('Publicar lançamentos')
+    if (gate.modo === 'local') return { ok: true, mudou: false }
+    return { ok: false, error: gate.error }
   }
 
   const path = caminhoItem(etapa, pedidoNorm, codProduto)

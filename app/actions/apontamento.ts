@@ -22,9 +22,9 @@ import {
   listarAlertasApontamentoNuvem,
   marcarAlertaApontamentoNuvemVisto,
   marcarAvisoApontamentoNuvem,
-  somarEntradaApontamentoNuvem,
   substituirTotalApontamentoNuvem,
 } from '@/lib/apontamento-nuvem'
+import { sincronizarProdutoApontamento } from '@/lib/apontamento-sync'
 import { enviarAvisoApontamentoWhatsApp } from '@/lib/whatsapp/apontamento-finalizado'
 import { EXCEL_ROW_FORA_DA_CARGA } from '@/lib/corte-producao'
 import { getApontamentoPedido } from '@/data/apontamento'
@@ -392,6 +392,9 @@ export async function salvarApontamento(
     nomeProduto,
     excelRow,
   })
+  if (nuvem.ok) {
+    await sincronizarProdutoApontamento(etapa, pedidoNorm, codProduto)
+  }
   syncDimPedidoApontamento(pedidoNorm)
   revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
   revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
@@ -547,35 +550,19 @@ export async function somarApontamento(
     )
   }
 
-  const totalRow = db
-    .prepare(
-      `SELECT COALESCE(SUM(qtd_pecas), 0) as v FROM ${tabela}
-       WHERE pedido_norm = ? AND cod_produto = ? AND qtd_pecas IS NOT NULL`,
-    )
-    .get(pedidoNorm, codProduto) as { v: number }
-
-  const nuvem = await somarEntradaApontamentoNuvem(etapa, pedidoNorm, {
-    excelRow: excelRowNovo,
-    codProduto,
-    origem: origem || null,
-    oficina: oficina || null,
-    qtdPecas,
-    dataProducao,
-    responsavel,
-    observacao,
-    nomeProduto,
-  })
+  // Publica TODAS as entradas do produto (não só a soma nova) e puxa a nuvem de volta.
+  const sync = await sincronizarProdutoApontamento(etapa, pedidoNorm, codProduto)
   syncDimPedidoApontamento(pedidoNorm)
   revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
   revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
   revalidatePath('/')
-  if (!nuvem.ok) {
+  if (!sync.ok) {
     return {
       ok: false,
-      error: `Somou nesta tela, mas a nuvem não atualizou (${nuvem.error}). Ao reabrir, o total pode ficar incompleto.`,
+      error: `Somou nesta tela, mas a nuvem não atualizou (${sync.error}). Ao reabrir, o total pode ficar incompleto.`,
     }
   }
-  return { ok: true, total: totalRow.v }
+  return { ok: true, total: sync.total }
 }
 
 /**
@@ -784,6 +771,10 @@ export async function corrigirApontamento(
     observacao,
     nomeProduto,
   })
+  if (nuvem.ok) {
+    // Garante SQLite local alinhado ao que ficou na nuvem (outros aparelhos).
+    await sincronizarProdutoApontamento(etapa, pedidoNorm, codProduto)
+  }
   syncDimPedidoApontamento(pedidoNorm)
   revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
   revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)

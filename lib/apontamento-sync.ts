@@ -2,6 +2,8 @@ import { getSqlite } from '@/db'
 import { ETAPAS_APONTAMENTO, type EtapaApontamento } from '@/lib/apontamento'
 import { syncDimPedidoApontamento } from '@/lib/apontamento-fatos'
 import {
+  entradasDoLancamento,
+  lerApontamentoNuvem,
   listarTodosApontamentosNuvem,
   mesclarEntradasApontamentoNuvem,
   type ApontamentoNuvemComPedido,
@@ -44,7 +46,12 @@ function tabelaExiste(nome: string) {
   )
 }
 
-function upsertLote(etapa: EtapaApontamento, rows: ApontamentoNuvemComPedido[]) {
+function upsertLote(
+  etapa: EtapaApontamento,
+  rows: ApontamentoNuvemComPedido[],
+  options?: { limparOrfaos?: boolean },
+) {
+  const limparOrfaos = options?.limparOrfaos !== false
   const tabela = ETAPAS_APONTAMENTO[etapa].tabela
   if (!tabelaExiste(tabela) || !rows.length) {
     return { n: 0, pecas: 0, porDia: {} as Record<string, number> }
@@ -125,17 +132,19 @@ function upsertLote(etapa: EtapaApontamento, rows: ApontamentoNuvemComPedido[]) 
       }
     }
 
-    // Só remove órfãos locais mais antigos que a nuvem — nunca apaga soma mais nova
-    // (ex.: lançamento do mobile ainda só no SQLite da instância).
-    for (const grupo of porProduto.values()) {
-      const unicos = [...new Set(grupo.rows)]
-      const placeholders = unicos.map(() => '?').join(', ')
-      db.prepare(
-        `DELETE FROM ${tabela}
-         WHERE pedido_norm = ? AND cod_produto = ?
-           AND excel_row NOT IN (${placeholders})
-           AND atualizado_em <= ?`,
-      ).run(grupo.pedidoNorm, grupo.codProduto, ...unicos, grupo.maxAtualizado)
+    // Só no sync global: remove órfãos locais mais antigos que a nuvem.
+    // No sync por pedido/produto não apaga — evita perder soma local se o push falhou.
+    if (limparOrfaos) {
+      for (const grupo of porProduto.values()) {
+        const unicos = [...new Set(grupo.rows)]
+        const placeholders = unicos.map(() => '?').join(', ')
+        db.prepare(
+          `DELETE FROM ${tabela}
+           WHERE pedido_norm = ? AND cod_produto = ?
+             AND excel_row NOT IN (${placeholders})
+             AND atualizado_em <= ?`,
+        ).run(grupo.pedidoNorm, grupo.codProduto, ...unicos, grupo.maxAtualizado)
+      }
     }
   })
   gravar()
@@ -319,4 +328,199 @@ export async function publicarApontamentosLocaisNaNuvem(options?: {
     })
   }
   return pushInFlight
+}
+
+function lerLocaisPedidoProduto(
+  etapa: EtapaApontamento,
+  pedidoNorm: string,
+  codProduto?: string,
+): LinhaLocalPush[] {
+  const tabela = ETAPAS_APONTAMENTO[etapa].tabela
+  if (!tabelaExiste(tabela)) return []
+  const origem = etapa === 'costura' ? 'origem' : 'NULL as origem'
+  const oficina = etapa === 'costura' ? 'oficina' : 'NULL as oficina'
+  if (codProduto) {
+    return getSqlite()
+      .prepare(
+        `SELECT pedido_norm as pedidoNorm, cod_produto as codProduto,
+                excel_row as excelRow, ${origem}, ${oficina}, qtd_pecas as qtdPecas,
+                data_producao as dataProducao, responsavel,
+                aviso_data_producao as avisoDataProducao,
+                observacao, nome_produto as nomeProduto,
+                atualizado_em as atualizadoEm
+         FROM ${tabela}
+         WHERE pedido_norm = ? AND cod_produto = ?
+           AND (qtd_pecas IS NOT NULL OR data_producao IS NOT NULL OR responsavel IS NOT NULL)`,
+      )
+      .all(pedidoNorm, codProduto) as LinhaLocalPush[]
+  }
+  return getSqlite()
+    .prepare(
+      `SELECT pedido_norm as pedidoNorm, cod_produto as codProduto,
+              excel_row as excelRow, ${origem}, ${oficina}, qtd_pecas as qtdPecas,
+              data_producao as dataProducao, responsavel,
+              aviso_data_producao as avisoDataProducao,
+              observacao, nome_produto as nomeProduto,
+              atualizado_em as atualizadoEm
+       FROM ${tabela}
+       WHERE pedido_norm = ?
+         AND (qtd_pecas IS NOT NULL OR data_producao IS NOT NULL OR responsavel IS NOT NULL)`,
+    )
+    .all(pedidoNorm) as LinhaLocalPush[]
+}
+
+function totalPecasLocais(
+  etapa: EtapaApontamento,
+  pedidoNorm: string,
+  codProduto: string,
+): number {
+  const tabela = ETAPAS_APONTAMENTO[etapa].tabela
+  if (!tabelaExiste(tabela)) return 0
+  const row = getSqlite()
+    .prepare(
+      `SELECT COALESCE(SUM(qtd_pecas), 0) as v FROM ${tabela}
+       WHERE pedido_norm = ? AND cod_produto = ? AND qtd_pecas IS NOT NULL`,
+    )
+    .get(pedidoNorm, codProduto) as { v: number }
+  return row.v
+}
+
+/**
+ * Publica TODAS as entradas locais do produto na nuvem (união) e devolve o total
+ * depois de puxar a nuvem de volta — evita mobile com somas só no SQLite da instância.
+ */
+export async function sincronizarProdutoApontamento(
+  etapa: EtapaApontamento,
+  pedidoNorm: string,
+  codProduto: string,
+): Promise<{ ok: true; total: number } | { ok: false; error: string }> {
+  const linhas = lerLocaisPedidoProduto(etapa, pedidoNorm, codProduto)
+  const entradas: ApontamentoNuvemEntrada[] = linhas.map((row) => ({
+    excelRow: Number.isInteger(row.excelRow) ? row.excelRow : EXCEL_ROW_FORA_DA_CARGA,
+    origem: row.origem,
+    oficina: row.oficina,
+    qtdPecas: row.qtdPecas,
+    dataProducao: row.dataProducao,
+    responsavel: row.responsavel,
+    avisoDataProducao: row.avisoDataProducao,
+    observacao: row.observacao,
+    atualizadoEm: row.atualizadoEm,
+  }))
+  const nomeProduto = linhas.find((row) => row.nomeProduto)?.nomeProduto ?? null
+
+  if (entradas.length && isSupabaseWriteConfigured()) {
+    const publicado = await mesclarEntradasApontamentoNuvem(
+      etapa,
+      pedidoNorm,
+      codProduto,
+      entradas,
+      nomeProduto,
+    )
+    if (!publicado.ok) return publicado
+  } else if (entradas.length && isSupabaseConfigured()) {
+    return {
+      ok: false,
+      error: 'Falta SUPABASE_SERVICE_ROLE_KEY. Sem ela o lançamento não chega no outro aparelho.',
+    }
+  }
+
+  if (isSupabaseConfigured()) {
+    try {
+      const nuvem = await lerApontamentoNuvem(etapa, pedidoNorm)
+      const doc = nuvem.get(codProduto)
+      if (doc) {
+        const rows: ApontamentoNuvemComPedido[] = entradasDoLancamento(doc).map((entrada) => ({
+          ...doc,
+          ...entrada,
+          pedidoNorm,
+          excelRow: entrada.excelRow,
+          nomeProduto: doc.nomeProduto ?? nomeProduto,
+          entradas: undefined,
+        }))
+        upsertLote(etapa, rows, { limparOrfaos: false })
+      }
+    } catch (error) {
+      console.error('pull produto apontamento falhou', etapa, pedidoNorm, codProduto, error)
+    }
+  }
+
+  return { ok: true, total: totalPecasLocais(etapa, pedidoNorm, codProduto) }
+}
+
+/**
+ * Ao abrir o pedido: sobe o que só existia no SQLite local e baixa o que o outro
+ * aparelho já publicou — costura e revisão (mobile ↔ desktop).
+ */
+export async function sincronizarPedidoApontamento(
+  etapa: EtapaApontamento,
+  pedidoNorm: string,
+): Promise<void> {
+  if (!pedidoNorm || !isSupabaseConfigured()) return
+
+  const linhas = lerLocaisPedidoProduto(etapa, pedidoNorm)
+  if (linhas.length && isSupabaseWriteConfigured()) {
+    const porProduto = new Map<
+      string,
+      { nomeProduto: string | null; entradas: ApontamentoNuvemEntrada[] }
+    >()
+    for (const row of linhas) {
+      const grupo = porProduto.get(row.codProduto) ?? {
+        nomeProduto: row.nomeProduto,
+        entradas: [] as ApontamentoNuvemEntrada[],
+      }
+      grupo.nomeProduto = grupo.nomeProduto ?? row.nomeProduto
+      grupo.entradas.push({
+        excelRow: Number.isInteger(row.excelRow) ? row.excelRow : EXCEL_ROW_FORA_DA_CARGA,
+        origem: row.origem,
+        oficina: row.oficina,
+        qtdPecas: row.qtdPecas,
+        dataProducao: row.dataProducao,
+        responsavel: row.responsavel,
+        avisoDataProducao: row.avisoDataProducao,
+        observacao: row.observacao,
+        atualizadoEm: row.atualizadoEm,
+      })
+      porProduto.set(row.codProduto, grupo)
+    }
+    await Promise.all(
+      [...porProduto.entries()].map(([codProduto, grupo]) =>
+        mesclarEntradasApontamentoNuvem(
+          etapa,
+          pedidoNorm,
+          codProduto,
+          grupo.entradas,
+          grupo.nomeProduto,
+        ).then((result) => {
+          if (!result.ok) {
+            console.error(
+              'push pedido apontamento falhou',
+              etapa,
+              pedidoNorm,
+              codProduto,
+              result.error,
+            )
+          }
+        }),
+      ),
+    )
+  }
+
+  try {
+    const nuvem = await lerApontamentoNuvem(etapa, pedidoNorm)
+    const rows: ApontamentoNuvemComPedido[] = []
+    for (const doc of nuvem.values()) {
+      for (const entrada of entradasDoLancamento(doc)) {
+        rows.push({
+          ...doc,
+          ...entrada,
+          pedidoNorm,
+          excelRow: entrada.excelRow,
+          entradas: undefined,
+        })
+      }
+    }
+    if (rows.length) upsertLote(etapa, rows, { limparOrfaos: false })
+  } catch (error) {
+    console.error('pull pedido apontamento falhou', etapa, pedidoNorm, error)
+  }
 }
