@@ -2,7 +2,11 @@ import { AlertTriangle } from 'lucide-react'
 import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { getDataHealthWarning } from '@/lib/cloud/data-health'
 
-/** Banner só quando a restauração/sync da nuvem falhou — caminho feliz não renderiza nada. */
+/**
+ * Em toda abertura do painel sincroniza a carga.
+ * No mobile (Vercel), a 1ª abertura da instância já publica todos os
+ * lançamentos de costura/revisão do SQLite — sem pesquisar pedido a pedido.
+ */
 export async function CargaAvisoBanner() {
   try {
     await ensureCloudDatabase()

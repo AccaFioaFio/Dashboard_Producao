@@ -47,6 +47,10 @@ try {
 
 let localEtag = ''
 let inFlight: Promise<void> | null = null
+/** Na Vercel, a 1ª request da instância publica todos os lançamentos do /tmp de uma vez. */
+let cloudApontamentoRecoveryDone = false
+/** No desktop, a 1ª abertura do processo força puxar tudo da nuvem (após o mobile publicar). */
+let desktopApontamentoPullDone = false
 
 /** Download grande (~17 MB): URL assinada + fetch nativo (mais estável na Vercel). */
 const DOWNLOAD_TIMEOUT_MS = 120_000
@@ -56,21 +60,44 @@ const DOWNLOAD_TIMEOUT_MS = 120_000
  * no Storage. Sem Supabase: usa o SQLite do deploy.
  * Em seguida sincroniza lançamentos da tela (costura/revisão) da nuvem
  * para o SQLite — os KPIs somam planilha + esses lançamentos.
+ *
+ * No mobile (Vercel): antes de trocar o SQLite, publica TODOS os lançamentos
+ * locais (todos os pedidos) no Storage — não precisa pesquisar pedido a pedido.
  */
 export async function ensureCloudDatabase(options?: { force?: boolean }) {
-  if (IS_CLOUD || options?.force) {
+  const force = Boolean(options?.force)
+  const recuperarApontamentoCloud = IS_CLOUD && !cloudApontamentoRecoveryDone
+
+  // Salva o que ainda está no /tmp da instância ANTES do download da carga.
+  if (recuperarApontamentoCloud && existsSync(DB_PATH)) {
+    try {
+      ensureDataDirs()
+      getSqlite()
+      await publicarApontamentosLocaisNaNuvem({ force: true })
+    } catch (error) {
+      console.error('publicação pré-restore dos lançamentos falhou', error)
+    }
+  }
+
+  if (IS_CLOUD || force) {
     if (!inFlight) {
-      inFlight = restoreDatabase(Boolean(options?.force)).finally(() => {
+      inFlight = restoreDatabase(force).finally(() => {
         inFlight = null
       })
     }
     await inFlight
   }
-  await ensureApontamentosNuvemNoSqlite({ force: options?.force })
-  // Publica no Storage o que só existia no SQLite (ex.: lançamentos do mobile).
-  await publicarApontamentosLocaisNaNuvem({ force: options?.force })
-  await ensureProgramacaoNuvemNoSqlite({ force: options?.force })
-  await ensureProgramacaoHistoricoNuvemNoSqlite({ force: options?.force })
+
+  const recuperarDesktop = !IS_CLOUD && !desktopApontamentoPullDone
+  const forceApontamento = force || recuperarApontamentoCloud || recuperarDesktop
+  await ensureApontamentosNuvemNoSqlite({ force: forceApontamento })
+  // Todos os pedidos do SQLite → Storage (união; não apaga o que já estava na nuvem).
+  await publicarApontamentosLocaisNaNuvem({ force: forceApontamento })
+  if (recuperarApontamentoCloud) cloudApontamentoRecoveryDone = true
+  if (recuperarDesktop) desktopApontamentoPullDone = true
+
+  await ensureProgramacaoNuvemNoSqlite({ force })
+  await ensureProgramacaoHistoricoNuvemNoSqlite({ force })
 }
 
 async function restoreDatabase(force: boolean) {
