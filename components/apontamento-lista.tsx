@@ -9,9 +9,10 @@ import {
   type FormEvent,
 } from 'react'
 import { useRouter } from 'next/navigation'
-import { ListChecks, Plus } from 'lucide-react'
+import { ListChecks, Pencil, Plus, X } from 'lucide-react'
 import {
   buscarProdutoApontamento,
+  corrigirApontamento,
   salvarListaApontamento,
   somarApontamento,
 } from '@/app/actions/apontamento'
@@ -119,6 +120,7 @@ function Linha({
   salvandoItem,
   onOcupada,
   onSalvarItem,
+  onCorrigido,
   onRegisterFlush,
 }: {
   etapa: EtapaApontamento
@@ -132,6 +134,7 @@ function Linha({
   salvandoItem: boolean
   onOcupada: (ocupada: boolean) => void
   onSalvarItem: () => void
+  onCorrigido: () => void
   onRegisterFlush: (
     chave: string,
     flush: (() => Promise<{ ok: boolean; somou: boolean }>) | null,
@@ -145,6 +148,8 @@ function Linha({
   const [dataProducao, setDataProducao] = useState('')
   const [responsavel, setResponsavel] = useState('')
   const [observacao, setObservacao] = useState('')
+  const [modoCorrigir, setModoCorrigir] = useState(false)
+  const [corrigindo, setCorrigindo] = useState(false)
   const [datasAvisadas, setDatasAvisadas] = useState<string[]>(
     item.datasAvisadas ?? [],
   )
@@ -155,6 +160,7 @@ function Linha({
   const dataRef = useRef('')
   const responsavelRef = useRef('')
   const observacaoRef = useRef('')
+  const modoCorrigirRef = useRef(false)
   const [erro, setErro] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const descricao = item.nomeProduto?.replace(/\s+/g, ' ').trim() || '—'
@@ -165,14 +171,19 @@ function Linha({
     Boolean(dataProducao) &&
     (datasAvisadas.includes(dataProducao) || dataConfirmada === dataProducao)
   const temAdicao = Boolean(adicionar.trim())
-  const botaoDesabilitado = salvandoItem || (naLista && !temAdicao)
+  const botaoDesabilitado =
+    salvandoItem || corrigindo || (!modoCorrigir && naLista && !temAdicao)
   const rotuloBotao = salvandoItem
     ? 'Salvando…'
-    : temAdicao && jaLancado > 0
-      ? 'Adicionar'
-      : naLista && !temAdicao
-        ? 'Na lista'
-        : 'Salvar na lista'
+    : corrigindo
+      ? 'Corrigindo…'
+      : modoCorrigir
+        ? 'Aplicar correção'
+        : temAdicao && jaLancado > 0
+          ? 'Adicionar'
+          : naLista && !temAdicao
+            ? 'Na lista'
+            : 'Salvar na lista'
 
   // Ref estável: o pai chama o flush depois do re-render de “Salvando…”.
   // Se o effect re-registrar a cada render, o cleanup zera o Map no meio do clique
@@ -182,6 +193,9 @@ function Linha({
   )
 
   aplicarAdicaoRef.current = async () => {
+    if (modoCorrigirRef.current) {
+      return { ok: true, somou: false }
+    }
     const parsed = parseQtd(adicionarRef.current)
     if (parsed === 'invalida') {
       setErro('A quantidade precisa ser um número a partir de zero.')
@@ -226,8 +240,94 @@ function Linha({
     }
   }
 
+  function entrarCorrigir() {
+    modoCorrigirRef.current = true
+    setModoCorrigir(true)
+    adicionarRef.current = ''
+    setAdicionar('')
+    setErro(null)
+    setAviso(
+      'Digite o total correto (ou 0 para apagar) e toque em Aplicar correção. Isso substitui todas as somas deste produto.',
+    )
+  }
+
+  function cancelarCorrigir() {
+    modoCorrigirRef.current = false
+    setModoCorrigir(false)
+    adicionarRef.current = ''
+    setAdicionar('')
+    setErro(null)
+    setAviso(null)
+  }
+
+  async function aplicarCorrecao() {
+    const parsed = parseQtd(adicionarRef.current)
+    if (parsed === 'invalida') {
+      setErro('A quantidade precisa ser um número a partir de zero.')
+      return
+    }
+    if (parsed == null) {
+      setErro('Informe o novo total (ou zero para apagar).')
+      return
+    }
+    const atual = jaLancadoRef.current
+    const novoFmt = formatNumber(parsed, parsed % 1 ? 2 : 0)
+    const atualFmt = formatNumber(atual, atual % 1 ? 2 : 0)
+    const ok = window.confirm(
+      parsed === 0
+        ? `Zerar o lançamento de "${descricao}"?\n\nTotal atual: ${atualFmt}\n\nIsso apaga todas as somas deste produto neste pedido.`
+        : `Corrigir o total de "${descricao}"?\n\nTotal atual: ${atualFmt}\nNovo total: ${novoFmt}\n\nIsso substitui todas as somas deste produto neste pedido.`,
+    )
+    if (!ok) return
+
+    setCorrigindo(true)
+    onOcupada(true)
+    setErro(null)
+    try {
+      const result = await corrigirApontamento({
+        etapa,
+        pedidoNorm,
+        codProduto: item.codProduto,
+        excelRow: item.excelRow,
+        origem: origemRef.current,
+        oficina: oficinaRef.current,
+        qtdPecas: adicionarRef.current,
+        dataProducao: dataRef.current,
+        responsavel: responsavelRef.current,
+        observacao: observacaoRef.current,
+        nomeProduto: item.nomeProduto,
+      })
+      if (!result.ok) {
+        setErro(result.error)
+        return
+      }
+      jaLancadoRef.current = result.total
+      setJaLancado(result.total)
+      setDatasAvisadas([])
+      adicionarRef.current = ''
+      setAdicionar('')
+      modoCorrigirRef.current = false
+      setModoCorrigir(false)
+      setAviso(
+        result.total === 0
+          ? 'Lançamento apagado. O total deste produto ficou zerado.'
+          : `Total corrigido para ${formatNumber(result.total, result.total % 1 ? 2 : 0)} peças.`,
+      )
+      onCorrigido()
+    } catch {
+      setErro('Não foi possível corrigir o total agora.')
+    } finally {
+      setCorrigindo(false)
+      onOcupada(false)
+    }
+  }
+
   function salvarNaLista() {
     if (salvandoItem || botaoDesabilitado) return
+    if (modoCorrigir) {
+      void aplicarCorrecao()
+      return
+    }
     onSalvarItem()
   }
 
@@ -324,15 +424,41 @@ function Linha({
           data-label="Já lançado"
           className="w-28 px-1.5 py-1.5 text-right font-medium whitespace-nowrap tabular-nums"
         >
-          {formatNumber(jaLancado, jaLancado % 1 ? 2 : 0)}
+          <div className="flex flex-col items-end gap-1">
+            <span>{formatNumber(jaLancado, jaLancado % 1 ? 2 : 0)}</span>
+            {jaLancado > 0 && !modoCorrigir ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={salvandoItem || corrigindo}
+                onClick={entrarCorrigir}
+                className="h-7 px-1.5 text-[10px] text-muted-foreground sm:h-6"
+              >
+                <Pencil className="size-3" />
+                Corrigir
+              </Button>
+            ) : null}
+          </div>
         </td>
-        <td data-label={qtdLabel} className="w-28 px-1.5 py-1.5">
+        <td
+          data-label={modoCorrigir ? 'Novo total' : qtdLabel}
+          className="w-28 px-1.5 py-1.5"
+        >
           <input
-            aria-label={`${qtdLabel} de ${descricao}`}
+            aria-label={
+              modoCorrigir
+                ? `Novo total de ${descricao}`
+                : `${qtdLabel} de ${descricao}`
+            }
             inputMode="decimal"
             value={adicionar}
-            placeholder="Somar"
-            className={cn(campo, 'text-right tabular-nums')}
+            placeholder={modoCorrigir ? 'Novo total' : 'Somar'}
+            className={cn(
+              campo,
+              'text-right tabular-nums',
+              modoCorrigir && 'border-amber-500/60',
+            )}
             onChange={(event) => {
               const next = event.currentTarget.value
               adicionarRef.current = next
@@ -343,7 +469,11 @@ function Linha({
         </td>
         <td data-label="Data produção" className="w-36 px-1.5 py-1.5">
           <input
-            aria-label={`Data desta soma de ${descricao}`}
+            aria-label={
+              modoCorrigir
+                ? `Data da correção de ${descricao}`
+                : `Data desta soma de ${descricao}`
+            }
             type="date"
             value={dataProducao}
             className={campo}
@@ -371,11 +501,17 @@ function Linha({
         </td>
         <td data-label="Lista" data-span="full" className="px-1.5 py-1.5">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
-            <AvisoStatus
-              dataProducao={dataProducao}
-              datasAvisadas={datasAvisadas}
-              dataConfirmada={dataConfirmada}
-            />
+            {modoCorrigir ? (
+              <span className="font-medium text-amber-700 dark:text-amber-400">
+                Corrigindo
+              </span>
+            ) : (
+              <AvisoStatus
+                dataProducao={dataProducao}
+                datasAvisadas={datasAvisadas}
+                dataConfirmada={dataConfirmada}
+              />
+            )}
             <Button
               type="button"
               size="sm"
@@ -383,9 +519,22 @@ function Linha({
               onClick={salvarNaLista}
               className="h-10 w-full sm:h-8 sm:w-auto"
             >
-              <ListChecks />
+              {modoCorrigir ? <Pencil /> : <ListChecks />}
               {rotuloBotao}
             </Button>
+            {modoCorrigir ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={corrigindo}
+                onClick={cancelarCorrigir}
+                className="h-10 w-full sm:h-8 sm:w-auto"
+              >
+                <X />
+                Cancelar
+              </Button>
+            ) : null}
           </div>
         </td>
       </tr>
@@ -577,10 +726,7 @@ export function ApontamentoLista({
     ...extras.filter((item) => !chavesServidor.has(chaveCodigo(item.codProduto))),
   ]
   const chaves = new Set(visiveis.map((item) => chaveCodigo(item.codProduto)))
-  const dica =
-    etapa === 'costura'
-      ? `Já lançado = total do card (todas as datas). Se a qtd já existia na planilha (descrição incompleta), some no produto certo e anote na observação: “${OBS_JA_LANCADO_PLANILHA}” — assim não duplica no KPI. Cada soma nova leva a própria data.`
-      : `Já lançado = total do card (todas as datas). Se a qtd já existia na planilha (descrição incompleta), some no produto certo e anote na observação: “${OBS_JA_LANCADO_PLANILHA}” — assim não duplica no KPI. Cada soma nova leva a própria data.`
+  const dica = `Já lançado = total do card (todas as datas). Errou a digitação? Use Corrigir para substituir o total (ou zerar com 0). Soma nova = outra data/qtd. Se a qtd já existia na planilha (descrição incompleta), some no produto certo e anote “${OBS_JA_LANCADO_PLANILHA}”.`
 
   function marcarOcupada(chave: string, ocupada: boolean) {
     setOcupadas((atual) => {
@@ -742,6 +888,7 @@ export function ApontamentoLista({
                       marcarOcupada(`${item.codProduto}:${item.excelRow}`, ocupada)
                     }
                     onRegisterFlush={registerFlush}
+                    onCorrigido={() => router.refresh()}
                     onSalvarItem={() => {
                       if (salvando) return
                       salvarLista(item.codProduto)

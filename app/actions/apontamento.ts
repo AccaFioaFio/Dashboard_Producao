@@ -23,6 +23,7 @@ import {
   marcarAlertaApontamentoNuvemVisto,
   marcarAvisoApontamentoNuvem,
   somarEntradaApontamentoNuvem,
+  substituirTotalApontamentoNuvem,
 } from '@/lib/apontamento-nuvem'
 import { enviarAvisoApontamentoWhatsApp } from '@/lib/whatsapp/apontamento-finalizado'
 import { EXCEL_ROW_FORA_DA_CARGA } from '@/lib/corte-producao'
@@ -51,6 +52,10 @@ export type SalvarApontamentoInput = {
 export type SalvarApontamentoResult = { ok: true } | { ok: false; error: string }
 
 export type SomarApontamentoResult =
+  | { ok: true; total: number }
+  | { ok: false; error: string }
+
+export type CorrigirApontamentoResult =
   | { ok: true; total: number }
   | { ok: false; error: string }
 
@@ -571,6 +576,225 @@ export async function somarApontamento(
     }
   }
   return { ok: true, total: totalRow.v }
+}
+
+/**
+ * Corrige erro de digitação: substitui o total do produto (todas as somas)
+ * pelo valor informado. Zero apaga o lançamento deste produto no pedido.
+ */
+export async function corrigirApontamento(
+  input: SalvarApontamentoInput,
+): Promise<CorrigirApontamentoResult> {
+  const etapa = etapaApontamento(input.etapa)
+  if (!etapa) return { ok: false, error: 'Etapa inválida.' }
+
+  const session = await readSession()
+  if (!session || !canAccessPath(ETAPAS_APONTAMENTO[etapa].acesso, session.acessos)) {
+    return { ok: false, error: semPermissao(etapa) }
+  }
+
+  await ensureCloudDatabase()
+
+  const pedidoNorm = pedidoDigits(input.pedidoNorm)
+  let codProduto = input.codProduto.trim()
+  if (!pedidoNorm || !codProduto) {
+    return { ok: false, error: 'Item do pedido inválido.' }
+  }
+
+  const qtdPecas = quantidade(input.qtdPecas)
+  if (qtdPecas === 'invalida') {
+    return { ok: false, error: 'A quantidade precisa ser um número a partir de zero.' }
+  }
+  if (qtdPecas == null) {
+    return { ok: false, error: 'Informe o novo total (ou zero para apagar).' }
+  }
+
+  const zerar = qtdPecas === 0
+  const dataProducao = input.dataProducao.trim()
+  const responsavel = input.responsavel.trim()
+  const origem = etapa === 'costura' ? input.origem.trim() : ''
+  const conserto = etapa === 'costura' && origemCosturaConserto(origem)
+  const oficina = conserto ? (input.oficina?.trim() ?? '') : ''
+  const observacao = clipObs(input.observacao, 500)
+
+  if (!zerar) {
+    if (!dataProducao || !dataValida(dataProducao)) {
+      return { ok: false, error: 'Informe a data de produção desta correção.' }
+    }
+    if (!responsavel || !responsavelApontamentoValido(etapa, responsavel)) {
+      return { ok: false, error: 'Escolha um responsável da lista.' }
+    }
+    if (etapa === 'costura' && !origemCosturaValida(origem)) {
+      return { ok: false, error: 'Escolha a origem antes de corrigir.' }
+    }
+    if (conserto && !oficinaCadastrada(oficina)) {
+      return { ok: false, error: 'Em Conserto, escolha a oficina antes de corrigir.' }
+    }
+  }
+
+  const excelRowBase = Number(input.excelRow)
+  const foraDaCarga = excelRowBase === EXCEL_ROW_FORA_DA_CARGA
+  let nomeProduto: string | null = null
+  if (foraDaCarga) {
+    const produto = produtoNaBaseItens(codProduto)
+    const nomeInformado = input.nomeProduto?.trim() || null
+    if (produto) {
+      codProduto = produto.codProduto
+      nomeProduto = produto.nomeProduto ?? nomeInformado
+    } else {
+      nomeProduto = nomeInformado
+      if (!nomeProduto) {
+        const guardado = getSqlite()
+          .prepare(
+            `SELECT nome_produto as nomeProduto FROM ${ETAPAS_APONTAMENTO[etapa].tabela}
+             WHERE pedido_norm = ? AND cod_produto = ?
+             ORDER BY atualizado_em DESC LIMIT 1`,
+          )
+          .get(pedidoNorm, codProduto) as { nomeProduto: string | null } | undefined
+        nomeProduto = guardado?.nomeProduto ?? null
+      }
+      if (!nomeProduto && !zerar) {
+        return { ok: false, error: 'Informe a descrição do produto.' }
+      }
+    }
+  } else {
+    const existe = getSqlite()
+      .prepare(
+        `SELECT 1 as v FROM fato_pedido_item
+         WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
+      )
+      .get(pedidoNorm, codProduto, excelRowBase)
+    if (!existe) {
+      // Depois de várias somas o excel_row da tela pode ser o da última entrada,
+      // não o da carga — ainda assim a correção vale se já houver lançamento.
+      const temLancamento = getSqlite()
+        .prepare(
+          `SELECT 1 as v FROM ${ETAPAS_APONTAMENTO[etapa].tabela}
+           WHERE pedido_norm = ? AND cod_produto = ? LIMIT 1`,
+        )
+        .get(pedidoNorm, codProduto)
+      if (!temLancamento) {
+        return { ok: false, error: 'Este item não está na carga do pedido.' }
+      }
+    }
+  }
+
+  const tabela = ETAPAS_APONTAMENTO[etapa].tabela
+  const db = getSqlite()
+  if (!nomeProduto) {
+    const guardado = db
+      .prepare(
+        `SELECT nome_produto as nomeProduto FROM ${tabela}
+         WHERE pedido_norm = ? AND cod_produto = ?
+         ORDER BY atualizado_em DESC LIMIT 1`,
+      )
+      .get(pedidoNorm, codProduto) as { nomeProduto: string | null } | undefined
+    nomeProduto = guardado?.nomeProduto ?? input.nomeProduto?.trim() ?? null
+  }
+
+  db.prepare(`DELETE FROM ${tabela} WHERE pedido_norm = ? AND cod_produto = ?`).run(
+    pedidoNorm,
+    codProduto,
+  )
+
+  if (zerar) {
+    const nuvem = await substituirTotalApontamentoNuvem(etapa, pedidoNorm, {
+      excelRow: 0,
+      codProduto,
+      origem: null,
+      oficina: null,
+      qtdPecas: null,
+      dataProducao: null,
+      responsavel: null,
+      observacao: null,
+      nomeProduto,
+    })
+    syncDimPedidoApontamento(pedidoNorm)
+    revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
+    revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
+    revalidatePath('/')
+    if (!nuvem.ok) {
+      return {
+        ok: false,
+        error: `Zerou nesta tela, mas a nuvem não atualizou (${nuvem.error}). Ao reabrir, o total pode voltar.`,
+      }
+    }
+    return { ok: true, total: 0 }
+  }
+
+  const agora = new Date().toISOString()
+  let excelRowNovo = -Date.now()
+  while (
+    db
+      .prepare(
+        `SELECT 1 as v FROM ${tabela}
+         WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
+      )
+      .get(pedidoNorm, codProduto, excelRowNovo)
+  ) {
+    excelRowNovo -= 1
+  }
+
+  if (etapa === 'costura') {
+    db.prepare(
+      `INSERT INTO ${tabela} (
+         pedido_norm, cod_produto, excel_row, origem, oficina, qtd_pecas, data_producao,
+         responsavel, observacao, nome_produto, atualizado_em
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      pedidoNorm,
+      codProduto,
+      excelRowNovo,
+      origem || null,
+      oficina || null,
+      qtdPecas,
+      dataProducao,
+      responsavel,
+      observacao,
+      nomeProduto,
+      agora,
+    )
+  } else {
+    db.prepare(
+      `INSERT INTO ${tabela} (
+         pedido_norm, cod_produto, excel_row, qtd_pecas, data_producao,
+         responsavel, observacao, nome_produto, atualizado_em
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      pedidoNorm,
+      codProduto,
+      excelRowNovo,
+      qtdPecas,
+      dataProducao,
+      responsavel,
+      observacao,
+      nomeProduto,
+      agora,
+    )
+  }
+
+  const nuvem = await substituirTotalApontamentoNuvem(etapa, pedidoNorm, {
+    excelRow: excelRowNovo,
+    codProduto,
+    origem: origem || null,
+    oficina: oficina || null,
+    qtdPecas,
+    dataProducao,
+    responsavel,
+    observacao,
+    nomeProduto,
+  })
+  syncDimPedidoApontamento(pedidoNorm)
+  revalidatePath(ETAPAS_APONTAMENTO[etapa].href)
+  revalidatePath(ETAPAS_APONTAMENTO[etapa].voltar)
+  revalidatePath('/')
+  if (!nuvem.ok) {
+    return {
+      ok: false,
+      error: `Corrigiu nesta tela, mas a nuvem não atualizou (${nuvem.error}). Ao reabrir, o total pode voltar ao valor antigo.`,
+    }
+  }
+  return { ok: true, total: qtdPecas }
 }
 
 export type SalvarListaApontamentoResult =

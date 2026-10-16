@@ -524,6 +524,78 @@ export async function apagarApontamentoNuvem(
   return { ok: true }
 }
 
+/**
+ * Substitui o total do produto na nuvem (apaga entradas antigas).
+ * Com qtd 0/null, remove o arquivo do produto.
+ */
+export async function substituirTotalApontamentoNuvem(
+  etapa: EtapaApontamento,
+  pedidoNorm: string,
+  entrada: {
+    excelRow: number
+    codProduto: string
+    origem: string | null
+    oficina: string | null
+    qtdPecas: number | null
+    dataProducao: string | null
+    responsavel: string | null
+    observacao: string | null
+    nomeProduto: string | null
+  },
+): Promise<{ ok: true; total: number } | { ok: false; error: string }> {
+  const qtd = entrada.qtdPecas
+  if (qtd == null || qtd <= 0) {
+    const apagado = await apagarApontamentoNuvem(etapa, pedidoNorm, entrada.codProduto)
+    if (!apagado.ok) return apagado
+    return { ok: true, total: 0 }
+  }
+
+  const client = clienteEscrita()
+  if (!client) {
+    if (!isSupabaseConfigured()) return { ok: true, total: qtd }
+    return {
+      ok: false,
+      error: 'Falta SUPABASE_SERVICE_ROLE_KEY. Sem ela a correção some ao reabrir a tela.',
+    }
+  }
+
+  const path = caminhoItem(etapa, pedidoNorm, entrada.codProduto)
+  const baixa = await baixarJson(path)
+  if (baixa.status === 'error') {
+    return {
+      ok: false,
+      error: `Não leu a nuvem antes de corrigir (${baixa.error}). Tente de novo.`,
+    }
+  }
+  const anterior = baixa.status === 'ok' ? lancamentoDe(baixa.data) : null
+  const agora = new Date().toISOString()
+  const unica: ApontamentoNuvemEntrada = {
+    excelRow: entrada.excelRow,
+    origem: entrada.origem,
+    oficina: entrada.oficina,
+    qtdPecas: qtd,
+    dataProducao: entrada.dataProducao,
+    responsavel: entrada.responsavel,
+    avisoDataProducao: null,
+    observacao: entrada.observacao,
+    atualizadoEm: agora,
+  }
+  const corpo = agregarEntradas(
+    entrada.codProduto,
+    entrada.nomeProduto ?? anterior?.nomeProduto ?? null,
+    [unica],
+  )
+  const { error } = await client.storage
+    .from(CARGA_BUCKET)
+    .upload(path, JSON.stringify(corpo), {
+      upsert: true,
+      contentType: 'application/json',
+      cacheControl: '0',
+    })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, total: qtd }
+}
+
 function alertaDe(raw: unknown, id: string): ApontamentoNuvemAlerta | null {
   if (!raw || typeof raw !== 'object') return null
   const row = raw as Record<string, unknown>

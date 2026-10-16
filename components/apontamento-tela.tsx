@@ -51,10 +51,7 @@ export async function ApontamentoTela({
   // Tela + planilha, sem duplicar o que já foi anotado no card como “já lançado na planilha”.
   const totalLancado = totalNosCards + totalPlanilha - totalSoPlanilhaNoCard
   const mostrarLista = Boolean(consulta?.itens.length || consulta?.inclusaoManual)
-  const descricao =
-    etapa === 'costura'
-      ? `Pesquise o pedido. Já lançado no card = total do produto. Se a planilha trouxe qtd sem descrição completa, some no produto certo e anote na observação “${OBS_JA_LANCADO_PLANILHA}” (não duplica no KPI). Soma nova = outra data/qtd.`
-      : `Pesquise o pedido. Já lançado no card = total do produto. Se a planilha trouxe qtd sem descrição completa, some no produto certo e anote na observação “${OBS_JA_LANCADO_PLANILHA}” (não duplica no KPI). Soma nova = outra data/qtd.`
+  const descricao = `Pesquise o pedido. Já lançado no card = total do produto. Errou a digitação? Use Corrigir para substituir o total (0 apaga). Soma nova = outra data/qtd. Se a planilha trouxe qtd sem descrição completa, some no produto certo e anote “${OBS_JA_LANCADO_PLANILHA}”.`
 
   return (
     <PageShell
@@ -192,8 +189,8 @@ export async function ApontamentoTela({
             <h2 className="text-sm font-medium">Itens do pedido</h2>
             <p className="text-xs text-muted-foreground">
               {consulta.inclusaoManual
-                ? `Já lançado no card = total. Se veio da planilha sem descrição completa, some aqui e anote “${OBS_JA_LANCADO_PLANILHA}”.`
-                : `Itens.xlsx · ${formatInt(consulta.itens.length)} produto${consulta.itens.length === 1 ? '' : 's'}. Já lançado = total do card; Qtd a somar + Data = esta entrada.`}
+                ? `Já lançado = total. Corrigir troca o total (0 apaga). Se veio da planilha sem descrição completa, some aqui e anote “${OBS_JA_LANCADO_PLANILHA}”.`
+                : `Itens.xlsx · ${formatInt(consulta.itens.length)} produto${consulta.itens.length === 1 ? '' : 's'}. Já lançado = total; Qtd a somar = nova entrada; Corrigir = substitui o total.`}
             </p>
             <ApontamentoLista
               key={consulta.pedidoNorm ?? pedido}
