@@ -624,6 +624,34 @@ export async function apagarApontamentoNuvem(
 }
 
 /**
+ * Grava exatamente estas entradas no produto (não une com o que já está na nuvem).
+ * Lista vazia apaga o arquivo.
+ */
+export async function definirEntradasApontamentoNuvem(
+  etapa: EtapaApontamento,
+  pedidoNorm: string,
+  codProduto: string,
+  entradas: ApontamentoNuvemEntrada[],
+  nomeProduto: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const validas = entradas.filter((row) => !entradaSemConteudo(row))
+  if (!validas.length) return apagarApontamentoNuvem(etapa, pedidoNorm, codProduto)
+
+  const client = clienteEscrita()
+  if (!client) {
+    const gate = semEscritaNuvem('Gravar lançamentos')
+    if (gate.modo === 'local') return { ok: true }
+    return { ok: false, error: gate.error }
+  }
+
+  const path = caminhoItem(etapa, pedidoNorm, codProduto)
+  return comTravaPath(path, async () => {
+    const corpo = agregarEntradas(codProduto, nomeProduto, validas)
+    return uploadJsonComRetry(path, corpo)
+  })
+}
+
+/**
  * Substitui o total do produto na nuvem (apaga entradas antigas).
  * Com qtd 0/null, remove o arquivo do produto.
  */
