@@ -411,9 +411,9 @@ function Linha({
           {descricao}
         </td>
         {temOrigem ? (
-          <td data-label="Origem" data-span="full" className="w-44 px-1.5 py-1.5">
+          <td data-label="Serviço" data-span="full" className="w-44 px-1.5 py-1.5">
             <CampoSelect
-              label={`Origem de ${descricao}`}
+              label={`Serviço de ${descricao}`}
               value={origem}
               items={ORIGENS_COSTURA}
               className={campo}
@@ -920,7 +920,7 @@ export function ApontamentoLista({
                 <th className="w-px px-1.5 py-1 text-right whitespace-nowrap">Qtd pedida</th>
                 <th className="px-1.5 py-1 whitespace-nowrap">Código</th>
                 <th className="px-1.5 py-1">Descrição do produto</th>
-                {temOrigem ? <th className="px-1.5 py-1">Origem</th> : null}
+                {temOrigem ? <th className="px-1.5 py-1">Serviço</th> : null}
                 {temOrigem ? <th className="px-1.5 py-1">Oficina</th> : null}
                 <th className="px-1.5 py-1">Responsável</th>
                 <th className="w-28 px-1.5 py-1 text-right whitespace-nowrap">Já lançado</th>

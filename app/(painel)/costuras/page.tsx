@@ -126,10 +126,10 @@ export default async function CosturasPage({
       />
 
       <section className="flex min-w-0 flex-col gap-2">
-        <h2 className="text-sm font-medium">Mix de origem</h2>
+        <h2 className="text-sm font-medium">Mix de serviço</h2>
         <SimpleTable
           columns={[
-            { key: 'origem', label: 'Origem' },
+            { key: 'origem', label: 'Serviço' },
             { key: 'lancamentos', label: 'Lançamentos', numeric: true },
             { key: 'pecas', label: 'Peças', numeric: true },
             { key: 'pedidos', label: 'Pedidos', numeric: true },

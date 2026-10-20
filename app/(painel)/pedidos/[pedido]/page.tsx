@@ -7,10 +7,9 @@ import {
   PedidoTimeline,
   SectionMeta,
   SectionNote,
-  isGenericProduto,
   uniqueLabels,
 } from '@/components/pedido-ficha'
-import { getPedidoFicha } from '@/data/pedidos'
+import { getPedidoFicha, type LinhaProdutoFicha } from '@/data/pedidos'
 import { QUALIDADE_TIPO_LABEL } from '@/lib/pedido'
 import {
   formatDate,
@@ -19,7 +18,6 @@ import {
   formatMeters,
   formatMoney,
   formatNumber,
-  formatProduto,
   formatTecido,
   TIPO_TECIDO_LABEL,
 } from '@/lib/format'
@@ -36,15 +34,31 @@ export async function generateMetadata({
   return { title: `Pedido ${parsePedidoParam(pedido)}` }
 }
 
-function formatMetrosCell(value: number | null | undefined) {
-  if (value == null) return '—'
-  return formatMeters(value, value >= 10 ? 0 : 1)
-}
-
 function formatQtdLancada(value: number | null) {
   if (value == null) return '—'
   return formatNumber(value, value % 1 ? 2 : 0)
 }
+
+function celulaProduto(row: LinhaProdutoFicha) {
+  return {
+    cod: row.codProduto || '—',
+    produto: row.produto || '—',
+    origem: row.origem || '—',
+    pecas: formatQtdLancada(row.pecas),
+    responsavel: row.responsavel || '—',
+    periodo: formatPeriodo(row.inicio, row.fim),
+    warning: row.pendentes > 0 || (row.origemNorm != null && row.origemNorm !== 'Producao'),
+    alert: row.defeitos > 0,
+  }
+}
+
+const colunasProduto = [
+  { key: 'cod', label: 'Código do Produto' },
+  { key: 'produto', label: 'Produto', wrap: true as const },
+  { key: 'pecas', label: 'Peças', numeric: true as const },
+  { key: 'responsavel', label: 'Responsável' },
+  { key: 'periodo', label: 'Período', nowrap: true as const },
+]
 
 function formatPeriodo(inicio: string | null, fim: string | null) {
   if (!inicio && !fim) return '—'
@@ -71,62 +85,8 @@ export default async function PedidoFichaPage({
   )
   const status = statusLabels.join(' · ') || null
   const cliente = ficha.corte?.cliente
-  const statusMix = statusLabels.length > 1
 
-  const linhaByExcel = new Map(
-    ficha.linhas.map((row) => [row.excelRow, row] as const),
-  )
-  const corteRows =
-    ficha.ocs.length > 0
-      ? ficha.ocs.map((oc) => {
-          const linha = linhaByExcel.get(oc.excelRow)
-          return {
-            excelRow: oc.excelRow,
-            data: oc.data,
-            tecido: formatProduto(oc),
-            metros: linha?.metros ?? null,
-            economia: linha?.economia ?? null,
-            pecas: oc.pecas,
-            status: oc.status,
-            responsavel: oc.responsavel,
-            isHeader: true,
-          }
-        })
-      : ficha.linhas
-          .filter(
-            (row) =>
-              row.isHeader ||
-              row.metros != null ||
-              row.pecas != null ||
-              row.tecido,
-          )
-          .map((row) => ({
-            excelRow: row.excelRow,
-            data: null as string | null,
-            tecido: formatTecido(row.codTecido, row.tecido),
-            metros: row.metros,
-            economia: row.economia,
-            pecas: row.pecas,
-            status: row.status,
-            responsavel: null as string | null,
-            isHeader: row.isHeader,
-          }))
-
-  const corteResponsaveis = uniqueLabels(corteRows.map((row) => row.responsavel))
-  const showCorteResponsavel = corteResponsaveis.length > 1
-  const showEconomia = corteRows.some(
-    (row) => row.economia != null && row.economia !== 0,
-  )
-
-  const pecasRef =
-    ficha.totais.pecasCorte ||
-    ficha.totais.pecasCosturaProd ||
-    ficha.totais.pecasRevisao
-
-  const hideOficinasProduto = ficha.oficinas
-    .map((row) => formatProduto(row))
-    .every(isGenericProduto)
-
+  const corteResponsaveis = uniqueLabels(ficha.corteProdutos.map((row) => row.responsavel))
   const metrosMeta = [
     ficha.totais.metrosCorte
       ? `${formatMeters(ficha.totais.metrosCorte)} no corte`
@@ -139,14 +99,11 @@ export default async function PedidoFichaPage({
     .join(' · ')
 
   const corteMeta = [
-    corteRows.length
-      ? `${formatInt(corteRows.length)} OC${corteRows.length === 1 ? '' : 's'}`
+    ficha.corteProdutos.length
+      ? `${formatInt(ficha.corteProdutos.length)} produto${ficha.corteProdutos.length === 1 ? '' : 's'}`
       : null,
-    !showCorteResponsavel && corteResponsaveis[0]
-      ? corteResponsaveis[0]
-      : null,
+    corteResponsaveis.length === 1 ? corteResponsaveis[0] : null,
     metrosMeta || null,
-    pecasRef ? `${formatInt(pecasRef)} pç` : null,
   ]
     .filter(Boolean)
     .join(' · ')
@@ -245,14 +202,14 @@ export default async function PedidoFichaPage({
               ? `Serviço ${formatInt(ficha.totais.pecasCosturaServico)}`
               : 'Origem = Produção'
           }
-          detail="Relatório de Costura · peças com Origem = Produção deste pedido."
+          detail="Uma linha por produto e origem. O total é o da aba; a planilha não entra de novo."
           tone="teal"
         />
         <KpiCard
           label="Peças na Revisão"
           value={formatInt(ficha.totais.pecasRevisao)}
-          hint="Pode ser maior que o corte (recorte de ano ou vários lançamentos)"
-          detail="Relatório de Revisão · peças limpas deste pedido."
+          hint="Total por produto"
+          detail="Uma linha por produto. O total é o da aba; a planilha não entra de novo."
           tone="magenta"
         />
         <KpiCard
@@ -327,40 +284,13 @@ export default async function PedidoFichaPage({
         )}
       </section>
 
-      {corteRows.length ? (
+      {ficha.corteProdutos.length ? (
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Corte</h2>
           <SectionMeta>{corteMeta}</SectionMeta>
-          {statusMix ? (
-            <SectionNote>
-              Status mistos neste pedido — cada OC mostra o seu.
-            </SectionNote>
-          ) : null}
           <SimpleTable
-            columns={[
-              { key: 'data', label: 'Data' },
-              { key: 'tecido', label: 'Tecido', wrap: true },
-              { key: 'metros', label: 'Metros', numeric: true },
-              ...(showEconomia
-                ? [{ key: 'economia', label: 'Economia', numeric: true as const }]
-                : []),
-              { key: 'pecas', label: 'Peças', numeric: true },
-              { key: 'status', label: 'Status' },
-              ...(showCorteResponsavel
-                ? [{ key: 'responsavel', label: 'Responsável' }]
-                : []),
-            ]}
-            rows={corteRows.map((row) => ({
-              data: formatDate(row.data),
-              tecido: row.tecido,
-              metros: formatMetrosCell(row.metros),
-              economia: formatMetrosCell(row.economia),
-              pecas: row.pecas != null ? formatInt(row.pecas) : '—',
-              status: row.status,
-              responsavel: row.responsavel,
-              alert: row.status === 'EM PRODUÇÃO',
-              warning: row.status === 'AGUARDANDO TECIDO',
-            }))}
+            columns={colunasProduto}
+            rows={ficha.corteProdutos.map(celulaProduto)}
           />
         </section>
       ) : null}
@@ -370,20 +300,12 @@ export default async function PedidoFichaPage({
           <h2 className="text-sm font-medium">Costura</h2>
           <SimpleTable
             columns={[
-              { key: 'data', label: 'Data' },
-              { key: 'origem', label: 'Origem' },
-              { key: 'pecas', label: 'Peças', numeric: true },
-              { key: 'responsavel', label: 'Responsável' },
-              { key: 'produto', label: 'Produto', wrap: true },
+              colunasProduto[0],
+              colunasProduto[1],
+              { key: 'origem', label: 'Serviço' },
+              ...colunasProduto.slice(2),
             ]}
-            rows={ficha.costura.map((row) => ({
-              data: formatDate(row.dataProducao),
-              origem: row.origem,
-              pecas: formatInt(row.pecas),
-              responsavel: row.responsavel,
-              produto: formatProduto(row),
-              warning: row.origemNorm !== 'Producao',
-            }))}
+            rows={ficha.costura.map(celulaProduto)}
           />
         </section>
       ) : (
@@ -394,18 +316,8 @@ export default async function PedidoFichaPage({
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-sm font-medium">Revisão</h2>
           <SimpleTable
-            columns={[
-              { key: 'data', label: 'Data' },
-              { key: 'pecas', label: 'Peças', numeric: true },
-              { key: 'responsavel', label: 'Responsável' },
-              { key: 'produto', label: 'Produto', wrap: true },
-            ]}
-            rows={ficha.revisao.map((row) => ({
-              data: formatDate(row.dataProducao),
-              pecas: formatInt(row.pecas),
-              responsavel: row.responsavel,
-              produto: formatProduto(row),
-            }))}
+            columns={colunasProduto}
+            rows={ficha.revisao.map(celulaProduto)}
           />
         </section>
       ) : (
@@ -417,7 +329,7 @@ export default async function PedidoFichaPage({
           <h2 className="text-sm font-medium">Oficinas</h2>
           <SectionMeta>
             {[
-              `${formatInt(ficha.oficinas.length)} lote${ficha.oficinas.length === 1 ? '' : 's'}`,
+              `${formatInt(ficha.oficinas.length)} produto${ficha.oficinas.length === 1 ? '' : 's'}`,
               ficha.totais.pendentes
                 ? `${formatInt(ficha.totais.pendentes)} pendentes`
                 : 'sem pendentes',
@@ -429,32 +341,8 @@ export default async function PedidoFichaPage({
               .join(' · ')}
           </SectionMeta>
           <SimpleTable
-            columns={[
-              { key: 'oficina', label: 'Oficina' },
-              ...(!hideOficinasProduto
-                ? [{ key: 'produto', label: 'Produto', wrap: true as const }]
-                : []),
-              { key: 'envio', label: 'Envio' },
-              { key: 'retorno', label: 'Retorno' },
-              { key: 'enviadas', label: 'Enviadas', numeric: true },
-              { key: 'retornadas', label: 'Retornadas', numeric: true },
-              { key: 'pendentes', label: 'Pendentes', numeric: true },
-              { key: 'defeitos', label: 'Defeitos', numeric: true },
-              { key: 'valor', label: 'Valor', numeric: true },
-            ]}
-            rows={ficha.oficinas.map((row) => ({
-              oficina: row.oficina,
-              produto: formatProduto(row),
-              envio: formatDate(row.dataEnvio),
-              retorno: formatDate(row.dataRetorno),
-              enviadas: formatInt(row.enviadas),
-              retornadas: formatInt(row.retornadas),
-              pendentes: formatInt(row.pendentes),
-              defeitos: formatInt(row.defeitos),
-              valor: row.valorTotal != null ? formatMoney(row.valorTotal) : '—',
-              warning: row.pendentes > 0,
-              alert: row.defeitos > 0,
-            }))}
+            columns={colunasProduto}
+            rows={ficha.oficinas.map(celulaProduto)}
           />
         </section>
       ) : null}
