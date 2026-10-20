@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { SlidersHorizontal, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,7 @@ import { MONTH_LABELS } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 const ALL = '__all__'
+const SEARCH_DEBOUNCE_MS = 300
 
 type FilterBarProps = {
   pathname: string
@@ -42,6 +44,18 @@ export function FilterBar({
   const router = useRouter()
   const active = countActiveFilters(values)
   const hasCategoria = fields.includes('categoria')
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const qDraftRef = useRef(values.q ?? '')
+
+  useEffect(() => {
+    qDraftRef.current = values.q ?? ''
+  }, [values.q])
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
 
   function push(next: DashFilters) {
     const withDefault =
@@ -54,6 +68,21 @@ export function FilterBar({
 
   function setField<K extends FilterField>(key: K, value: DashFilters[K]) {
     push({ ...values, [key]: value || undefined })
+  }
+
+  function commitQ(raw: string) {
+    const next = raw.trim()
+    const current = values.q ?? ''
+    if (next === current) return
+    setField('q', next || undefined)
+  }
+
+  function scheduleQ(raw: string) {
+    qDraftRef.current = raw
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      commitQ(qDraftRef.current)
+    }, SEARCH_DEBOUNCE_MS)
   }
 
   const selectFields = fields.filter((field) => field !== 'mes')
@@ -137,12 +166,17 @@ export function FilterBar({
                   : 'Nº pedido'
               }
               className="bg-background/70"
+              onChange={(event) => scheduleQ(event.currentTarget.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
-                  setField('q', event.currentTarget.value.trim())
+                  if (debounceRef.current) clearTimeout(debounceRef.current)
+                  commitQ(event.currentTarget.value)
                 }
               }}
-              onBlur={(event) => setField('q', event.currentTarget.value.trim())}
+              onBlur={(event) => {
+                if (debounceRef.current) clearTimeout(debounceRef.current)
+                commitQ(event.currentTarget.value)
+              }}
             />
           </label>
         ) : null}

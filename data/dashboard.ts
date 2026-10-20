@@ -5,7 +5,8 @@ import { getSqlite } from '@/db'
 import type { DashFilters, FilterOptions } from '@/lib/filters'
 import { isProducaoOrigem, splitCodigoDescricao } from '@/lib/keys'
 /** Baixa a carga do Supabase Storage (quando configurado) antes das queries. */
-import { ensureCloudDatabase } from '@/lib/cloud/carga'
+import { ensureCloudDatabase, getLocalCargaEtag } from '@/lib/cloud/carga'
+import { pedidoDigits } from '@/lib/pedido'
 import { YEAR } from '@/lib/year'
 import type { FunilKpis, HeaderKpis, SerieMensal } from '@/lib/etl/types'
 import { ocJoinLinhas, ocPecasExpr } from '@/lib/corte-oc'
@@ -174,8 +175,9 @@ function applyPedidoFilters(
     filter.params.oficina = filters.oficina
   }
   if (filters.q && cols.pedido) {
-    filter.clauses.push(`${alias}.pedido_norm LIKE @q`)
-    filter.params.q = likeContains(filters.q)
+    const exact = pedidoDigits(filters.q) ?? filters.q.trim()
+    filter.clauses.push(`${alias}.pedido_norm = @q`)
+    filter.params.q = exact
   }
 }
 
@@ -191,8 +193,9 @@ function applySignusFilters(filter: SqlFilter, alias: string, filters: DashFilte
     filter.params.mes = filters.mes
   }
   if (filters.q) {
-    filter.clauses.push(`${alias}.pedido_norm LIKE @q`)
-    filter.params.q = likeContains(filters.q)
+    const exact = pedidoDigits(filters.q) ?? filters.q.trim()
+    filter.clauses.push(`${alias}.pedido_norm = @q`)
+    filter.params.q = exact
   }
   if (filters.canal || filters.cliente) {
     const pedidoClauses = [`sp.pedido_norm = ${alias}.pedido_norm`]
@@ -290,8 +293,9 @@ function hasAproveitamentoTable() {
   )
 }
 
-export const getFilterOptions = cache(async (): Promise<FilterOptions> => {
-  await ensureCloudDatabase()
+const filterOptionsByCarga = new Map<string, FilterOptions>()
+
+function buildFilterOptions(): FilterOptions {
   const db = sqlite()
   const aproveitamentoUnion = hasAproveitamentoTable()
     ? 'UNION SELECT data FROM fato_aproveitamento'
@@ -364,6 +368,26 @@ export const getFilterOptions = cache(async (): Promise<FilterOptions> => {
         .all() as { categoria: string }[]
     ).map((row) => row.categoria),
   }
+}
+
+export const getFilterOptions = cache(async (): Promise<FilterOptions> => {
+  await ensureCloudDatabase()
+  const cargaKey =
+    getLocalCargaEtag() ||
+    (
+      sqlite()
+        .prepare(
+          `SELECT lida_em as lidaEm FROM carga WHERE ok = 1 ORDER BY id DESC LIMIT 1`,
+        )
+        .get() as { lidaEm: string } | undefined
+    )?.lidaEm ||
+    'local'
+  const cached = filterOptionsByCarga.get(cargaKey)
+  if (cached) return cached
+  const options = buildFilterOptions()
+  filterOptionsByCarga.clear()
+  filterOptionsByCarga.set(cargaKey, options)
+  return options
 })
 
 export const getLatestCarga = cache(async (): Promise<CargaInfo | null> => {

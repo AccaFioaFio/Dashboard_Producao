@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, writeFileSync } from 'node:fs'
 import dns from 'node:dns'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { cache } from 'react'
 import { getSqlite, resetSqlite } from '@/db'
 import {
   captureApontamentoOperacao,
@@ -47,7 +48,9 @@ try {
 }
 
 let localEtag = ''
-let inFlight: Promise<void> | null = null
+let restoreInFlight: Promise<void> | null = null
+/** Dedupa o corpo inteiro de ensure entre callers concorrentes (mesmo processo). */
+const ensureInFlight = new Map<string, Promise<void>>()
 /** Na Vercel, a 1ª request da instância publica todos os lançamentos do /tmp de uma vez. */
 let cloudApontamentoRecoveryDone = false
 /** No desktop, a 1ª abertura do processo força puxar tudo da nuvem (após o mobile publicar). */
@@ -55,6 +58,11 @@ let desktopApontamentoPullDone = false
 
 /** Download grande (~17 MB): URL assinada + fetch nativo (mais estável na Vercel). */
 const DOWNLOAD_TIMEOUT_MS = 120_000
+
+/** ETag da carga já restaurada neste processo (vazio se ainda não baixou). */
+export function getLocalCargaEtag() {
+  return localEtag
+}
 
 /**
  * Na Vercel (e quando Supabase está configurado): baixa o SQLite publicado
@@ -68,6 +76,8 @@ const DOWNLOAD_TIMEOUT_MS = 120_000
  * `light: true` — usado em gravações: garante a carga local, mas pula o sync
  * global de apontamento/programação quando a instância já aqueci. O produto
  * gravado continua sincronizando na action (mesclar na nuvem).
+ *
+ * Deduplicado 1× por request (React `cache`) e entre awaits concorrentes no processo.
  */
 export async function ensureCloudDatabase(options?: {
   force?: boolean
@@ -75,6 +85,22 @@ export async function ensureCloudDatabase(options?: {
 }) {
   const force = Boolean(options?.force)
   const light = Boolean(options?.light) && !force
+  return ensureCloudDatabaseCached(force, light)
+}
+
+const ensureCloudDatabaseCached = cache(async (force: boolean, light: boolean) => {
+  const key = `${force ? 'f' : 'n'}:${light ? 'l' : 'f'}`
+  let pending = ensureInFlight.get(key)
+  if (!pending) {
+    pending = runEnsureCloudDatabase(force, light).finally(() => {
+      ensureInFlight.delete(key)
+    })
+    ensureInFlight.set(key, pending)
+  }
+  await pending
+})
+
+async function runEnsureCloudDatabase(force: boolean, light: boolean) {
   const recuperarApontamentoCloud = IS_CLOUD && !cloudApontamentoRecoveryDone
   const recuperarDesktop = !IS_CLOUD && !desktopApontamentoPullDone
 
@@ -90,12 +116,12 @@ export async function ensureCloudDatabase(options?: {
   }
 
   if (IS_CLOUD || force) {
-    if (!inFlight) {
-      inFlight = restoreDatabase(force).finally(() => {
-        inFlight = null
+    if (!restoreInFlight) {
+      restoreInFlight = restoreDatabase(force).finally(() => {
+        restoreInFlight = null
       })
     }
-    await inFlight
+    await restoreInFlight
   }
 
   // Gravação com DB já quente: não repuxa todos os pedidos / programação.

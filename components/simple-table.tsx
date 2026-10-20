@@ -1,6 +1,7 @@
 'use client'
 
 import type { KeyboardEvent, ReactNode } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { PedidoLink } from '@/components/pedido-link'
 import { cn } from '@/lib/utils'
@@ -61,6 +62,10 @@ function TonedRow({
       row.warning &&
       'bg-chart-3/15 shadow-[inset_3px_0_0_0_var(--chart-3)] hover:bg-chart-3/25',
   )
+
+  useEffect(() => {
+    if (href) router.prefetch(href)
+  }, [href, router])
 
   const activate = () => {
     if (href) router.push(href)

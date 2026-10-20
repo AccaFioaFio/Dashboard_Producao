@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import { PageShell } from '@/components/page-shell'
 import { KpiCard, KpiGrid } from '@/components/kpi-card'
@@ -9,7 +10,11 @@ import {
   SectionNote,
   uniqueLabels,
 } from '@/components/pedido-ficha'
-import { getPedidoFicha, type LinhaProdutoFicha } from '@/data/pedidos'
+import {
+  getPedidoFicha,
+  type LinhaProdutoFicha,
+  type PedidoFicha,
+} from '@/data/pedidos'
 import { QUALIDADE_TIPO_LABEL } from '@/lib/pedido'
 import {
   formatDate,
@@ -22,6 +27,7 @@ import {
   TIPO_TECIDO_LABEL,
 } from '@/lib/format'
 import { parsePedidoParam } from '@/lib/pedido'
+import PedidoFichaLoading from './loading'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,53 +75,10 @@ function formatPeriodo(inicio: string | null, fim: string | null) {
   return `– ${formatDate(fim)}`
 }
 
-export default async function PedidoFichaPage({
-  params,
-}: {
-  params: Promise<{ pedido: string }>
-}) {
-  const { pedido } = await params
-  const ficha = await getPedidoFicha(pedido)
-  if (!ficha) notFound()
-
-  const statusLabels = uniqueLabels(
-    ficha.ocs.length
-      ? ficha.ocs.map((oc) => oc.status)
-      : [ficha.corte?.statusVigente],
-  )
-  const status = statusLabels.join(' · ') || null
-  const cliente = ficha.corte?.cliente
-
-  const corteResponsaveis = uniqueLabels(ficha.corteProdutos.map((row) => row.responsavel))
-  const metrosMeta = [
-    ficha.totais.metrosCorte
-      ? `${formatMeters(ficha.totais.metrosCorte)} no corte`
-      : null,
-    ficha.totais.metrosSignusBaixa
-      ? `Signus ${formatMeters(ficha.totais.metrosSignusBaixa)}`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
-
-  const corteMeta = [
-    ficha.corteProdutos.length
-      ? `${formatInt(ficha.corteProdutos.length)} produto${ficha.corteProdutos.length === 1 ? '' : 's'}`
-      : null,
-    corteResponsaveis.length === 1 ? corteResponsaveis[0] : null,
-    metrosMeta || null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
-
+/** KPIs + timeline — renderizam assim que a ficha resolve (antes das tabelas no stream). */
+function PedidoFichaKpis({ ficha }: { ficha: PedidoFicha }) {
   return (
-    <PageShell
-      title={`Pedido ${ficha.pedidoNorm}`}
-      description={
-        [cliente, ficha.corte?.canal, status].filter(Boolean).join(' · ') ||
-        'Pedido 2026 sem cabeçalho de Corte neste ano.'
-      }
-    >
+    <>
       {ficha.qualidade.length ? (
         <ul className="card-surface flex flex-col gap-1 px-3 py-2 text-xs text-destructive">
           {ficha.qualidade.map((item) => (
@@ -228,7 +191,36 @@ export default async function PedidoFichaPage({
           tone="teal"
         />
       </KpiGrid>
+    </>
+  )
+}
 
+/** Tabelas em Suspense — no stream HTML ficam depois dos KPIs. */
+function PedidoFichaTabelas({ ficha }: { ficha: PedidoFicha }) {
+  const corteResponsaveis = uniqueLabels(ficha.corteProdutos.map((row) => row.responsavel))
+  const metrosMeta = [
+    ficha.totais.metrosCorte
+      ? `${formatMeters(ficha.totais.metrosCorte)} no corte`
+      : null,
+    ficha.totais.metrosSignusBaixa
+      ? `Signus ${formatMeters(ficha.totais.metrosSignusBaixa)}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  const corteMeta = [
+    ficha.corteProdutos.length
+      ? `${formatInt(ficha.corteProdutos.length)} produto${ficha.corteProdutos.length === 1 ? '' : 's'}`
+      : null,
+    corteResponsaveis.length === 1 ? corteResponsaveis[0] : null,
+    metrosMeta || null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  return (
+    <>
       <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Produtos</h2>
         {ficha.itens.length ? (
@@ -372,6 +364,47 @@ export default async function PedidoFichaPage({
       ) : (
         <SectionNote>Sem movimento Signus com este PED em Orig. Mov.</SectionNote>
       )}
+    </>
+  )
+}
+
+async function PedidoFichaContent({ pedido }: { pedido: string }) {
+  const ficha = await getPedidoFicha(pedido)
+  if (!ficha) notFound()
+
+  const statusLabels = uniqueLabels(
+    ficha.ocs.length
+      ? ficha.ocs.map((oc) => oc.status)
+      : [ficha.corte?.statusVigente],
+  )
+  const status = statusLabels.join(' · ') || null
+  const cliente = ficha.corte?.cliente
+
+  return (
+    <PageShell
+      title={`Pedido ${ficha.pedidoNorm}`}
+      description={
+        [cliente, ficha.corte?.canal, status].filter(Boolean).join(' · ') ||
+        'Pedido 2026 sem cabeçalho de Corte neste ano.'
+      }
+    >
+      <PedidoFichaKpis ficha={ficha} />
+      <Suspense fallback={null}>
+        <PedidoFichaTabelas ficha={ficha} />
+      </Suspense>
     </PageShell>
+  )
+}
+
+export default async function PedidoFichaPage({
+  params,
+}: {
+  params: Promise<{ pedido: string }>
+}) {
+  const { pedido } = await params
+  return (
+    <Suspense fallback={<PedidoFichaLoading />}>
+      <PedidoFichaContent pedido={pedido} />
+    </Suspense>
   )
 }

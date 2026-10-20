@@ -15,6 +15,7 @@ import {
   lerLancamentosNuvem,
   type CorteNuvemLancamento,
 } from '@/lib/corte-nuvem'
+import { apontamentoNuvemSyncOk } from '@/lib/apontamento-sync'
 import { ensureCloudDatabase } from '@/lib/cloud/carga'
 import { leadTimeDays } from '@/lib/dates'
 import type { DashFilters } from '@/lib/filters'
@@ -234,10 +235,6 @@ function sqlite() {
   return getSqlite()
 }
 
-function likeContains(value: string) {
-  return `%${value.replaceAll('%', '').replaceAll('_', '')}%`
-}
-
 function hasObservacaoColumn() {
   return Boolean(
     sqlite()
@@ -302,8 +299,9 @@ export const getPedidosLista = cache(async (filters: DashFilters = {}) => {
     : [funilSliceWhere('d')[fatia]]
   const params: Record<string, unknown> = {}
   if (filters.q) {
-    clauses.push((oc ? 'h' : 'd') + '.pedido_norm LIKE @q')
-    params.q = likeContains(filters.q)
+    const exact = pedidoDigits(filters.q) ?? filters.q.trim()
+    clauses.push((oc ? 'h' : 'd') + '.pedido_norm = @q')
+    params.q = exact
   }
   if (filters.canal) {
     clauses.push(
@@ -979,14 +977,17 @@ async function aplicarApontamento(
     })
   }
 
+  // Após ensureCloudDatabase + sync ok, a nuvem já está no SQLite — evita Storage por clique.
   const nuvem = new Map<string, ApontamentoNuvem>()
-  try {
-    for (const [cod, row] of await lerApontamentoNuvem(etapa, pedidoNorm)) {
-      const chave = chaveProduto(cod)
-      if (!nuvem.has(chave)) nuvem.set(chave, row)
+  if (!apontamentoNuvemSyncOk()) {
+    try {
+      for (const [cod, row] of await lerApontamentoNuvem(etapa, pedidoNorm)) {
+        const chave = chaveProduto(cod)
+        if (!nuvem.has(chave)) nuvem.set(chave, row)
+      }
+    } catch (error) {
+      console.error('leitura do lançamento na nuvem falhou', etapa, pedidoNorm, error)
     }
-  } catch (error) {
-    console.error('leitura do lançamento na nuvem falhou', etapa, pedidoNorm, error)
   }
 
   const linhas: LinhaProdutoFicha[] = []
