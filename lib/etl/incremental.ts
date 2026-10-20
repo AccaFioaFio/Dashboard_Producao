@@ -9,7 +9,6 @@ import {
   parseCostura,
   parseOficinas,
   parseRevisao,
-  readWorkbook,
 } from '@/lib/etl/parse'
 import { parseAproveitamento } from '@/lib/etl/parse-aproveitamento'
 import { parseEstoqueTecidos } from '@/lib/etl/parse-estoque'
@@ -17,6 +16,7 @@ import { parsePedidosComerciais } from '@/lib/etl/parse-pedidos'
 import { parsePedidosItens } from '@/lib/etl/parse-itens'
 import { parseParceiros } from '@/lib/etl/parse-parceiros'
 import { parseSignusTecidos } from '@/lib/etl/parse-signus'
+import { readSourceWorkbook } from '@/lib/etl/parquet-workbook'
 import { lastOkCargaMtimes, type SourceMtimes } from '@/lib/etl/publish'
 import { readWorkbooksParallel } from '@/lib/etl/read-workbooks-parallel'
 import type { QualidadeEvento, Snapshot } from '@/lib/etl/types'
@@ -68,7 +68,7 @@ export function changedSourceKeys(
 }
 
 /**
- * Monta o snapshot: reusa SQLite no que não mudou; só lê/parseia os Excel novos.
+ * Monta o snapshot: reusa SQLite no que não mudou; só lê/parseia os parquet novos.
  */
 export async function buildSnapshotIncremental(
   copied: CopiedSources,
@@ -90,7 +90,7 @@ export async function buildSnapshotIncremental(
         copied.parceirosCache,
       ])
     if (!corteWb || !oficinasWb || !signusWb || !estoqueWb) {
-      throw new Error('Falha ao ler planilhas obrigatórias.')
+      throw new Error('Falha ao ler parquet obrigatórios.')
     }
     return {
       snapshot: buildSnapshotFromWorkbooks(
@@ -128,7 +128,7 @@ export async function buildSnapshotIncremental(
   )
 
   if (need.has('corte')) {
-    const wb = corteWb ?? readWorkbook(copied.corteCache)
+    const wb = corteWb ?? (await readSourceWorkbook(copied.corteCache, 'corte'))
     const corte = parseCorte(wb)
     const costura = parseCostura(wb)
     const revisao = parseRevisao(wb)
@@ -152,7 +152,8 @@ export async function buildSnapshotIncremental(
   }
 
   if (need.has('oficinas')) {
-    const wb = oficinasWb ?? readWorkbook(copied.oficinasCache)
+    const wb =
+      oficinasWb ?? (await readSourceWorkbook(copied.oficinasCache, 'oficinas'))
     const oficinas = parseOficinas(wb)
     snapshot = { ...snapshot, oficinas: oficinas.lotes }
     qualidade = [
@@ -162,18 +163,22 @@ export async function buildSnapshotIncremental(
   }
 
   if (need.has('signus')) {
-    const wb = signusWb ?? readWorkbook(copied.signusCache)
+    const wb =
+      signusWb ?? (await readSourceWorkbook(copied.signusCache, 'signus'))
     snapshot = { ...snapshot, tecidosSignus: parseSignusTecidos(wb) }
   }
 
   if (need.has('estoque')) {
-    const wb = estoqueWb ?? readWorkbook(copied.estoqueCache)
+    const wb =
+      estoqueWb ?? (await readSourceWorkbook(copied.estoqueCache, 'estoque'))
     snapshot = { ...snapshot, tecidosEstoque: parseEstoqueTecidos(wb) }
   }
 
   if (need.has('pedidos')) {
     if (copied.pedidosCache && existsSync(copied.pedidosCache)) {
-      const wb = pedidosWb ?? readWorkbook(copied.pedidosCache)
+      const wb =
+        pedidosWb ??
+        (await readSourceWorkbook(copied.pedidosCache, 'pedidos'))
       snapshot = { ...snapshot, pedidosComerciais: parsePedidosComerciais(wb) }
     } else {
       snapshot = { ...snapshot, pedidosComerciais: [] }
@@ -182,7 +187,8 @@ export async function buildSnapshotIncremental(
 
   if (need.has('itens')) {
     if (copied.itensCache && existsSync(copied.itensCache)) {
-      const wb = itensWb ?? readWorkbook(copied.itensCache)
+      const wb =
+        itensWb ?? (await readSourceWorkbook(copied.itensCache, 'itens'))
       snapshot = { ...snapshot, pedidosItens: parsePedidosItens(wb) }
     } else {
       snapshot = { ...snapshot, pedidosItens: [] }
@@ -191,7 +197,9 @@ export async function buildSnapshotIncremental(
 
   if (need.has('parceiros')) {
     if (copied.parceirosCache && existsSync(copied.parceirosCache)) {
-      const wb = parceirosWb ?? readWorkbook(copied.parceirosCache)
+      const wb =
+        parceirosWb ??
+        (await readSourceWorkbook(copied.parceirosCache, 'parceiros'))
       snapshot = { ...snapshot, parceiros: parseParceiros(wb) }
     } else {
       snapshot = { ...snapshot, parceiros: [] }

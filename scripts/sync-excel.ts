@@ -43,7 +43,7 @@ async function main() {
 }
 
 async function runWatch() {
-  log('sinc no ar. Copia a origem para Arquivos do Excel. Ctrl+C para parar.')
+  log('sinc no ar. Copia a origem Parquet para a pasta Parquet. Ctrl+C para parar.')
   const dirs = originWatchDirs()
   for (const dir of dirs) {
     log(`origem  ${dir}`)

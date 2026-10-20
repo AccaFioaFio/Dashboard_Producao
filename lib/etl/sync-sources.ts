@@ -9,30 +9,22 @@ import {
 } from 'node:fs'
 import path from 'node:path'
 import {
-  EXCEL_DIR,
+  corteBundleNames,
+  parquetFolderReady,
+  PARQUET_NAMES,
+  requiredParquetPaths,
+} from '@/lib/etl/parquet-files'
+import {
+  PARQUET_DIR,
   projectFilePaths,
   type SourceFilePaths,
 } from '@/lib/paths'
-
-const SIGNUS_DIR =
-  'C:/Users/INTEL/OneDrive/Área de Trabalho/1 - TABELA BASE PARA ATUALIZAÇÃO/TABELAS  2 SEMESTRES 2026/Relatorio Signus'
-
-const DEFAULT_ORIGINS: SourceFilePaths = {
-  corte:
-    'C:/Users/INTEL/OneDrive/FIO A FIO/RELATORIO/PRODUÇÃO CORTE E COSTURA/PROGRAMAÇÃO CORTE E COSTURA .xlsx',
-  oficinas: 'Q:/00 - OFICINAS 2026/Produção Oficinas.xlsx',
-  signus: path.join(SIGNUS_DIR, 'Movimentacao Tecidos.xlsx'),
-  estoque: path.join(SIGNUS_DIR, 'Saldo do Estoque Geral.xlsx'),
-  pedidos: path.join(SIGNUS_DIR, 'Pedidos.xlsx'),
-  itens: path.join(SIGNUS_DIR, 'Itens.xlsx'),
-  parceiros: path.join(SIGNUS_DIR, 'Parceiro Comercial.xlsx'),
-}
 
 const COPY_RETRIES = 5
 const COPY_RETRY_MS = 1_200
 
 export type SyncResult =
-  | { ok: true; copied: Array<{ name: keyof SourceFilePaths; from: string; to: string }> }
+  | { ok: true; copied: Array<{ name: string; from: string; to: string }> }
   | { ok: false; error: string }
 
 function envPath(...keys: string[]) {
@@ -49,39 +41,14 @@ function sleep(ms: number) {
   })
 }
 
-function isWorkbook(name: string) {
+function isParquet(name: string) {
   const base = path.basename(name)
   if (base.startsWith('~$')) return false
-  return /\.(xlsx|xls)$/i.test(base)
+  return /\.parquet$/i.test(base)
 }
 
 function samePath(left: string, right: string) {
   return path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase()
-}
-
-function pickInDir(dir: string, preferredName: string) {
-  const exact = path.join(dir, preferredName)
-  if (existsSync(exact) && statSync(exact).isFile()) return exact
-  const wanted = preferredName.toLowerCase()
-  const files = readdirSync(dir).filter(isWorkbook)
-  const match = files.find((file) => file.toLowerCase() === wanted)
-  if (match) return path.join(dir, match)
-  const stem = path.parse(preferredName).name.toLowerCase()
-  const byStem = files.find((file) => path.parse(file).name.toLowerCase() === stem)
-  if (byStem) return path.join(dir, byStem)
-  return null
-}
-
-function resolveOrigin(origin: string, destFile: string) {
-  if (!existsSync(origin)) {
-    throw new Error(`Origem ausente: ${origin}`)
-  }
-  if (statSync(origin).isFile()) return origin
-  const picked = pickInDir(origin, path.basename(destFile))
-  if (!picked) {
-    throw new Error(`Nenhum Excel encontrado em ${origin}`)
-  }
-  return picked
 }
 
 function copyLocked(from: string, to: string) {
@@ -115,75 +82,97 @@ async function copyWithRetry(from: string, to: string) {
   throw new Error(`Não copiou ${path.basename(to)}: ${message}`)
 }
 
-export function originSyncPaths(): SourceFilePaths {
-  return {
-    corte: envPath('CORTE_XLSX') || DEFAULT_ORIGINS.corte,
-    oficinas: envPath('OFICINAS_XLSX') || DEFAULT_ORIGINS.oficinas,
-    signus: envPath('SIGNUS_XLSX', 'SIGNUS_XLS') || DEFAULT_ORIGINS.signus,
-    estoque: envPath('ESTOQUE_XLSX') || DEFAULT_ORIGINS.estoque,
-    pedidos: envPath('PEDIDOS_XLSX') || DEFAULT_ORIGINS.pedidos,
-    itens: envPath('ITENS_XLSX') || DEFAULT_ORIGINS.itens,
-    parceiros: envPath('PARCEIROS_XLSX') || DEFAULT_ORIGINS.parceiros,
-  }
-}
-
-export function resolvedOriginFile(name: keyof SourceFilePaths) {
-  const origin = originSyncPaths()
-  const dest = projectFilePaths()
-  return resolveOrigin(origin[name], dest[name])
+/** Origem opcional da automação (pasta com os .parquet). */
+export function originParquetDir() {
+  return envPath('PARQUET_ORIGIN_DIR', 'PARQUET_DIR_ORIGIN')
 }
 
 export function originWatchDirs() {
-  const origin = originSyncPaths()
-  const dirs = new Set<string>()
-  for (const raw of Object.values(origin)) {
-    if (!raw) continue
-    dirs.add(existsSync(raw) && statSync(raw).isFile() ? path.dirname(raw) : raw)
-  }
-  return [...dirs]
+  const origin = originParquetDir()
+  if (origin) return [origin]
+  return [PARQUET_DIR]
+}
+
+function allRequiredNames() {
+  return [
+    ...corteBundleNames(),
+    PARQUET_NAMES.oficinas,
+    PARQUET_NAMES.signus,
+    PARQUET_NAMES.estoque,
+    PARQUET_NAMES.pedidos,
+    PARQUET_NAMES.itens,
+    PARQUET_NAMES.parceiros,
+  ]
 }
 
 export function readOriginMtimes() {
-  const dest = projectFilePaths()
-  const times: Partial<Record<keyof SourceFilePaths, string>> = {}
-  for (const name of Object.keys(dest) as Array<keyof SourceFilePaths>) {
-    try {
-      const from = resolvedOriginFile(name)
-      times[name] = statSync(from).mtime.toISOString()
-    } catch {
-      times[name] = ''
-    }
+  const origin = originParquetDir() || PARQUET_DIR
+  const times: Record<string, string> = {}
+  for (const name of allRequiredNames()) {
+    const filePath = path.join(origin, name)
+    times[name] = existsSync(filePath)
+      ? statSync(filePath).mtime.toISOString()
+      : ''
   }
   return times
 }
 
+/**
+ * Garante a pasta Parquet do projeto.
+ * Se PARQUET_ORIGIN_DIR estiver definido, copia de lá; senão só valida os arquivos locais.
+ */
 export async function syncExcelToProject(): Promise<SyncResult> {
-  const origin = originSyncPaths()
-  const dest = projectFilePaths()
-  mkdirSync(EXCEL_DIR, { recursive: true })
+  return syncParquetToProject()
+}
 
-  const copied: Array<{ name: keyof SourceFilePaths; from: string; to: string }> = []
-  const required: Array<keyof SourceFilePaths> = [
-    'corte',
-    'oficinas',
-    'signus',
-    'pedidos',
-    'estoque',
-  ]
+export async function syncParquetToProject(): Promise<SyncResult> {
+  mkdirSync(PARQUET_DIR, { recursive: true })
+  const origin = originParquetDir()
+  const copied: Array<{ name: string; from: string; to: string }> = []
 
   try {
-    for (const name of Object.keys(dest) as Array<keyof SourceFilePaths>) {
-        const optional = name === 'itens' || name === 'parceiros'
-      try {
-        const from = resolveOrigin(origin[name], dest[name])
-        const to = dest[name]
+    if (origin) {
+      if (!existsSync(origin) || !statSync(origin).isDirectory()) {
+        return { ok: false, error: `Origem Parquet ausente: ${origin}` }
+      }
+      const available = new Set(
+        readdirSync(origin).filter(isParquet).map((name) => name.toLowerCase()),
+      )
+      for (const name of allRequiredNames()) {
+        const optional =
+          name === PARQUET_NAMES.itens ||
+          name === PARQUET_NAMES.parceiros ||
+          name === PARQUET_NAMES.aproveitamentoOrigem ||
+          name === PARQUET_NAMES.aproveitamentoPedidos
+        const from = path.join(origin, name)
+        const to = path.join(PARQUET_DIR, name)
+        if (!available.has(name.toLowerCase()) && !existsSync(from)) {
+          if (optional) continue
+          throw new Error(`Parquet obrigatório ausente na origem: ${name}`)
+        }
+        if (!existsSync(from)) {
+          if (optional) continue
+          throw new Error(`Parquet obrigatório ausente na origem: ${name}`)
+        }
         if (!samePath(from, to)) {
           await copyWithRetry(from, to)
         }
         copied.push({ name, from, to })
-      } catch (error) {
-        if (optional) continue
-        if (required.includes(name)) throw error
+      }
+    } else {
+      const required = requiredParquetPaths(PARQUET_DIR)
+      const missing = (
+        ['corte', 'costura', 'revisao', 'oficinas', 'signus', 'estoque'] as const
+      ).filter((key) => !existsSync(required[key]))
+      if (missing.length) {
+        return {
+          ok: false,
+          error: `Pasta Parquet incompleta (${missing.join(', ')}).`,
+        }
+      }
+      for (const name of allRequiredNames()) {
+        const to = path.join(PARQUET_DIR, name)
+        if (existsSync(to)) copied.push({ name, from: to, to })
       }
     }
   } catch (error) {
@@ -191,15 +180,21 @@ export async function syncExcelToProject(): Promise<SyncResult> {
     return { ok: false, error: `Sinc falhou; carga anterior mantida. ${message}` }
   }
 
-  const missingRequired = required.filter(
-    (name) => !copied.some((item) => item.name === name),
-  )
-  if (missingRequired.length) {
+  if (!parquetFolderReady(PARQUET_DIR)) {
     return {
       ok: false,
-      error: `Sinc incompleta (${missingRequired.join(', ')}); carga anterior mantida.`,
+      error: 'Sinc incompleta (faltam parquet obrigatórios); carga anterior mantida.',
     }
   }
 
   return { ok: true, copied }
+}
+
+/** Compat: paths “de origem” = pasta Parquet do projeto (ou env). */
+export function originSyncPaths(): SourceFilePaths {
+  return projectFilePaths()
+}
+
+export function resolvedOriginFile(name: keyof SourceFilePaths) {
+  return projectFilePaths()[name]
 }

@@ -1,5 +1,11 @@
 import { buildSnapshotFromWorkbooks } from '@/lib/etl/build-snapshot'
 import { readWorkbooksParallel } from '@/lib/etl/read-workbooks-parallel'
+import {
+  corteBundleNames,
+  maxMtimeIso,
+  PARQUET_NAMES,
+  resolveParquetBeside,
+} from '@/lib/etl/parquet-files'
 import type { Snapshot } from '@/lib/etl/types'
 import { cachePath, ensureDataDirs } from '@/lib/paths'
 import {
@@ -9,6 +15,7 @@ import {
   statSync,
   utimesSync,
 } from 'node:fs'
+import path from 'node:path'
 
 /** Copia só se o destino não existe ou a origem mudou (mtime/tamanho). */
 function copyIfChanged(src: string, dest: string) {
@@ -22,6 +29,7 @@ function copyIfChanged(src: string, dest: string) {
       return
     }
   }
+  mkdirSync(path.dirname(dest), { recursive: true })
   copyFileSync(src, dest)
   const srcStat = statSync(src)
   utimesSync(dest, srcStat.atime, srcStat.mtime)
@@ -44,6 +52,30 @@ export type CopiedSources = {
   parceirosLastWrite: string | null
 }
 
+function copyCorteBundle(cortePath: string, cacheDir: string) {
+  mkdirSync(cacheDir, { recursive: true })
+  const sources: string[] = []
+  for (const name of corteBundleNames()) {
+    const from = resolveParquetBeside(cortePath, name)
+    if (!existsSync(from)) {
+      if (
+        name === PARQUET_NAMES.aproveitamentoOrigem ||
+        name === PARQUET_NAMES.aproveitamentoPedidos
+      ) {
+        continue
+      }
+      throw new Error(`Parquet de corte ausente: ${from}`)
+    }
+    const to = path.join(cacheDir, name)
+    copyIfChanged(from, to)
+    sources.push(from)
+  }
+  return {
+    corteCache: path.join(cacheDir, PARQUET_NAMES.corte),
+    corteLastWrite: maxMtimeIso(sources),
+  }
+}
+
 export function copySources(
   cortePath: string,
   oficinasPath: string,
@@ -55,17 +87,19 @@ export function copySources(
 ): CopiedSources {
   ensureDataDirs()
   mkdirSync(cachePath('.'), { recursive: true })
-  const corteCache = cachePath('corte.xlsx')
-  const oficinasCache = cachePath('oficinas.xlsx')
-  const signusCache = cachePath('signus-tecidos.xlsx')
-  const estoqueCache = cachePath('estoque-geral.xlsx')
-  const pedidosCache = cachePath('pedidos.xlsx')
-  const itensCache = cachePath('itens.xlsx')
-  const parceirosCache = cachePath('parceiros.xlsx')
-  copyIfChanged(cortePath, corteCache)
+
+  const corte = copyCorteBundle(cortePath, cachePath('corte'))
+  const oficinasCache = cachePath(PARQUET_NAMES.oficinas)
+  const signusCache = cachePath(PARQUET_NAMES.signus)
+  const estoqueCache = cachePath(PARQUET_NAMES.estoque)
+  const pedidosCache = cachePath(PARQUET_NAMES.pedidos)
+  const itensCache = cachePath(PARQUET_NAMES.itens)
+  const parceirosCache = cachePath(PARQUET_NAMES.parceiros)
+
   copyIfChanged(oficinasPath, oficinasCache)
   copyIfChanged(signusPath, signusCache)
   copyIfChanged(estoquePath, estoqueCache)
+
   let pedidosLastWrite: string | null = null
   let pedidosCacheOut: string | null = null
   if (existsSync(pedidosPath)) {
@@ -73,6 +107,7 @@ export function copySources(
     pedidosLastWrite = statSync(pedidosPath).mtime.toISOString()
     pedidosCacheOut = pedidosCache
   }
+
   let itensLastWrite: string | null = null
   let itensCacheOut: string | null = null
   if (existsSync(itensPath)) {
@@ -80,6 +115,7 @@ export function copySources(
     itensLastWrite = statSync(itensPath).mtime.toISOString()
     itensCacheOut = itensCache
   }
+
   let parceirosLastWrite: string | null = null
   let parceirosCacheOut: string | null = null
   if (existsSync(parceirosPath)) {
@@ -87,15 +123,16 @@ export function copySources(
     parceirosLastWrite = statSync(parceirosPath).mtime.toISOString()
     parceirosCacheOut = parceirosCache
   }
+
   return {
-    corteCache,
+    corteCache: corte.corteCache,
     oficinasCache,
     signusCache,
     estoqueCache,
     pedidosCache: pedidosCacheOut,
     itensCache: itensCacheOut,
     parceirosCache: parceirosCacheOut,
-    corteLastWrite: statSync(cortePath).mtime.toISOString(),
+    corteLastWrite: corte.corteLastWrite,
     oficinasLastWrite: statSync(oficinasPath).mtime.toISOString(),
     signusLastWrite: statSync(signusPath).mtime.toISOString(),
     estoqueLastWrite: statSync(estoquePath).mtime.toISOString(),
@@ -125,7 +162,7 @@ export async function parseWorkbookFiles(
       parceirosFile,
     ])
   if (!corteWb || !oficinasWb || !signusWb || !estoqueWb) {
-    throw new Error('Falha ao ler uma ou mais planilhas obrigatórias.')
+    throw new Error('Falha ao ler uma ou mais fontes parquet obrigatórias.')
   }
   return buildSnapshotFromWorkbooks(
     corteWb,

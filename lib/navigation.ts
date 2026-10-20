@@ -107,7 +107,7 @@ export const navigation: NavItem[] = [
     title: 'Configuração',
     href: '/configuracoes',
     icon: Settings,
-    description: 'Caminhos da pasta Arquivos do Excel, última carga e atualizar dados.',
+    description: 'Caminhos da pasta Parquet, última carga e atualizar dados.',
   },
   {
     title: 'Ajuda',

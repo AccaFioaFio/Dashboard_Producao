@@ -3,8 +3,9 @@ import { refreshFromSupabaseCarga } from '@/lib/cloud/carga'
 import { getSqlite } from '@/db'
 import { publishSqliteToSupabase } from '@/lib/etl/publish-supabase'
 import { refreshFromExcel } from '@/lib/etl/refresh'
-import { syncExcelToProject } from '@/lib/etl/sync-sources'
-import { IS_CLOUD, projectFilePaths } from '@/lib/paths'
+import { parquetFolderReady } from '@/lib/etl/parquet-files'
+import { syncParquetToProject } from '@/lib/etl/sync-sources'
+import { IS_CLOUD, PARQUET_DIR, projectFilePaths } from '@/lib/paths'
 import {
   isSupabaseConfigured,
   isSupabaseWriteConfigured,
@@ -29,14 +30,8 @@ export async function atualizarDadosCore(): Promise<AtualizarDadosResult> {
   return inFlight
 }
 
-function excelFolderReady() {
-  const paths = projectFilePaths()
-  return (
-    existsSync(paths.corte) &&
-    existsSync(paths.oficinas) &&
-    existsSync(paths.signus) &&
-    existsSync(paths.estoque)
-  )
+function sourcesFolderReady() {
+  return parquetFolderReady(PARQUET_DIR)
 }
 
 async function withTimeout<T>(
@@ -81,8 +76,8 @@ async function pullFromSupabase(
 }
 
 /**
- * Igual Orçamentos: se a pasta de Excel existe, o botão processa (incremental)
- * e publica. Sem pasta (leitor puro na nuvem), só puxa a carga.
+ * Se a pasta Parquet existe, o botão processa (incremental) e publica.
+ * Sem pasta (leitor puro na nuvem), só puxa a carga.
  */
 async function runAtualizarDados(): Promise<AtualizarDadosResult> {
   const t0 = Date.now()
@@ -91,22 +86,22 @@ async function runAtualizarDados(): Promise<AtualizarDadosResult> {
   }
 
   try {
-    // Na Vercel as planilhas podem existir no deploy, mas o site só lê a carga
+    // Na Vercel as fontes podem existir no deploy, mas o site só lê a carga
     // publicada. ETL + upload (~16 MB) no serverless quebra com "fetch failed".
-    if (!IS_CLOUD && excelFolderReady()) {
+    if (!IS_CLOUD && sourcesFolderReady()) {
       if (!isSupabaseWriteConfigured()) {
         return {
           ok: false,
           error:
-            'Planilhas ok, mas falta SUPABASE_SERVICE_ROLE_KEY (e URL/anon) no .env.local para publicar.',
+            'Parquet ok, mas falta SUPABASE_SERVICE_ROLE_KEY (e URL/anon) no .env.local para publicar.',
         }
       }
 
       mark('sync start')
-      const synced = await syncExcelToProject()
+      const synced = await syncParquetToProject()
       mark(`sync done ok=${synced.ok}`)
       if (!synced.ok) {
-        if (!excelFolderReady()) return synced
+        if (!sourcesFolderReady()) return synced
         mark(`sync ignorada, usando pasta local: ${synced.error}`)
       }
 
@@ -149,8 +144,8 @@ async function runAtualizarDados(): Promise<AtualizarDadosResult> {
     return {
       ok: false,
       error: IS_CLOUD
-        ? 'No site online a carga vem do Supabase. Publique neste PC (pasta Arquivos do Excel + botão Atualização) e depois atualize no site.'
-        : 'Pasta Arquivos do Excel incompleta. Coloque as planilhas na pasta do projeto e tente de novo.',
+        ? 'No site online a carga vem do Supabase. Publique neste PC (pasta Parquet + botão Atualização) e depois atualize no site.'
+        : 'Pasta Parquet incompleta. Coloque os .parquet na pasta do projeto e tente de novo.',
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

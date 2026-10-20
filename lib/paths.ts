@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
+import { PARQUET_NAMES } from '@/lib/etl/parquet-files'
 
 export { YEAR } from '@/lib/year'
 
@@ -16,15 +17,19 @@ export const DB_PATH = path.join(DATA_DIR, 'producao.sqlite')
 export const BUNDLED_DB_PATH = path.join(PROJECT_ROOT, 'data', 'producao.sqlite')
 export const MIGRATIONS_DIR = path.join(PROJECT_ROOT, 'drizzle')
 
+/** Pasta legada de Excel (mantida só para referência / migração). */
 export const EXCEL_DIR = path.join(PROJECT_ROOT, 'Arquivos do Excel')
 
-const DEFAULT_CORTE = path.join(EXCEL_DIR, 'PROGRAMAÇÃO CORTE E COSTURA .xlsx')
-const DEFAULT_OFICINAS = path.join(EXCEL_DIR, 'Produção Oficinas.xlsx')
-const DEFAULT_SIGNUS = path.join(EXCEL_DIR, 'Movimentacao Tecidos.xlsx')
-const DEFAULT_ESTOQUE = path.join(EXCEL_DIR, 'Saldo do Estoque Geral.xlsx')
-const DEFAULT_PEDIDOS = path.join(EXCEL_DIR, 'Pedidos.xlsx')
-const DEFAULT_ITENS = path.join(EXCEL_DIR, 'Itens.xlsx')
-const DEFAULT_PARCEIROS = path.join(EXCEL_DIR, 'Parceiro Comercial.xlsx')
+/** Fonte atual da carga: 1 aba = 1 parquet. */
+export const PARQUET_DIR = path.join(PROJECT_ROOT, 'Parquet')
+
+const DEFAULT_CORTE = path.join(PARQUET_DIR, PARQUET_NAMES.corte)
+const DEFAULT_OFICINAS = path.join(PARQUET_DIR, PARQUET_NAMES.oficinas)
+const DEFAULT_SIGNUS = path.join(PARQUET_DIR, PARQUET_NAMES.signus)
+const DEFAULT_ESTOQUE = path.join(PARQUET_DIR, PARQUET_NAMES.estoque)
+const DEFAULT_PEDIDOS = path.join(PARQUET_DIR, PARQUET_NAMES.pedidos)
+const DEFAULT_ITENS = path.join(PARQUET_DIR, PARQUET_NAMES.itens)
+const DEFAULT_PARCEIROS = path.join(PARQUET_DIR, PARQUET_NAMES.parceiros)
 
 export type SourceFilePaths = {
   corte: string
@@ -45,25 +50,44 @@ function resolveSourcePath(configured: string | undefined, fallback: string) {
 
 export function sourceFilePaths(): SourceFilePaths {
   return {
-    corte: resolveSourcePath(process.env.CORTE_XLSX, DEFAULT_CORTE),
-    oficinas: resolveSourcePath(process.env.OFICINAS_XLSX, DEFAULT_OFICINAS),
+    corte: resolveSourcePath(process.env.CORTE_PARQUET ?? process.env.CORTE_XLSX, DEFAULT_CORTE),
+    oficinas: resolveSourcePath(
+      process.env.OFICINAS_PARQUET ?? process.env.OFICINAS_XLSX,
+      DEFAULT_OFICINAS,
+    ),
     signus: resolveSourcePath(
-      process.env.SIGNUS_XLSX ?? process.env.SIGNUS_XLS,
+      process.env.SIGNUS_PARQUET ??
+        process.env.SIGNUS_XLSX ??
+        process.env.SIGNUS_XLS,
       DEFAULT_SIGNUS,
     ),
-    estoque: resolveSourcePath(process.env.ESTOQUE_XLSX, DEFAULT_ESTOQUE),
-    pedidos: resolveSourcePath(process.env.PEDIDOS_XLSX, DEFAULT_PEDIDOS),
-    itens: resolveSourcePath(process.env.ITENS_XLSX, DEFAULT_ITENS),
+    estoque: resolveSourcePath(
+      process.env.ESTOQUE_PARQUET ?? process.env.ESTOQUE_XLSX,
+      DEFAULT_ESTOQUE,
+    ),
+    pedidos: resolveSourcePath(
+      process.env.PEDIDOS_PARQUET ?? process.env.PEDIDOS_XLSX,
+      DEFAULT_PEDIDOS,
+    ),
+    itens: resolveSourcePath(
+      process.env.ITENS_PARQUET ?? process.env.ITENS_XLSX,
+      DEFAULT_ITENS,
+    ),
     parceiros: resolveSourcePath(
-      process.env.PARCEIROS_XLSX,
-      process.env.PEDIDOS_XLSX
-        ? path.join(path.dirname(process.env.PEDIDOS_XLSX), 'Parceiro Comercial.xlsx')
+      process.env.PARCEIROS_PARQUET ?? process.env.PARCEIROS_XLSX,
+      process.env.PEDIDOS_PARQUET || process.env.PEDIDOS_XLSX
+        ? path.join(
+            path.dirname(
+              process.env.PEDIDOS_PARQUET || process.env.PEDIDOS_XLSX || '',
+            ),
+            PARQUET_NAMES.parceiros,
+          )
         : DEFAULT_PARCEIROS,
     ),
   }
 }
 
-/** Destino da sinc: sempre a pasta Arquivos do Excel na raiz. */
+/** Destino da sinc: pasta Parquet na raiz do projeto. */
 export function projectFilePaths(): SourceFilePaths {
   return {
     corte: DEFAULT_CORTE,

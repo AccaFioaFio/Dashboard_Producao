@@ -132,10 +132,10 @@ export async function refreshFromExcel(
     )
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : 'Falha ao copiar os arquivos Excel'
+      error instanceof Error ? error.message : 'Falha ao copiar os arquivos Parquet'
     return {
       ok: false,
-      error: `Cópia da origem dos Excel falhou; a carga anterior foi mantida. ${message}`,
+      error: `Cópia da origem Parquet falhou; a carga anterior foi mantida. ${message}`,
     }
   }
 

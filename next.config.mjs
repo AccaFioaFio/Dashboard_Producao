@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ['better-sqlite3', 'xlsx'],
+  serverExternalPackages: ['better-sqlite3', 'xlsx', 'hyparquet'],
   outputFileTracingIncludes: {
     '/**': ['./data/producao.sqlite'],
   },

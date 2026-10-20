@@ -17,20 +17,20 @@ export type AjudaSecao = {
 /** Visão geral do sistema — topo da aba Ajuda. */
 export const ajudaGeral = {
   titulo: 'Como funciona o dashboard',
-  resumo: `Painel de produção e comercial da Fio a Fio, com foco no ano ${YEAR}. Os números vêm das planilhas Excel; o site online usa a última carga publicada.`,
+  resumo: `Painel de produção e comercial da Fio a Fio, com foco no ano ${YEAR}. Os números vêm dos arquivos Parquet; o site online usa a última carga publicada.`,
   regras: [
     `Só entra o ano ${YEAR} (exceto quando a própria tela avisa o contrário).`,
     'Pedido = número do pedido. Ordem de corte (OC) pode haver mais de uma no mesmo pedido.',
     'Não conte linhas da planilha de Corte: o volume certo é soma de peças / pedidos distintos.',
     'Costura no funil = só Origem Produção. Etiqueta, festonê e conserto são serviço.',
-    'Atualizar dados: neste PC, pasta Arquivos do Excel + botão Atualização. No site, só puxa o que já foi publicado.',
+    'Atualizar dados: neste PC, pasta Parquet + botão Atualização. No site, só puxa o que já foi publicado.',
   ],
   fontes: [
-    'PROGRAMAÇÃO CORTE E COSTURA.xlsx — Corte, Costura, Revisão, Aproveitamento',
-    'Produção Oficinas.xlsx — Oficinas',
-    'Movimentacao Tecidos.xlsx — baixas Signus',
-    'Saldo do Estoque Geral.xlsx — saldo (snapshot)',
-    'Pedidos.xlsx / Itens.xlsx / Parceiro Comercial.xlsx — vendas e clientes',
+    'PROGRAMAÇÃO CORTE E COSTURA - *.parquet — Corte, Costura, Revisão, Aproveitamento',
+    'Produção Oficinas - TABELA OFICINAS.parquet — Oficinas',
+    'Movimentacao Tecidos.parquet — baixas Signus',
+    'Saldo do Estoque Geral.parquet — saldo (snapshot)',
+    'Pedidos / Itens / Parceiro Comercial.parquet — vendas e clientes',
   ],
 }
 
@@ -371,7 +371,7 @@ export const ajudaSecoes: AjudaSecao[] = [
     titulo: 'Configuração',
     resumo: 'Onde estão os Excel, última carga e como atualizar.',
     escopo: [
-      'Caminhos das planilhas (pasta Arquivos do Excel)',
+      'Caminhos dos parquet (pasta Parquet)',
       'Horário da última leitura e LastWriteTime de cada arquivo',
     ],
     foraEscopo: [

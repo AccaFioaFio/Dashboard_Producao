@@ -30,7 +30,8 @@ function parseTable(
   tipo: AproveitamentoMovimento['tipo'],
   qtyAliases: string[],
 ) {
-  const scanUntil = Math.min(rows.length, 40)
+  // Empilhado (parquet) a 2ª tabela pode ficar depois da 1ª (~60+ linhas).
+  const scanUntil = Math.min(rows.length, 200)
   let headerIndexRow = -1
   let qtyCol: number | null = null
   let pedidoCol: number | null = null

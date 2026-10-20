@@ -20,37 +20,37 @@ export default async function ConfiguracoesPage() {
   return (
     <PageShell
       title="Configurações"
-      description="A sinc mantém Arquivos do Excel. O botão lê essa pasta, grava o SQLite e publica no Supabase."
+      description="A sinc mantém a pasta Parquet. O botão lê essa pasta, grava o SQLite e publica no Supabase."
     >
       <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-        Igual ao Orçamentos: o botão lê a pasta{' '}
-        <span className="font-mono text-xs">Arquivos do Excel</span>, processa só o
-        que mudou e publica no Supabase. Sem vigia. No site online, se a pasta não
-        estiver no deploy, o botão só puxa a última carga publicada.
+        O botão lê a pasta{' '}
+        <span className="font-mono text-xs">Parquet</span>, processa só o que mudou
+        e publica no Supabase. Sem vigia. No site online, se a pasta não estiver no
+        deploy, o botão só puxa a última carga publicada.
       </p>
       <dl className="card-surface grid gap-3 p-3 text-sm sm:grid-cols-2">
         <div className="flex flex-col gap-1 sm:col-span-2">
-          <dt className="text-xs text-muted-foreground">CORTE_XLSX</dt>
+          <dt className="text-xs text-muted-foreground">CORTE (parquet)</dt>
           <dd className="break-all font-mono text-xs">{corteXlsxPath()}</dd>
         </div>
         <div className="flex flex-col gap-1 sm:col-span-2">
-          <dt className="text-xs text-muted-foreground">OFICINAS_XLSX</dt>
+          <dt className="text-xs text-muted-foreground">OFICINAS (parquet)</dt>
           <dd className="break-all font-mono text-xs">{oficinasXlsxPath()}</dd>
         </div>
         <div className="flex flex-col gap-1 sm:col-span-2">
-          <dt className="text-xs text-muted-foreground">SIGNUS_XLS</dt>
+          <dt className="text-xs text-muted-foreground">SIGNUS (parquet)</dt>
           <dd className="break-all font-mono text-xs">{signusXlsPath()}</dd>
         </div>
         <div className="flex flex-col gap-1 sm:col-span-2">
-          <dt className="text-xs text-muted-foreground">ESTOQUE_XLSX</dt>
+          <dt className="text-xs text-muted-foreground">ESTOQUE (parquet)</dt>
           <dd className="break-all font-mono text-xs">{estoqueXlsxPath()}</dd>
         </div>
         <div className="flex flex-col gap-1 sm:col-span-2">
-          <dt className="text-xs text-muted-foreground">PEDIDOS_XLSX</dt>
+          <dt className="text-xs text-muted-foreground">PEDIDOS (parquet)</dt>
           <dd className="break-all font-mono text-xs">{pedidosXlsxPath()}</dd>
         </div>
         <div className="flex flex-col gap-1 sm:col-span-2">
-          <dt className="text-xs text-muted-foreground">ITENS_XLSX</dt>
+          <dt className="text-xs text-muted-foreground">ITENS (parquet)</dt>
           <dd className="break-all font-mono text-xs">{itensXlsxPath()}</dd>
         </div>
         <div className="flex flex-col gap-1">
