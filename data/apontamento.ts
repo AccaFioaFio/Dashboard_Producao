@@ -26,6 +26,8 @@ export type ItemApontamento = {
   oficina: string | null
   /** Soma de todas as entradas do produto (datas diferentes entram aqui). */
   qtdPecas: number | null
+  /** Menor data inicial já lançada neste produto. */
+  dataInicio: string | null
   dataProducao: string | null
   responsavel: string | null
   avisoDataProducao: string | null
@@ -62,6 +64,7 @@ type AgregadoProduto = {
   origem: string | null
   oficina: string | null
   qtdPecas: number
+  dataInicio: string | null
   dataProducao: string | null
   responsavel: string | null
   avisoDataProducao: string | null
@@ -90,11 +93,17 @@ function agregarLinhas(rows: Gravado[]): AgregadoProduto | null {
     ),
   ]
   const pecas = ordenadas.reduce((sum, row) => sum + (row.qtdPecas ?? 0), 0)
+  const dataInicio = ordenadas.reduce<string | null>((menor, row) => {
+    if (!row.dataInicio) return menor
+    if (!menor || row.dataInicio < menor) return row.dataInicio
+    return menor
+  }, null)
   return {
     excelRow: recente.excelRow,
     origem: recente.origem,
     oficina: recente.oficina,
     qtdPecas: pecas,
+    dataInicio,
     dataProducao: null,
     responsavel: null,
     avisoDataProducao: null,
@@ -111,6 +120,7 @@ function gravadosParaEntradas(rows: Gravado[]): ApontamentoNuvemEntrada[] {
     origem: row.origem,
     oficina: row.oficina,
     qtdPecas: row.qtdPecas,
+    dataInicio: row.dataInicio,
     dataProducao: row.dataProducao,
     responsavel: row.responsavel,
     avisoDataProducao: row.avisoDataProducao,
@@ -127,7 +137,7 @@ async function lancamentosDoPedido(etapa: EtapaApontamento, pedidoNorm: string) 
     .prepare(
       `SELECT cod_produto as codProduto, excel_row as excelRow, ${origem},
               ${etapa === 'costura' ? 'oficina' : 'NULL as oficina'},
-              qtd_pecas as qtdPecas, data_producao as dataProducao,
+              qtd_pecas as qtdPecas, data_inicio as dataInicio, data_producao as dataProducao,
               responsavel, aviso_data_producao as avisoDataProducao,
               observacao, nome_produto as nomeProduto,
               atualizado_em as atualizadoEm
@@ -186,6 +196,7 @@ function mergeProduto(
     origem: row.origem,
     oficina: row.oficina,
     qtdPecas: row.qtdPecas,
+    dataInicio: row.dataInicio,
     dataProducao: row.dataProducao,
     responsavel: row.responsavel,
     avisoDataProducao: row.avisoDataProducao,
@@ -211,6 +222,7 @@ function itemDe(
     origem: null,
     oficina: null,
     qtdPecas: lancamento && lancamento.qtdPecas > 0 ? lancamento.qtdPecas : null,
+    dataInicio: lancamento?.dataInicio ?? null,
     dataProducao: null,
     responsavel: null,
     avisoDataProducao: null,

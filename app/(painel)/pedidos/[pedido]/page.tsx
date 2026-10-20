@@ -46,6 +46,15 @@ function formatQtdLancada(value: number | null) {
   return formatNumber(value, value % 1 ? 2 : 0)
 }
 
+function formatPeriodo(inicio: string | null, fim: string | null) {
+  if (!inicio && !fim) return '—'
+  if (inicio && fim) {
+    return inicio === fim ? formatDate(inicio) : `${formatDate(inicio)} – ${formatDate(fim)}`
+  }
+  if (inicio) return `${formatDate(inicio)} –`
+  return `– ${formatDate(fim)}`
+}
+
 export default async function PedidoFichaPage({
   params,
 }: {
@@ -168,15 +177,41 @@ export default async function PedidoFichaPage({
       ) : null}
 
       <PedidoTimeline
-        steps={[
-          { label: 'PCP prontas', date: ficha.datas.pcpProntas },
-          { label: 'Início corte', date: ficha.datas.inicioCorte },
-          { label: 'Final corte', date: ficha.datas.finalCorte },
-          { label: 'Costura Produção', date: ficha.datas.primeiraCosturaProd },
-          { label: 'Envio oficina', date: ficha.datas.ultimoEnvio },
-          { label: 'Retorno oficina', date: ficha.datas.ultimoRetorno },
-          { label: '1ª revisão', date: ficha.datas.primeiraRevisao },
-          { label: 'Última revisão', date: ficha.datas.ultimaRevisao },
+        secoes={[
+          { tipo: 'solo', label: 'PCP prontas', date: ficha.datas.pcpProntas },
+          {
+            tipo: 'par',
+            dias: 'dias de corte',
+            inicio: { label: 'Início corte', date: ficha.datas.inicioCorte },
+            fim: { label: 'Final corte', date: ficha.datas.finalCorte },
+          },
+          {
+            tipo: 'par',
+            dias: 'dias de costura',
+            inicio: { label: 'Início costura', date: ficha.datas.inicioCostura },
+            fim: { label: 'Final costura', date: ficha.datas.finalCostura },
+          },
+          {
+            tipo: 'par',
+            dias: 'dias na oficina',
+            inicio: { label: 'Envio oficina', date: ficha.datas.envioOficina },
+            fim: { label: 'Final oficina', date: ficha.datas.retornoOficina },
+            hint:
+              [
+                ficha.datas.oficinaAberta ? 'Ainda há peças na oficina' : null,
+                ficha.datas.prometidaOficina
+                  ? `Prometida ${formatDate(ficha.datas.prometidaOficina)}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || null,
+          },
+          {
+            tipo: 'par',
+            dias: 'dias de revisão',
+            inicio: { label: 'Início revisão', date: ficha.datas.inicioRevisao },
+            fim: { label: 'Final revisão', date: ficha.datas.finalRevisao },
+          },
         ]}
       />
 
@@ -243,10 +278,10 @@ export default async function PedidoFichaPage({
           <>
             <SectionMeta>
               {ficha.itens.every((row) => row.foraDoSignus)
-                ? `${formatInt(ficha.itens.length)} código${ficha.itens.length === 1 ? '' : 's'} lançado${ficha.itens.length === 1 ? '' : 's'} neste pedido. Não há linha em Itens.xlsx, então qtd pedida e valor ficam em branco. Cortado, costurado e revisado = peças lançadas.`
+                ? `${formatInt(ficha.itens.length)} código${ficha.itens.length === 1 ? '' : 's'} lançado${ficha.itens.length === 1 ? '' : 's'} neste pedido. Não há linha em Itens.xlsx, então qtd pedida e valor ficam em branco. Cortado, costurado e revisado = peças lançadas. Corte, costura e revisão = início – fim lançados na aba.`
                 : ficha.itens.some((row) => row.foraDoSignus)
-                  ? `Itens.xlsx e códigos lançados fora dessa carga. Qtd = pedida; valor = líquido. Cortado, costurado e revisado = peças lançadas deste código.`
-                  : `Itens.xlsx · ${formatInt(ficha.itens.length)} linha${ficha.itens.length === 1 ? '' : 's'} deste pedido. Qtd = pedida; valor = líquido. Cortado, costurado e revisado = peças lançadas deste código.`}
+                  ? `Itens.xlsx e códigos lançados fora dessa carga. Qtd = pedida; valor = líquido. Cortado, costurado e revisado = peças lançadas deste código. Corte, costura e revisão = início – fim lançados na aba.`
+                  : `Itens.xlsx · ${formatInt(ficha.itens.length)} linha${ficha.itens.length === 1 ? '' : 's'} deste pedido. Qtd = pedida; valor = líquido. Cortado, costurado e revisado = peças lançadas deste código. Corte, costura e revisão = início – fim lançados na aba.`}
             </SectionMeta>
             <SimpleTable
               columns={[
@@ -254,8 +289,11 @@ export default async function PedidoFichaPage({
                 { key: 'produto', label: 'Produto', wrap: true },
                 { key: 'qtd', label: 'Qtd', numeric: true },
                 { key: 'cortado', label: 'Cortado', numeric: true },
+                { key: 'corte', label: 'Corte', nowrap: true },
                 { key: 'costurado', label: 'Costurado', numeric: true },
+                { key: 'costura', label: 'Costura', nowrap: true },
                 { key: 'revisado', label: 'Revisado', numeric: true },
+                { key: 'revisao', label: 'Revisão', nowrap: true },
                 { key: 'valor', label: 'Valor', numeric: true },
               ]}
               rows={ficha.itens.map((row) => {
@@ -272,8 +310,11 @@ export default async function PedidoFichaPage({
                       ? '—'
                       : formatNumber(row.qtdPedida, row.qtdPedida % 1 ? 2 : 0),
                   cortado: formatQtdLancada(row.qtdCortada),
+                  corte: formatPeriodo(row.inicioCorte, row.fimCorte),
                   costurado: formatQtdLancada(row.qtdCosturada),
+                  costura: formatPeriodo(row.inicioCostura, row.fimCostura),
                   revisado: formatQtdLancada(row.qtdRevisada),
+                  revisao: formatPeriodo(row.inicioRevisao, row.fimRevisao),
                   valor: valor > 0 ? formatMoney(valor) : '—',
                 }
               })}

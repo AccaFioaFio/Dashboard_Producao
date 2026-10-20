@@ -3,7 +3,11 @@ import 'server-only'
 import { cache } from 'react'
 import { getSqlite } from '@/db'
 import { collapseItensCorte } from '@/lib/corte-producao'
-import { lerApontamentoNuvem, type ApontamentoNuvem } from '@/lib/apontamento-nuvem'
+import {
+  entradasDoLancamento,
+  lerApontamentoNuvem,
+  type ApontamentoNuvem,
+} from '@/lib/apontamento-nuvem'
 import {
   escolherLancamento,
   lerLancamentosNuvem,
@@ -18,6 +22,7 @@ import { sqlPendentesOficina } from '@/lib/oficinas-qty'
 import { pedidoDigits, parsePedidoParam } from '@/lib/pedido'
 import { sqlAlmoxPrincipais } from '@/lib/almox-principais'
 import {
+  SQL_LANC_SO_PLANILHA,
   sqlCosturaProducaoUnion,
   sqlCosturaUnion,
   sqlRevisaoUnion,
@@ -144,17 +149,26 @@ export type PedidoFicha = {
     qtdCortada: number | null
     qtdCosturada: number | null
     qtdRevisada: number | null
+    inicioCorte: string | null
+    fimCorte: string | null
+    inicioCostura: string | null
+    fimCostura: string | null
+    inicioRevisao: string | null
+    fimRevisao: string | null
   }[]
   qualidade: { tipo: string; detalhe: string; valor: number | null }[]
   datas: {
     pcpProntas: string | null
     inicioCorte: string | null
     finalCorte: string | null
-    primeiraCosturaProd: string | null
-    ultimoEnvio: string | null
-    ultimoRetorno: string | null
-    primeiraRevisao: string | null
-    ultimaRevisao: string | null
+    inicioCostura: string | null
+    finalCostura: string | null
+    envioOficina: string | null
+    retornoOficina: string | null
+    prometidaOficina: string | null
+    oficinaAberta: boolean
+    inicioRevisao: string | null
+    finalRevisao: string | null
   }
   totais: {
     pecasCorte: number
@@ -458,6 +472,23 @@ type MarcaItem = {
   cortada: number | null
   costurada: number | null
   revisada: number | null
+  inicioCorte: string | null
+  fimCorte: string | null
+  inicioCostura: string | null
+  fimCostura: string | null
+  inicioRevisao: string | null
+  fimRevisao: string | null
+}
+
+function extremo(datas: (string | null | undefined)[], qual: 'min' | 'max') {
+  let escolhida: string | null = null
+  for (const data of datas) {
+    if (!data) continue
+    if (!escolhida || (qual === 'min' ? data < escolhida : data > escolhida)) {
+      escolhida = data
+    }
+  }
+  return escolhida
 }
 
 function marcaDe(marcas: Map<string, MarcaItem>, cod: string) {
@@ -470,6 +501,12 @@ function marcaDe(marcas: Map<string, MarcaItem>, cod: string) {
       cortada: null,
       costurada: null,
       revisada: null,
+      inicioCorte: null,
+      fimCorte: null,
+      inicioCostura: null,
+      fimCostura: null,
+      inicioRevisao: null,
+      fimRevisao: null,
     }
     marcas.set(chave, marca)
   }
@@ -478,6 +515,45 @@ function marcaDe(marcas: Map<string, MarcaItem>, cod: string) {
 
 function guardarNome(marca: MarcaItem, nome: string | null | undefined) {
   if (!marca.nomeProduto && nome?.trim()) marca.nomeProduto = nome.trim()
+}
+
+function periodoDe(
+  linhas: { dataInicio: string | null; dataProducao: string | null; qtdPecas: number | null }[],
+) {
+  return {
+    inicio: extremo(
+      linhas.map((row) => row.dataInicio),
+      'min',
+    ),
+    fim: extremo(
+      linhas.filter((row) => row.qtdPecas != null).map((row) => row.dataProducao),
+      'max',
+    ),
+  }
+}
+
+/** Datas da aba, por código. A data inicial é a que o responsável lançou. */
+function periodosApontamento(pedidoNorm: string, etapa: 'costura' | 'revisao') {
+  const tabela = etapa === 'costura' ? 'costura_lancamento' : 'revisao_lancamento'
+  const origem = etapa === 'costura' ? `AND origem = 'Produção'` : ''
+  const rows = sqlite()
+    .prepare(
+      `SELECT cod_produto as codProduto,
+              MIN(CASE WHEN data_inicio IS NOT NULL AND data_inicio != '' THEN data_inicio END) as inicio,
+              MAX(CASE WHEN qtd_pecas IS NOT NULL AND data_producao IS NOT NULL AND data_producao != '' THEN data_producao END) as fim,
+              MAX(atualizado_em) as atualizadoEm
+       FROM ${tabela}
+       WHERE pedido_norm = ? ${origem}
+         AND NOT (${SQL_LANC_SO_PLANILHA})
+       GROUP BY cod_produto`,
+    )
+    .all(pedidoNorm) as {
+    codProduto: string
+    inicio: string | null
+    fim: string | null
+    atualizadoEm: string | null
+  }[]
+  return new Map(rows.map((row) => [chaveProduto(row.codProduto), row]))
 }
 
 /** Soma das entradas do produto (várias datas). Nuvem e local: fica o maior total. */
@@ -489,6 +565,7 @@ async function aplicarApontamento(
   const tabela = etapa === 'costura' ? 'costura_lancamento' : 'revisao_lancamento'
   const origemFiltro =
     etapa === 'costura' ? `AND origem = 'Produção'` : ''
+  const periodosLocais = periodosApontamento(pedidoNorm, etapa)
   const locais = new Map<
     string,
     { codProduto: string; qtdPecas: number; nomeProduto: string | null; atualizadoEm: string }
@@ -522,7 +599,11 @@ async function aplicarApontamento(
     console.error('leitura do lançamento na nuvem falhou', etapa, pedidoNorm, error)
   }
 
-  for (const chave of new Set([...locais.keys(), ...nuvem.keys()])) {
+  for (const chave of new Set([
+    ...locais.keys(),
+    ...nuvem.keys(),
+    ...periodosLocais.keys(),
+  ])) {
     const local = locais.get(chave)
     const remoto = nuvem.get(chave)
     const pecasNuvem = remoto?.qtdPecas ?? 0
@@ -530,10 +611,33 @@ async function aplicarApontamento(
     const total = Math.max(pecasLocal, pecasNuvem)
     const marca = marcaDe(
       marcas,
-      remoto?.codProduto ?? local?.codProduto ?? chave,
+      remoto?.codProduto ??
+        local?.codProduto ??
+        periodosLocais.get(chave)?.codProduto ??
+        chave,
     )
     guardarNome(marca, local?.nomeProduto)
     guardarNome(marca, remoto?.nomeProduto)
+    const localPeriodo = periodosLocais.get(chave)
+    const entradas = (remoto ? entradasDoLancamento(remoto) : []).filter((row) => {
+      if (etapa === 'costura' && row.origem !== 'Produção') return false
+      const obs = (row.observacao ?? '').toLowerCase().replaceAll('ç', 'c')
+      return !obs.includes('ja lancado na planilha')
+    })
+    const nuvemPeriodo = periodoDe(entradas)
+    const localMaisNovo = Boolean(local && (!remoto || local.atualizadoEm >= remoto.atualizadoEm))
+    const periodo = localMaisNovo
+      ? { inicio: localPeriodo?.inicio ?? null, fim: localPeriodo?.fim ?? null }
+      : nuvemPeriodo.inicio || nuvemPeriodo.fim
+        ? nuvemPeriodo
+        : { inicio: localPeriodo?.inicio ?? null, fim: localPeriodo?.fim ?? null }
+    if (etapa === 'costura') {
+      marca.inicioCostura = periodo.inicio
+      marca.fimCostura = periodo.fim
+    } else {
+      marca.inicioRevisao = periodo.inicio
+      marca.fimRevisao = periodo.fim
+    }
     if (total <= 0) continue
     if (etapa === 'costura') marca.costurada = total
     else marca.revisada = total
@@ -567,6 +671,8 @@ async function marcasLancamentoItens(pedidoNorm: string) {
     const lancamento = escolherLancamento(localCorte.get(chave), nuvemCorte.get(chave))
     const marca = marcaDe(marcas, codigoCorte.get(chave) ?? chave)
     guardarNome(marca, lancamento?.nomeProduto)
+    marca.inicioCorte = lancamento?.dataInicio ?? null
+    marca.fimCorte = lancamento?.dataFinal ?? null
     if (lancamento?.qtdReal == null) continue
     marca.cortada = lancamento.qtdReal
   }
@@ -694,7 +800,16 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
         )
         .all(pedidoNorm) as Omit<
         PedidoFicha['itens'][number],
-        'qtdCortada' | 'qtdCosturada' | 'qtdRevisada' | 'foraDoSignus'
+        | 'qtdCortada'
+        | 'qtdCosturada'
+        | 'qtdRevisada'
+        | 'inicioCorte'
+        | 'fimCorte'
+        | 'inicioCostura'
+        | 'fimCostura'
+        | 'inicioRevisao'
+        | 'fimRevisao'
+        | 'foraDoSignus'
       >[])
     : []
   const marcas = await marcasLancamentoItens(pedidoNorm)
@@ -706,6 +821,12 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
       qtdCortada: marca?.cortada ?? null,
       qtdCosturada: marca?.costurada ?? null,
       qtdRevisada: marca?.revisada ?? null,
+      inicioCorte: marca?.inicioCorte ?? null,
+      fimCorte: marca?.fimCorte ?? null,
+      inicioCostura: marca?.inicioCostura ?? null,
+      fimCostura: marca?.fimCostura ?? null,
+      inicioRevisao: marca?.inicioRevisao ?? null,
+      fimRevisao: marca?.fimRevisao ?? null,
       foraDoSignus: false,
     }
   })
@@ -713,7 +834,15 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
     .filter(
       (marca) =>
         !vistos.has(chaveProduto(marca.codProduto)) &&
-        (marca.cortada != null || marca.costurada != null || marca.revisada != null),
+        (marca.cortada != null ||
+          marca.costurada != null ||
+          marca.revisada != null ||
+          marca.inicioCorte != null ||
+          marca.fimCorte != null ||
+          marca.inicioCostura != null ||
+          marca.fimCostura != null ||
+          marca.inicioRevisao != null ||
+          marca.fimRevisao != null),
     )
     .sort((a, b) => a.codProduto.localeCompare(b.codProduto, 'pt-BR'))
   for (const marca of foraDoSignus) {
@@ -729,6 +858,12 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
       qtdCortada: marca.cortada,
       qtdCosturada: marca.costurada,
       qtdRevisada: marca.revisada,
+      inicioCorte: marca.inicioCorte,
+      fimCorte: marca.fimCorte,
+      inicioCostura: marca.inicioCostura,
+      fimCostura: marca.fimCostura,
+      inicioRevisao: marca.inicioRevisao,
+      fimRevisao: marca.fimRevisao,
       foraDoSignus: true,
     })
   }
@@ -740,10 +875,30 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
     .filter((row) => row.origemNorm !== 'Producao')
     .reduce((sum, row) => sum + row.pecas, 0)
   const pecasRevisao = revisao.reduce((sum, row) => sum + row.pecas, 0)
-  const primeiraCosturaProd =
-    costura.find((row) => row.origemNorm === 'Producao')?.dataProducao ?? null
-  const primeiraRevisao = revisao[0]?.dataProducao ?? null
-  const ultimaRevisao = revisao.at(-1)?.dataProducao ?? null
+  const temCorteAba = itens.some((row) => row.inicioCorte || row.fimCorte)
+  const temCosturaAba = itens.some((row) => row.fimCostura)
+  const temRevisaoAba = itens.some((row) => row.fimRevisao)
+  const inicioCorte = temCorteAba
+    ? extremo(itens.map((row) => row.inicioCorte), 'min')
+    : (corte?.inicioCorte ?? null)
+  const finalCorte = temCorteAba
+    ? extremo(itens.map((row) => row.fimCorte), 'max')
+    : (corte?.finalCorte ?? null)
+  const inicioCostura = extremo(itens.map((row) => row.inicioCostura), 'min')
+  const finalCostura = temCosturaAba
+    ? extremo(itens.map((row) => row.fimCostura), 'max')
+    : extremo(
+        costura.filter((row) => row.origemNorm === 'Producao').map((row) => row.dataProducao),
+        'max',
+      )
+  const inicioRevisao = extremo(itens.map((row) => row.inicioRevisao), 'min')
+  const finalRevisao = temRevisaoAba
+    ? extremo(itens.map((row) => row.fimRevisao), 'max')
+    : extremo(revisao.map((row) => row.dataProducao), 'max')
+  const oficinaAberta = oficinas.some((row) => row.pendentes > 0)
+  const prometidaBase = oficinaAberta
+    ? oficinas.filter((row) => row.pendentes > 0)
+    : oficinas
   const pcpProntas = corte?.pcpProntas ?? null
 
   return {
@@ -768,14 +923,16 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
     qualidade,
     datas: {
       pcpProntas,
-      inicioCorte: corte?.inicioCorte ?? null,
-      finalCorte: corte?.finalCorte ?? null,
-      primeiraCosturaProd,
-      ultimoEnvio: oficinas.at(-1)?.dataEnvio ?? null,
-      ultimoRetorno:
-        [...oficinas].reverse().find((row) => row.dataRetorno)?.dataRetorno ?? null,
-      primeiraRevisao,
-      ultimaRevisao,
+      inicioCorte,
+      finalCorte,
+      inicioCostura,
+      finalCostura,
+      envioOficina: extremo(oficinas.map((row) => row.dataEnvio), 'min'),
+      retornoOficina: extremo(oficinas.map((row) => row.dataRetorno), 'max'),
+      prometidaOficina: extremo(prometidaBase.map((row) => row.dataPrometida), 'max'),
+      oficinaAberta,
+      inicioRevisao,
+      finalRevisao,
     },
     totais: {
       pecasCorte: corte?.pecas ?? 0,
@@ -790,7 +947,7 @@ export const getPedidoFicha = cache(async (raw: string): Promise<PedidoFicha | n
       metrosSignusBaixa: signus
         .filter((row) => row.isBaixa)
         .reduce((sum, row) => sum + row.metros, 0),
-      diasCiclo: leadTimeDays(pcpProntas, ultimaRevisao),
+      diasCiclo: leadTimeDays(pcpProntas, finalRevisao),
     },
   }
 })

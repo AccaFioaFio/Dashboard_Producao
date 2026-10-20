@@ -46,6 +46,7 @@ export type SalvarApontamentoInput = {
   origem: string
   oficina?: string
   qtdPecas: string
+  dataInicio?: string
   dataProducao: string
   responsavel: string
   observacao?: string
@@ -83,6 +84,58 @@ function dataValida(value: string) {
     data.getUTCMonth() === mes - 1 &&
     data.getUTCDate() === dia
   )
+}
+
+function dataInicioInformada(value: string | undefined) {
+  return (value ?? '').trim()
+}
+
+function validarDataInicio(dataInicio: string, dataProducao: string) {
+  if (dataInicio && !dataValida(dataInicio)) return 'Data inicial inválida.'
+  if (dataInicio && dataProducao && dataInicio > dataProducao) {
+    return 'A data inicial não pode ser depois da data de produção.'
+  }
+  return null
+}
+
+/** A data inicial é do produto: todas as somas ficam com o mesmo começo. */
+function propagarDataInicio(
+  etapa: EtapaApontamento,
+  pedidoNorm: string,
+  codProduto: string,
+  dataInicio: string | null,
+  agora: string,
+) {
+  const tabela = ETAPAS_APONTAMENTO[etapa].tabela
+  getSqlite()
+    .prepare(
+      `UPDATE ${tabela}
+       SET data_inicio = ?, atualizado_em = ?
+       WHERE pedido_norm = ? AND cod_produto = ?`,
+    )
+    .run(dataInicio, agora, pedidoNorm, codProduto)
+}
+
+function producaoMaisCedo(
+  etapa: EtapaApontamento,
+  pedidoNorm: string,
+  codProduto: string,
+  dataProducaoNova: string,
+) {
+  const tabela = ETAPAS_APONTAMENTO[etapa].tabela
+  const origem = etapa === 'costura' ? `AND origem = 'Produção'` : ''
+  const row = getSqlite()
+    .prepare(
+      `SELECT MIN(data_producao) as v FROM ${tabela}
+       WHERE pedido_norm = ? AND cod_produto = ?
+         AND qtd_pecas IS NOT NULL
+         AND data_producao IS NOT NULL AND data_producao != ''
+         ${origem}`,
+    )
+    .get(pedidoNorm, codProduto) as { v: string | null }
+  const datas = [row?.v, dataProducaoNova || null].filter((value): value is string => Boolean(value))
+  datas.sort()
+  return datas[0] ?? null
 }
 
 function quantidade(value: string): number | null | 'invalida' {
@@ -145,7 +198,8 @@ export async function buscarProdutoApontamento(
   const oficinaSql = etapa === 'costura' ? 'oficina' : 'NULL as oficina'
   const gravado = getSqlite()
     .prepare(
-      `SELECT ${origemSql}, ${oficinaSql}, qtd_pecas as qtdPecas, data_producao as dataProducao,
+      `SELECT ${origemSql}, ${oficinaSql}, qtd_pecas as qtdPecas, data_inicio as dataInicio,
+              data_producao as dataProducao,
               responsavel, nome_produto as nomeProduto
        FROM ${tabela}
        WHERE pedido_norm = ? AND cod_produto = ? AND excel_row = ?`,
@@ -154,6 +208,7 @@ export async function buscarProdutoApontamento(
     origem: string | null
     oficina: string | null
     qtdPecas: number | null
+    dataInicio: string | null
     dataProducao: string | null
     responsavel: string | null
     nomeProduto: string | null
@@ -164,8 +219,9 @@ export async function buscarProdutoApontamento(
     origem: gravado?.origem ?? null,
     oficina: gravado?.oficina ?? null,
     qtdPecas: gravado?.qtdPecas ?? null,
-    dataProducao: gravado?.dataProducao ?? null,
-    responsavel: gravado?.responsavel ?? null,
+    dataInicio: gravado?.dataInicio ?? null,
+        dataProducao: gravado?.dataProducao ?? null,
+        responsavel: gravado?.responsavel ?? null,
     observacao: null,
     nomeProduto: gravado?.nomeProduto ?? resolvido.nomeProduto,
   })
@@ -210,6 +266,9 @@ export async function salvarApontamento(
   if (dataProducao && !dataValida(dataProducao)) {
     return { ok: false, error: 'Data de produção inválida.' }
   }
+  const dataInicio = dataInicioInformada(input.dataInicio)
+  const erroInicio = validarDataInicio(dataInicio, dataProducao)
+  if (erroInicio) return { ok: false, error: erroInicio }
 
   const responsavel = input.responsavel.trim()
   if (responsavel && !responsavelApontamentoValido(etapa, responsavel)) {
@@ -274,13 +333,19 @@ export async function salvarApontamento(
   const tabela = ETAPAS_APONTAMENTO[etapa].tabela
   const db = getSqlite()
   const vazio =
-    qtdPecas == null && !dataProducao && !responsavel && !origem && !oficina && !observacao
+    qtdPecas == null &&
+    !dataInicio &&
+    !dataProducao &&
+    !responsavel &&
+    !origem &&
+    !oficina &&
+    !observacao
 
   if (vazio) {
     if (foraDaCarga) {
       db.prepare(
         `UPDATE ${tabela}
-         SET qtd_pecas = NULL, data_producao = NULL, responsavel = NULL,
+         SET qtd_pecas = NULL, data_inicio = NULL, data_producao = NULL, responsavel = NULL,
              aviso_data_producao = NULL, observacao = NULL,
              nome_produto = COALESCE(?, nome_produto), atualizado_em = ?
          WHERE pedido_norm = ? AND cod_produto = ?`,
@@ -297,6 +362,7 @@ export async function salvarApontamento(
         origem: null,
         oficina: null,
         qtdPecas: null,
+        dataInicio: null,
         dataProducao: null,
         responsavel: null,
         avisoDataProducao: null,
@@ -329,17 +395,25 @@ export async function salvarApontamento(
     return { ok: true }
   }
 
+  if (dataInicio) {
+    const fim = producaoMaisCedo(etapa, pedidoNorm, codProduto, dataProducao)
+    if (fim && dataInicio > fim) {
+      return { ok: false, error: 'A data inicial não pode ser depois da data de produção.' }
+    }
+  }
+
   const agora = new Date().toISOString()
   if (etapa === 'costura') {
     db.prepare(
       `INSERT INTO ${tabela} (
-         pedido_norm, cod_produto, excel_row, origem, oficina, qtd_pecas, data_producao,
+         pedido_norm, cod_produto, excel_row, origem, oficina, qtd_pecas, data_inicio, data_producao,
          responsavel, observacao, nome_produto, atualizado_em
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
          origem = excluded.origem,
          oficina = excluded.oficina,
          qtd_pecas = excluded.qtd_pecas,
+         data_inicio = excluded.data_inicio,
          data_producao = excluded.data_producao,
          responsavel = excluded.responsavel,
          observacao = excluded.observacao,
@@ -352,6 +426,7 @@ export async function salvarApontamento(
       origem || null,
       oficina || null,
       qtdPecas,
+      dataInicio || null,
       dataProducao || null,
       responsavel || null,
       observacao,
@@ -361,11 +436,12 @@ export async function salvarApontamento(
   } else {
     db.prepare(
       `INSERT INTO ${tabela} (
-         pedido_norm, cod_produto, excel_row, qtd_pecas, data_producao,
+         pedido_norm, cod_produto, excel_row, qtd_pecas, data_inicio, data_producao,
          responsavel, observacao, nome_produto, atualizado_em
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
          qtd_pecas = excluded.qtd_pecas,
+         data_inicio = excluded.data_inicio,
          data_producao = excluded.data_producao,
          responsavel = excluded.responsavel,
          observacao = excluded.observacao,
@@ -376,6 +452,7 @@ export async function salvarApontamento(
       codProduto,
       excelRow,
       qtdPecas,
+      dataInicio || null,
       dataProducao || null,
       responsavel || null,
       observacao,
@@ -383,12 +460,14 @@ export async function salvarApontamento(
       agora,
     )
   }
+  propagarDataInicio(etapa, pedidoNorm, codProduto, dataInicio || null, agora)
 
   const nuvem = await gravarApontamentoNuvem(etapa, pedidoNorm, {
     codProduto,
     origem: origem || null,
     oficina: oficina || null,
     qtdPecas,
+    dataInicio: dataInicio || null,
     dataProducao: dataProducao || null,
     responsavel: responsavel || null,
     observacao,
@@ -441,6 +520,9 @@ export async function somarApontamento(
   if (!dataProducao || !dataValida(dataProducao)) {
     return { ok: false, error: 'Informe a data de produção deste lançamento.' }
   }
+  const dataInicio = dataInicioInformada(input.dataInicio)
+  const erroInicio = validarDataInicio(dataInicio, dataProducao)
+  if (erroInicio) return { ok: false, error: erroInicio }
 
   const responsavel = input.responsavel.trim()
   if (!responsavel || !responsavelApontamentoValido(etapa, responsavel)) {
@@ -500,6 +582,12 @@ export async function somarApontamento(
 
   const tabela = ETAPAS_APONTAMENTO[etapa].tabela
   const db = getSqlite()
+  if (dataInicio) {
+    const fim = producaoMaisCedo(etapa, pedidoNorm, codProduto, dataProducao)
+    if (fim && dataInicio > fim) {
+      return { ok: false, error: 'A data inicial não pode ser depois da data de produção.' }
+    }
+  }
   const agora = new Date().toISOString()
   let excelRowNovo = -Date.now()
   while (
@@ -516,9 +604,9 @@ export async function somarApontamento(
   if (etapa === 'costura') {
     db.prepare(
       `INSERT INTO ${tabela} (
-         pedido_norm, cod_produto, excel_row, origem, oficina, qtd_pecas, data_producao,
+         pedido_norm, cod_produto, excel_row, origem, oficina, qtd_pecas, data_inicio, data_producao,
          responsavel, observacao, nome_produto, atualizado_em
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       pedidoNorm,
       codProduto,
@@ -526,6 +614,7 @@ export async function somarApontamento(
       origem || null,
       oficina || null,
       qtdPecas,
+      dataInicio || null,
       dataProducao,
       responsavel,
       observacao,
@@ -535,14 +624,15 @@ export async function somarApontamento(
   } else {
     db.prepare(
       `INSERT INTO ${tabela} (
-         pedido_norm, cod_produto, excel_row, qtd_pecas, data_producao,
+         pedido_norm, cod_produto, excel_row, qtd_pecas, data_inicio, data_producao,
          responsavel, observacao, nome_produto, atualizado_em
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       pedidoNorm,
       codProduto,
       excelRowNovo,
       qtdPecas,
+      dataInicio || null,
       dataProducao,
       responsavel,
       observacao,
@@ -550,6 +640,7 @@ export async function somarApontamento(
       agora,
     )
   }
+  propagarDataInicio(etapa, pedidoNorm, codProduto, dataInicio || null, agora)
 
   // Publica na nuvem sem re-baixar o pedido (total já está no SQLite).
   const sync = await sincronizarProdutoApontamento(etapa, pedidoNorm, codProduto, {
@@ -599,6 +690,7 @@ export async function corrigirApontamento(
 
   const zerar = qtdPecas === 0
   const dataProducao = input.dataProducao.trim()
+  const dataInicio = dataInicioInformada(input.dataInicio)
   const responsavel = input.responsavel.trim()
   const origem = etapa === 'costura' ? input.origem.trim() : ''
   const conserto = etapa === 'costura' && origemCosturaConserto(origem)
@@ -609,6 +701,8 @@ export async function corrigirApontamento(
     if (!dataProducao || !dataValida(dataProducao)) {
       return { ok: false, error: 'Informe a data de produção desta correção.' }
     }
+    const erroInicio = validarDataInicio(dataInicio, dataProducao)
+    if (erroInicio) return { ok: false, error: erroInicio }
     if (!responsavel || !responsavelApontamentoValido(etapa, responsavel)) {
       return { ok: false, error: 'Escolha um responsável da lista.' }
     }
@@ -692,6 +786,7 @@ export async function corrigirApontamento(
       origem: null,
       oficina: null,
       qtdPecas: null,
+      dataInicio: null,
       dataProducao: null,
       responsavel: null,
       observacao: null,
@@ -728,9 +823,9 @@ export async function corrigirApontamento(
   if (etapa === 'costura') {
     db.prepare(
       `INSERT INTO ${tabela} (
-         pedido_norm, cod_produto, excel_row, origem, oficina, qtd_pecas, data_producao,
+         pedido_norm, cod_produto, excel_row, origem, oficina, qtd_pecas, data_inicio, data_producao,
          responsavel, observacao, nome_produto, atualizado_em
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       pedidoNorm,
       codProduto,
@@ -738,6 +833,7 @@ export async function corrigirApontamento(
       origem || null,
       oficina || null,
       qtdPecas,
+      dataInicio || null,
       dataProducao,
       responsavel,
       observacao,
@@ -747,14 +843,15 @@ export async function corrigirApontamento(
   } else {
     db.prepare(
       `INSERT INTO ${tabela} (
-         pedido_norm, cod_produto, excel_row, qtd_pecas, data_producao,
+         pedido_norm, cod_produto, excel_row, qtd_pecas, data_inicio, data_producao,
          responsavel, observacao, nome_produto, atualizado_em
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       pedidoNorm,
       codProduto,
       excelRowNovo,
       qtdPecas,
+      dataInicio || null,
       dataProducao,
       responsavel,
       observacao,
@@ -772,6 +869,7 @@ export async function corrigirApontamento(
     origem: origem || null,
     oficina: oficina || null,
     qtdPecas,
+    dataInicio: dataInicio || null,
     dataProducao,
     responsavel,
     observacao,
@@ -789,6 +887,115 @@ export async function corrigirApontamento(
     }
   }
   return { ok: true, total: qtdPecas }
+}
+
+/** Grava só a data inicial do produto, sem somar quantidade. */
+export async function gravarDataInicioApontamento(
+  input: SalvarApontamentoInput,
+): Promise<SalvarApontamentoResult> {
+  const etapa = etapaApontamento(input.etapa)
+  if (!etapa) return { ok: false, error: 'Etapa inválida.' }
+
+  const session = await readSession()
+  if (!session || !canAccessPath(ETAPAS_APONTAMENTO[etapa].acesso, session.acessos)) {
+    return { ok: false, error: semPermissao(etapa) }
+  }
+
+  await ensureCloudDatabase({ light: true })
+
+  const pedidoNorm = pedidoDigits(input.pedidoNorm)
+  let codProduto = input.codProduto.trim()
+  if (!pedidoNorm || !codProduto) return { ok: false, error: 'Item do pedido inválido.' }
+
+  const dataInicio = dataInicioInformada(input.dataInicio)
+  if (dataInicio && !dataValida(dataInicio)) {
+    return { ok: false, error: 'Data inicial inválida.' }
+  }
+
+  const tabela = ETAPAS_APONTAMENTO[etapa].tabela
+  const db = getSqlite()
+  const existentes = db
+    .prepare(
+      `SELECT COUNT(*) as v FROM ${tabela} WHERE pedido_norm = ? AND cod_produto = ?`,
+    )
+    .get(pedidoNorm, codProduto) as { v: number }
+
+  if (dataInicio && existentes.v > 0) {
+    const fim = producaoMaisCedo(etapa, pedidoNorm, codProduto, '')
+    if (fim && dataInicio > fim) {
+      return { ok: false, error: 'A data inicial não pode ser depois da data de produção.' }
+    }
+  }
+
+  const agora = new Date().toISOString()
+  const limpando = !dataInicio && existentes.v > 0
+  if (existentes.v > 0) {
+    propagarDataInicio(etapa, pedidoNorm, codProduto, dataInicio || null, agora)
+  } else if (dataInicio) {
+    const excelRowBase = Number(input.excelRow)
+    const excelRow = Number.isInteger(excelRowBase) && excelRowBase >= 0 ? excelRowBase : 0
+    const origem = etapa === 'costura' ? input.origem.trim() : ''
+    if (etapa === 'costura' && !origemCosturaValida(origem)) {
+      return { ok: false, error: 'Escolha a origem antes de gravar a data inicial.' }
+    }
+    const conserto = etapa === 'costura' && origemCosturaConserto(origem)
+    const oficina = conserto ? (input.oficina?.trim() ?? '') : ''
+    if (conserto && !oficinaCadastrada(oficina)) {
+      return { ok: false, error: 'Em Conserto, escolha a oficina antes de gravar a data inicial.' }
+    }
+    let nomeProduto = input.nomeProduto?.trim() || null
+    if (!nomeProduto) {
+      const produto = produtoNaBaseItens(codProduto)
+      if (produto) {
+        codProduto = produto.codProduto
+        nomeProduto = produto.nomeProduto
+      }
+    }
+    if (etapa === 'costura') {
+      db.prepare(
+        `INSERT INTO ${tabela} (
+           pedido_norm, cod_produto, excel_row, origem, oficina, qtd_pecas, data_inicio,
+           data_producao, responsavel, observacao, nome_produto, atualizado_em
+         ) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?, ?)`,
+      ).run(pedidoNorm, codProduto, excelRow, origem, oficina || null, dataInicio, nomeProduto, agora)
+    } else {
+      db.prepare(
+        `INSERT INTO ${tabela} (
+           pedido_norm, cod_produto, excel_row, qtd_pecas, data_inicio, data_producao,
+           responsavel, observacao, nome_produto, atualizado_em
+         ) VALUES (?, ?, ?, NULL, ?, NULL, NULL, NULL, ?, ?)`,
+      ).run(pedidoNorm, codProduto, excelRow, dataInicio, nomeProduto, agora)
+    }
+  } else {
+    return { ok: true }
+  }
+
+  const sync = await sincronizarProdutoApontamento(etapa, pedidoNorm, codProduto, {
+    skipPull: true,
+    incluirVazios: limpando,
+  })
+  if (limpando && sync.ok) {
+    const oficinaVazia = etapa === 'costura' ? `AND (oficina IS NULL OR oficina = '')` : ''
+    db.prepare(
+      `DELETE FROM ${tabela}
+       WHERE pedido_norm = ? AND cod_produto = ?
+         AND qtd_pecas IS NULL
+         AND (data_inicio IS NULL OR data_inicio = '')
+         AND (data_producao IS NULL OR data_producao = '')
+         AND (responsavel IS NULL OR responsavel = '')
+         AND (observacao IS NULL OR observacao = '')
+         ${oficinaVazia}`,
+    ).run(pedidoNorm, codProduto)
+  }
+  syncDimPedidoApontamento(pedidoNorm)
+  revalidateApontamento(etapa)
+  if (!sync.ok) {
+    return {
+      ok: false,
+      error: `Gravou a data inicial nesta tela, mas a nuvem não atualizou (${sync.error}).`,
+    }
+  }
+  return { ok: true }
 }
 
 export type SalvarListaApontamentoResult =
@@ -842,7 +1049,7 @@ export async function salvarListaApontamento(
     .prepare(
       `SELECT excel_row as excelRow, cod_produto as codProduto,
               nome_produto as nomeProduto, ${origemSql}, ${oficinaSql},
-              qtd_pecas as qtdPecas, data_producao as dataProducao,
+              qtd_pecas as qtdPecas, data_inicio as dataInicio, data_producao as dataProducao,
               responsavel, observacao
        FROM ${tabelaLanc}
        WHERE pedido_norm = ?
@@ -859,6 +1066,7 @@ export async function salvarListaApontamento(
     origem: string | null
     oficina: string | null
     qtdPecas: number | null
+    dataInicio: string | null
     dataProducao: string
     responsavel: string | null
     observacao: string | null
@@ -871,6 +1079,7 @@ export async function salvarListaApontamento(
     origem: string | null
     oficina: string | null
     qtdPecas: number | null
+    dataInicio: string | null
     dataProducao: string
     responsavel: string | null
     observacao: string | null
@@ -1047,6 +1256,7 @@ export async function salvarListaApontamento(
         origem: item.origem,
         oficina: item.oficina ?? null,
         qtdPecas: item.qtdPecas,
+        dataInicio: item.dataInicio,
         dataProducao: item.dataProducao,
         responsavel: item.responsavel,
         observacao: item.observacao,

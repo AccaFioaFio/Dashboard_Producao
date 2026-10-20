@@ -32,7 +32,7 @@ function blocoItem(item: AvisoApontamentoItem, indice: number, total: number, et
     `Produto: ${produto}`,
     `Código: ${isCodigoGeradoSemCadastro(item.codProduto) ? '—' : item.codProduto}`,
     `Quantidade: ${quantidade(item.qtdPecas)}`,
-    `Data produção: ${formatDate(item.dataProducao)}`,
+    `Data final: ${formatDate(item.dataProducao)}`,
     `Responsável: ${item.responsavel?.trim() || '—'}`,
   ]
   if (etapa === 'costura') {

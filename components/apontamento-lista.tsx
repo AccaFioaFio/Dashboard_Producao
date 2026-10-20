@@ -12,6 +12,7 @@ import { ListChecks, Pencil, Plus, X } from 'lucide-react'
 import {
   buscarProdutoApontamento,
   corrigirApontamento,
+  gravarDataInicioApontamento,
   salvarListaApontamento,
   somarApontamento,
 } from '@/app/actions/apontamento'
@@ -38,6 +39,7 @@ export type ItemApontamentoLista = {
   origem: string | null
   oficina: string | null
   qtdPecas: number | null
+  dataInicio: string | null
   dataProducao: string | null
   responsavel: string | null
   avisoDataProducao: string | null
@@ -136,7 +138,7 @@ function Linha({
   onCorrigido?: () => void
   onRegisterFlush: (
     chave: string,
-    flush: (() => Promise<{ ok: boolean; somou: boolean }>) | null,
+    flush: (() => Promise<{ ok: boolean; somou: boolean; gravouInicio?: 'gravada' | 'limpa' }>) | null,
   ) => void
 }) {
   const jaLancadoInicial = item.qtdPecas ?? 0
@@ -144,6 +146,7 @@ function Linha({
   const [oficina, setOficina] = useState('')
   const [jaLancado, setJaLancado] = useState(jaLancadoInicial)
   const [adicionar, setAdicionar] = useState('')
+  const [dataInicio, setDataInicio] = useState(item.dataInicio ?? '')
   const [dataProducao, setDataProducao] = useState('')
   const [responsavel, setResponsavel] = useState('')
   const [observacao, setObservacao] = useState('')
@@ -156,6 +159,7 @@ function Linha({
   const adicionarRef = useRef('')
   const origemRef = useRef('')
   const oficinaRef = useRef('')
+  const dataInicioRef = useRef(item.dataInicio ?? '')
   const dataRef = useRef('')
   const responsavelRef = useRef('')
   const observacaoRef = useRef('')
@@ -164,7 +168,7 @@ function Linha({
   const [aviso, setAviso] = useState<string | null>(null)
   const descricao = item.nomeProduto?.replace(/\s+/g, ' ').trim() || '—'
   const chave = chaveCodigo(item.codProduto)
-  const colunas = temOrigem ? 11 : 9
+  const colunas = temOrigem ? 12 : 10
   const mostraOficina = temOrigem && origemCosturaConserto(origem)
   const naLista =
     Boolean(dataProducao) &&
@@ -187,9 +191,9 @@ function Linha({
   // Ref estável: o pai chama o flush depois do re-render de “Salvando…”.
   // Se o effect re-registrar a cada render, o cleanup zera o Map no meio do clique
   // e a soma (qtd + observação) nunca chega ao servidor — some ao atualizar.
-  const aplicarAdicaoRef = useRef<() => Promise<{ ok: boolean; somou: boolean }>>(
-    async () => ({ ok: true, somou: false }),
-  )
+  const aplicarAdicaoRef = useRef<
+    () => Promise<{ ok: boolean; somou: boolean; gravouInicio?: 'gravada' | 'limpa' }>
+  >(async () => ({ ok: true, somou: false }))
 
   aplicarAdicaoRef.current = async () => {
     if (modoCorrigirRef.current) {
@@ -201,7 +205,39 @@ function Linha({
       return { ok: false, somou: false }
     }
     if (parsed == null || parsed <= 0) {
-      return { ok: true, somou: false }
+      const inicio = dataInicioRef.current.trim()
+      if (inicio === (item.dataInicio ?? '').trim()) {
+        return { ok: true, somou: false }
+      }
+      onOcupada(true)
+      try {
+        const gravado = await gravarDataInicioApontamento({
+          etapa,
+          pedidoNorm,
+          codProduto: item.codProduto,
+          excelRow: item.excelRow,
+          origem: origemRef.current,
+          oficina: oficinaRef.current,
+          qtdPecas: '',
+          dataInicio: inicio,
+          dataProducao: dataRef.current,
+          responsavel: responsavelRef.current,
+          observacao: observacaoRef.current,
+          nomeProduto: item.nomeProduto,
+        })
+        if (!gravado.ok) {
+          setErro(gravado.error)
+          return { ok: false, somou: false }
+        }
+        setErro(null)
+        setAviso(inicio ? 'Data inicial gravada neste produto.' : 'Data inicial limpa neste produto.')
+        return { ok: true, somou: false, gravouInicio: inicio ? 'gravada' : 'limpa' }
+      } catch {
+        setErro('Não foi possível gravar a data inicial agora.')
+        return { ok: false, somou: false }
+      } finally {
+        onOcupada(false)
+      }
     }
     onOcupada(true)
     try {
@@ -213,6 +249,7 @@ function Linha({
         origem: origemRef.current,
         oficina: oficinaRef.current,
         qtdPecas: adicionarRef.current,
+        dataInicio: dataInicioRef.current,
         dataProducao: dataRef.current,
         responsavel: responsavelRef.current,
         observacao: observacaoRef.current,
@@ -291,6 +328,7 @@ function Linha({
         origem: origemRef.current,
         oficina: oficinaRef.current,
         qtdPecas: adicionarRef.current,
+        dataInicio: dataInicioRef.current,
         dataProducao: dataRef.current,
         responsavel: responsavelRef.current,
         observacao: observacaoRef.current,
@@ -466,12 +504,26 @@ function Linha({
             }}
           />
         </td>
-        <td data-label="Data produção" className="w-36 px-1.5 py-1.5">
+        <td data-label="Data inicial" className="w-36 px-1.5 py-1.5">
+          <input
+            aria-label={`Data inicial de ${descricao}`}
+            type="date"
+            value={dataInicio}
+            className={campo}
+            onChange={(event) => {
+              const next = event.currentTarget.value
+              dataInicioRef.current = next
+              setDataInicio(next)
+              setErro(null)
+            }}
+          />
+        </td>
+        <td data-label="Data Final" className="w-36 px-1.5 py-1.5">
           <input
             aria-label={
               modoCorrigir
-                ? `Data da correção de ${descricao}`
-                : `Data desta soma de ${descricao}`
+                ? `Data final da correção de ${descricao}`
+                : `Data final de ${descricao}`
             }
             type="date"
             value={dataProducao}
@@ -622,6 +674,7 @@ function IncluirProduto({
         origem: null,
         oficina: null,
         qtdPecas: null,
+        dataInicio: null,
         dataProducao: null,
         responsavel: null,
         avisoDataProducao: null,
@@ -739,7 +792,7 @@ export function ApontamentoLista({
   const registerFlush = useCallback(
     (
       chave: string,
-      flush: (() => Promise<{ ok: boolean; somou: boolean }>) | null,
+      flush: (() => Promise<{ ok: boolean; somou: boolean; gravouInicio?: 'gravada' | 'limpa' }>) | null,
     ) => {
       if (flush) flushers.current.set(chave, flush)
       else flushers.current.delete(chave)
@@ -754,6 +807,7 @@ export function ApontamentoLista({
         return {
           ok: false,
           somou: false,
+          gravouInicio: undefined,
           erro: 'A tela ainda estava montando. Toque de novo em Salvar na lista.',
         }
       }
@@ -765,11 +819,13 @@ export function ApontamentoLista({
       [...flushers.current.values()].map((flush) => flush()),
     )
     let somou = false
+    let gravouInicio: 'gravada' | 'limpa' | undefined
     for (const result of resultados) {
-      if (!result.ok) return { ok: false, somou, erro: null as string | null }
+      if (!result.ok) return { ok: false, somou, gravouInicio, erro: null as string | null }
       if (result.somou) somou = true
+      if (result.gravouInicio) gravouInicio = result.gravouInicio
     }
-    return { ok: true, somou, erro: null as string | null }
+    return { ok: true, somou, gravouInicio, erro: null as string | null }
   }
 
   function salvarLista(codProduto?: string) {
@@ -789,11 +845,15 @@ export function ApontamentoLista({
       }
       const result = await salvarListaApontamento(etapa, pedidoNorm, codProduto)
       const textoOk =
-        result.ok && result.salvos === 0 && flush.somou
-          ? 'Quantidade somada. O total aparece em Já lançado.'
-          : result.ok
-            ? result.aviso
-            : result.error
+        result.ok && result.salvos === 0 && flush.gravouInicio === 'gravada'
+          ? 'Data inicial gravada neste produto.'
+          : result.ok && result.salvos === 0 && flush.gravouInicio === 'limpa'
+            ? 'Data inicial limpa neste produto.'
+          : result.ok && result.salvos === 0 && flush.somou
+            ? 'Quantidade somada. O total aparece em Já lançado.'
+            : result.ok
+              ? result.aviso
+              : result.error
       setLista({
         ok: result.ok,
         texto: textoOk,
@@ -865,7 +925,8 @@ export function ApontamentoLista({
                 <th className="px-1.5 py-1">Responsável</th>
                 <th className="w-28 px-1.5 py-1 text-right whitespace-nowrap">Já lançado</th>
                 <th className="px-1.5 py-1">{qtdLabel}</th>
-                <th className="px-1.5 py-1">Data produção</th>
+                <th className="px-1.5 py-1">Data inicial</th>
+                <th className="px-1.5 py-1">Data Final</th>
                 <th className="px-1.5 py-1">Observação</th>
                 <th className="px-1.5 py-1">Lista</th>
               </tr>

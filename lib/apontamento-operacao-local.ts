@@ -9,6 +9,7 @@ type LinhaLocal = {
   origem: string | null
   oficina: string | null
   qtdPecas: number | null
+  dataInicio: string | null
   dataProducao: string | null
   responsavel: string | null
   avisoDataProducao: string | null
@@ -61,7 +62,7 @@ function ler(etapa: EtapaApontamento): LinhaLocal[] {
     .prepare(
       `SELECT pedido_norm as pedidoNorm, cod_produto as codProduto,
               excel_row as excelRow, ${origem}, ${oficina}, qtd_pecas as qtdPecas,
-              data_producao as dataProducao, responsavel,
+              data_inicio as dataInicio, data_producao as dataProducao, responsavel,
               aviso_data_producao as avisoDataProducao,
               observacao, nome_produto as nomeProduto,
               atualizado_em as atualizadoEm
@@ -198,12 +199,13 @@ export function mergeApontamentoOperacao(backup: ApontamentoOperacaoBackup | nul
         etapa === 'costura' ? 'origem = excluded.origem, oficina = excluded.oficina,' : ''
       const upsert = db.prepare(
         `INSERT INTO ${tabela} (
-           pedido_norm, cod_produto, excel_row, ${colunasOrigem}qtd_pecas, data_producao,
+           pedido_norm, cod_produto, excel_row, ${colunasOrigem}qtd_pecas, data_inicio, data_producao,
            responsavel, aviso_data_producao, observacao, nome_produto, atualizado_em
-         ) VALUES (?, ?, ?, ${valoresOrigem}?, ?, ?, ?, ?, ?, ?)
+         ) VALUES (?, ?, ?, ${valoresOrigem}?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
            ${atualizaOrigem}
            qtd_pecas = excluded.qtd_pecas,
+           data_inicio = excluded.data_inicio,
            data_producao = excluded.data_producao,
            responsavel = excluded.responsavel,
            aviso_data_producao = excluded.aviso_data_producao,
@@ -219,6 +221,7 @@ export function mergeApontamentoOperacao(backup: ApontamentoOperacaoBackup | nul
           row.excelRow,
           ...(etapa === 'costura' ? [row.origem, row.oficina ?? null] : []),
           row.qtdPecas,
+          row.dataInicio,
           row.dataProducao,
           row.responsavel,
           row.avisoDataProducao,

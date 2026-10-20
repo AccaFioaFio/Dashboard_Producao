@@ -24,6 +24,7 @@ export type ApontamentoNuvemEntrada = {
   origem: string | null
   oficina: string | null
   qtdPecas: number | null
+  dataInicio: string | null
   dataProducao: string | null
   responsavel: string | null
   avisoDataProducao: string | null
@@ -36,6 +37,7 @@ export type ApontamentoNuvem = {
   origem: string | null
   oficina: string | null
   qtdPecas: number | null
+  dataInicio: string | null
   dataProducao: string | null
   responsavel: string | null
   avisoDataProducao: string | null
@@ -162,6 +164,17 @@ function numero(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+function entradaSemConteudo(row: ApontamentoNuvemEntrada) {
+  return (
+    row.qtdPecas == null &&
+    !row.dataInicio &&
+    !row.dataProducao &&
+    !row.responsavel &&
+    !row.observacao &&
+    !row.oficina
+  )
+}
+
 function entradaDe(raw: unknown): ApontamentoNuvemEntrada | null {
   if (!raw || typeof raw !== 'object') return null
   const row = raw as Record<string, unknown>
@@ -173,6 +186,7 @@ function entradaDe(raw: unknown): ApontamentoNuvemEntrada | null {
     origem: texto(row.origem),
     oficina: texto(row.oficina),
     qtdPecas: numero(row.qtdPecas),
+    dataInicio: texto(row.dataInicio),
     dataProducao: texto(row.dataProducao),
     responsavel: texto(row.responsavel),
     avisoDataProducao: texto(row.avisoDataProducao),
@@ -196,6 +210,11 @@ function agregarEntradas(
     origem: recente?.origem ?? null,
     oficina: recente?.oficina ?? null,
     qtdPecas: pecas > 0 ? pecas : recente?.qtdPecas ?? null,
+    dataInicio: ordenadas.reduce<string | null>((menor, row) => {
+      if (!row.dataInicio) return menor
+      if (!menor || row.dataInicio < menor) return row.dataInicio
+      return menor
+    }, null),
     dataProducao: recente?.dataProducao ?? null,
     responsavel: recente?.responsavel ?? null,
     avisoDataProducao: recente?.avisoDataProducao ?? null,
@@ -214,6 +233,7 @@ export function entradasDoLancamento(doc: ApontamentoNuvem): ApontamentoNuvemEnt
       origem: doc.origem,
       oficina: doc.oficina,
       qtdPecas: doc.qtdPecas,
+      dataInicio: doc.dataInicio,
       dataProducao: doc.dataProducao,
       responsavel: doc.responsavel,
       avisoDataProducao: doc.avisoDataProducao,
@@ -242,6 +262,7 @@ function lancamentoDe(raw: unknown, codArquivo?: string): ApontamentoNuvem | nul
     origem: texto(row.origem),
     oficina: texto(row.oficina),
     qtdPecas: numero(row.qtdPecas),
+    dataInicio: texto(row.dataInicio),
     dataProducao: texto(row.dataProducao),
     responsavel: texto(row.responsavel),
     avisoDataProducao: texto(row.avisoDataProducao),
@@ -455,6 +476,7 @@ export async function gravarApontamentoNuvem(
       origem: lancamento.origem,
       oficina: lancamento.oficina ?? null,
       qtdPecas: lancamento.qtdPecas,
+      dataInicio: lancamento.dataInicio ?? null,
       dataProducao: lancamento.dataProducao,
       responsavel: lancamento.responsavel,
       avisoDataProducao,
@@ -480,6 +502,7 @@ export async function somarEntradaApontamentoNuvem(
     origem: string | null
     oficina: string | null
     qtdPecas: number
+    dataInicio: string | null
     dataProducao: string
     responsavel: string
     observacao: string | null
@@ -510,6 +533,7 @@ export async function somarEntradaApontamentoNuvem(
       origem: entrada.origem,
       oficina: entrada.oficina,
       qtdPecas: entrada.qtdPecas,
+      dataInicio: entrada.dataInicio,
       dataProducao: entrada.dataProducao,
       responsavel: entrada.responsavel,
       avisoDataProducao: null,
@@ -556,6 +580,7 @@ export async function marcarAvisoApontamentoNuvem(
           origem: fallback.origem,
           oficina: fallback.oficina ?? null,
           qtdPecas: fallback.qtdPecas,
+          dataInicio: fallback.dataInicio ?? null,
           dataProducao: fallback.dataProducao,
           responsavel: fallback.responsavel,
           avisoDataProducao: null,
@@ -611,6 +636,7 @@ export async function substituirTotalApontamentoNuvem(
     origem: string | null
     oficina: string | null
     qtdPecas: number | null
+    dataInicio: string | null
     dataProducao: string | null
     responsavel: string | null
     observacao: string | null
@@ -647,6 +673,7 @@ export async function substituirTotalApontamentoNuvem(
       origem: entrada.origem,
       oficina: entrada.oficina,
       qtdPecas: qtd,
+      dataInicio: entrada.dataInicio,
       dataProducao: entrada.dataProducao,
       responsavel: entrada.responsavel,
       avisoDataProducao: null,
@@ -804,7 +831,15 @@ export async function mesclarEntradasApontamentoNuvem(
       const anterior =
         baixa.status === 'ok' ? lancamentoDe(baixa.data, trechoSeguro(codProduto)) : null
       const entradasNuvem = anterior ? entradasDoLancamento(anterior) : []
-      const unidas = unirEntradas(entradasNuvem, entradasLocais)
+      const unidas = unirEntradas(entradasNuvem, entradasLocais).filter(
+        (row) => !entradaSemConteudo(row),
+      )
+      if (!unidas.length) {
+        if (baixa.status !== 'ok') return { ok: true, mudou: false }
+        const { error } = await client.storage.from(CARGA_BUCKET).remove([path])
+        if (error) return { ok: false, error: error.message }
+        return { ok: true, mudou: true }
+      }
       const mudou =
         unidas.length !== entradasNuvem.length ||
         unidas.some((row) => {
@@ -817,6 +852,7 @@ export async function mesclarEntradasApontamentoNuvem(
             remoto.observacao !== row.observacao ||
             remoto.qtdPecas !== row.qtdPecas ||
             remoto.dataProducao !== row.dataProducao ||
+            remoto.dataInicio !== row.dataInicio ||
             remoto.responsavel !== row.responsavel ||
             remoto.origem !== row.origem ||
             remoto.oficina !== row.oficina

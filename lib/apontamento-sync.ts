@@ -65,12 +65,13 @@ function upsertLote(
     : ''
   const upsert = db.prepare(
     `INSERT INTO ${tabela} (
-       pedido_norm, cod_produto, excel_row, ${colunasOrigem}qtd_pecas, data_producao,
+       pedido_norm, cod_produto, excel_row, ${colunasOrigem}qtd_pecas, data_inicio, data_producao,
        responsavel, aviso_data_producao, observacao, nome_produto, atualizado_em
-     ) VALUES (?, ?, ?, ${valoresOrigem}?, ?, ?, ?, ?, ?, ?)
+     ) VALUES (?, ?, ?, ${valoresOrigem}?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(pedido_norm, cod_produto, excel_row) DO UPDATE SET
        ${atualizaOrigem}
        qtd_pecas = excluded.qtd_pecas,
+       data_inicio = excluded.data_inicio,
        data_producao = excluded.data_producao,
        responsavel = excluded.responsavel,
        aviso_data_producao = excluded.aviso_data_producao,
@@ -99,6 +100,7 @@ function upsertLote(
         excelRow,
         ...(temOficina ? [row.origem, row.oficina ?? null] : []),
         row.qtdPecas,
+        row.dataInicio,
         row.dataProducao,
         row.responsavel,
         row.avisoDataProducao,
@@ -238,6 +240,7 @@ type LinhaLocalPush = {
   origem: string | null
   oficina: string | null
   qtdPecas: number | null
+  dataInicio: string | null
   dataProducao: string | null
   responsavel: string | null
   avisoDataProducao: string | null
@@ -255,12 +258,12 @@ function lerLocaisParaPush(etapa: EtapaApontamento): LinhaLocalPush[] {
     .prepare(
       `SELECT pedido_norm as pedidoNorm, cod_produto as codProduto,
               excel_row as excelRow, ${origem}, ${oficina}, qtd_pecas as qtdPecas,
-              data_producao as dataProducao, responsavel,
+              data_inicio as dataInicio, data_producao as dataProducao, responsavel,
               aviso_data_producao as avisoDataProducao,
               observacao, nome_produto as nomeProduto,
               atualizado_em as atualizadoEm
        FROM ${tabela}
-       WHERE qtd_pecas IS NOT NULL OR data_producao IS NOT NULL OR responsavel IS NOT NULL`,
+       WHERE qtd_pecas IS NOT NULL OR data_inicio IS NOT NULL OR data_producao IS NOT NULL OR responsavel IS NOT NULL`,
     )
     .all() as LinhaLocalPush[]
 }
@@ -289,6 +292,7 @@ async function pushEtapa(etapa: EtapaApontamento): Promise<PushEtapaResult> {
       origem: row.origem,
       oficina: row.oficina,
       qtdPecas: row.qtdPecas,
+      dataInicio: row.dataInicio,
       dataProducao: row.dataProducao,
       responsavel: row.responsavel,
       avisoDataProducao: row.avisoDataProducao,
@@ -388,6 +392,7 @@ function lerLocaisPedidoProduto(
   etapa: EtapaApontamento,
   pedidoNorm: string,
   codProduto?: string,
+  incluirVazios = false,
 ): LinhaLocalPush[] {
   const tabela = ETAPAS_APONTAMENTO[etapa].tabela
   if (!tabelaExiste(tabela)) return []
@@ -398,27 +403,33 @@ function lerLocaisPedidoProduto(
       .prepare(
         `SELECT pedido_norm as pedidoNorm, cod_produto as codProduto,
                 excel_row as excelRow, ${origem}, ${oficina}, qtd_pecas as qtdPecas,
-                data_producao as dataProducao, responsavel,
+                data_inicio as dataInicio, data_producao as dataProducao, responsavel,
                 aviso_data_producao as avisoDataProducao,
                 observacao, nome_produto as nomeProduto,
                 atualizado_em as atualizadoEm
          FROM ${tabela}
          WHERE pedido_norm = ? AND cod_produto = ?
-           AND (qtd_pecas IS NOT NULL OR data_producao IS NOT NULL OR responsavel IS NOT NULL)`,
+           AND (
+             ? = 1
+             OR qtd_pecas IS NOT NULL
+             OR data_inicio IS NOT NULL
+             OR data_producao IS NOT NULL
+             OR responsavel IS NOT NULL
+           )`,
       )
-      .all(pedidoNorm, codProduto) as LinhaLocalPush[]
+      .all(pedidoNorm, codProduto, incluirVazios ? 1 : 0) as LinhaLocalPush[]
   }
   return getSqlite()
     .prepare(
       `SELECT pedido_norm as pedidoNorm, cod_produto as codProduto,
               excel_row as excelRow, ${origem}, ${oficina}, qtd_pecas as qtdPecas,
-              data_producao as dataProducao, responsavel,
+              data_inicio as dataInicio, data_producao as dataProducao, responsavel,
               aviso_data_producao as avisoDataProducao,
               observacao, nome_produto as nomeProduto,
               atualizado_em as atualizadoEm
        FROM ${tabela}
        WHERE pedido_norm = ?
-         AND (qtd_pecas IS NOT NULL OR data_producao IS NOT NULL OR responsavel IS NOT NULL)`,
+         AND (qtd_pecas IS NOT NULL OR data_inicio IS NOT NULL OR data_producao IS NOT NULL OR responsavel IS NOT NULL)`,
     )
     .all(pedidoNorm) as LinhaLocalPush[]
 }
@@ -448,14 +459,20 @@ export async function sincronizarProdutoApontamento(
   etapa: EtapaApontamento,
   pedidoNorm: string,
   codProduto: string,
-  options?: { skipPull?: boolean },
+  options?: { skipPull?: boolean; incluirVazios?: boolean },
 ): Promise<{ ok: true; total: number } | { ok: false; error: string }> {
-  const linhas = lerLocaisPedidoProduto(etapa, pedidoNorm, codProduto)
+  const linhas = lerLocaisPedidoProduto(
+    etapa,
+    pedidoNorm,
+    codProduto,
+    options?.incluirVazios,
+  )
   const entradas: ApontamentoNuvemEntrada[] = linhas.map((row) => ({
     excelRow: Number.isInteger(row.excelRow) ? row.excelRow : EXCEL_ROW_FORA_DA_CARGA,
     origem: row.origem,
     oficina: row.oficina,
     qtdPecas: row.qtdPecas,
+    dataInicio: row.dataInicio,
     dataProducao: row.dataProducao,
     responsavel: row.responsavel,
     avisoDataProducao: row.avisoDataProducao,
@@ -595,6 +612,7 @@ export async function sincronizarPedidoApontamento(
         origem: row.origem,
         oficina: row.oficina,
         qtdPecas: row.qtdPecas,
+        dataInicio: row.dataInicio,
         dataProducao: row.dataProducao,
         responsavel: row.responsavel,
         avisoDataProducao: row.avisoDataProducao,
