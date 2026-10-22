@@ -20,8 +20,19 @@ import { parseFilters, withCategoriaPadrao } from '@/lib/filters'
 import { YEAR } from '@/lib/year'
 import { ALMOX_PRINCIPAIS_LABEL } from '@/lib/almox-principais'
 import {
+  complementoQuebra,
+  formatClasse,
+  formatQuebra,
+  normalizarClasse,
+  temOutraUnidade,
+  textoCodigos,
+  valorPrincipal,
+} from '@/lib/tecido-unidade'
+import {
   explainAguardandoTecido,
+  explainBaixaSemPedido,
   explainEstoqueSemCorte,
+  explainRetornoCorteLista,
   explainSignusSemCorte,
   explainTecidoCanal,
   explainTecidoCruzado,
@@ -34,12 +45,18 @@ import {
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Tecidos' }
 
+function comHint(extra: string, hint: string) {
+  return extra ? `${extra} · ${hint}` : hint
+}
+
 export default async function TecidosPage({
   searchParams,
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   const filters = withCategoriaPadrao(parseFilters(await searchParams))
+  const categoria = filters.categoria ?? 'MATÉRIA PRIMA'
+  const descricao = `Consumo no Corte e baixa no Signus (${YEAR}), cruzados pelo código do item. Signus e saldo só dos almox ${ALMOX_PRINCIPAIS_LABEL}, categoria ${categoria}. Metro, peça, quilo e folha ficam separados. A diferença com o Corte usa só metros de baixas com nº de pedido; baixas sem pedido ficam em card separado. Corte e Signus já vêm filtrados pelo ano na carga. Saldo do estoque é snapshot (não filtra por mês/ano).`
   const [tecidos, options, carga] = await Promise.all([
     getTecidos(filters),
     getFilterOptions(),
@@ -48,7 +65,6 @@ export default async function TecidosPage({
   const metrosCorte = tecidos.metrosCorte
   const metrosSignus = tecidos.metrosSignus
   const metrosSignusComPedido = tecidos.metrosSignusComPedido
-  const metrosSignusSemPedido = metrosSignus - metrosSignusComPedido
   const metrosEconomia = tecidos.metrosEconomia
   const metrosCorteAproveitado = metrosCorte - metrosEconomia
   const economiaPct = metrosCorte > 0 ? (metrosEconomia / metrosCorte) * 100 : 0
@@ -63,8 +79,8 @@ export default async function TecidosPage({
   const baixaCanal = tecidos.baixaPorTipoOficial.find(
     (row) => row.tipoNorm === 'baixa_canal',
   )
-  const metrosProducao = baixaProducao?.metros ?? 0
-  const metrosCanal = baixaCanal?.metros ?? 0
+  const metrosProducao = baixaProducao?.quebra ?? tecidos.signusProducao
+  const metrosCanal = baixaCanal?.quebra ?? tecidos.signusCanal
   const movProducao = baixaProducao?.movimentos ?? 0
   const movCanal = baixaCanal?.movimentos ?? 0
   const pedidosProducao = baixaProducao?.pedidos ?? 0
@@ -74,7 +90,7 @@ export default async function TecidosPage({
     return (
       <PageShell
         title="Tecidos"
-        description={`Consumo no Corte e baixa no Signus (${YEAR}), cruzados pelo código do tecido. Signus e saldo só dos almox ${ALMOX_PRINCIPAIS_LABEL}, categoria MATÉRIA PRIMA por padrão. A diferença com o Corte usa só baixas com nº de pedido; baixas sem pedido ficam em card separado. Ambos já vêm filtrados pelo ano na carga — Corte pela data do pedido, Signus pela data do movimento. Saldo do estoque é snapshot (não filtra por mês/ano).`}
+        description={descricao}
         actions={<TecidosSubNav filters={filters} current="metros" />}
       >
         <SectionPlaceholder
@@ -89,7 +105,7 @@ export default async function TecidosPage({
   return (
     <PageShell
       title="Tecidos"
-      description={`Consumo no Corte e baixa no Signus (${YEAR}), cruzados pelo código do tecido. Signus e saldo só dos almox ${ALMOX_PRINCIPAIS_LABEL}, categoria MATÉRIA PRIMA por padrão. A diferença com o Corte usa só baixas com nº de pedido; baixas sem pedido ficam em card separado. Ambos já vêm filtrados pelo ano na carga — Corte pela data do pedido, Signus pela data do movimento. Saldo do estoque é snapshot (não filtra por mês/ano).`}
+      description={descricao}
       actions={<TecidosSubNav filters={filters} current="metros" />}
     >
       <FilterBar
@@ -102,51 +118,73 @@ export default async function TecidosPage({
       <KpiGrid columns={5}>
         <KpiCard
           label="Consumo de tecido no Corte"
-          value={`${formatMeters(metrosCorte)} · ${formatMeters(metrosCorteAproveitado)}`}
-          hint="Total · c/ aproveitamento (consumo − economia)"
+          value={formatMeters(metrosCorte)}
+          hint={`${formatMeters(metrosCorteAproveitado)} c/ aproveitamento (consumo − economia)`}
           detail={`Planilha de Corte · dois números no mesmo card:\n• Total: SUM dos metros apontados (MTS / TECIDOS) = ${formatMeters(metrosCorte)}\n• C/ aproveitamento: total − economia = ${formatMeters(metrosCorteAproveitado)} (economia ${formatMeters(metrosEconomia)})\n\nSó entram pedidos com data de corte em ${YEAR} (filtro na carga). O filtro de mês da tela corta dentro desse ano.`}
           tone="teal"
         />
         <KpiCard
           label="Baixa Signus c/ pedido"
-          value={formatMeters(metrosSignusComPedido)}
-          hint={`${formatInt(tecidos.movimentosBaixaComPedido)} movimentos · ${formatInt(tecidos.pedidosComBaixa)} pedidos`}
-          detail={`Baixas oficiais no Signus (almox ${ALMOX_PRINCIPAIS_LABEL}) que trazem nº de pedido em Orig. Mov.\n\nTipos: Produção (insumos) + SAÍDA FF/AC/TC. É o recorte comparável com o consumo do Corte — o card ao lado mostra a diferença real.`}
+          value={valorPrincipal(tecidos.signusComPedido)}
+          hint={comHint(
+            complementoQuebra(tecidos.signusComPedido),
+            `${formatInt(tecidos.movimentosBaixaComPedido)} movimentos · ${formatInt(tecidos.pedidosComBaixa)} pedidos`,
+          )}
+          detail={`Baixas oficiais no Signus (almox ${ALMOX_PRINCIPAIS_LABEL}, categoria ${categoria}) que trazem nº de pedido em Orig. Mov.\n\nA unidade vem do estoque do mesmo código. Sem cadastro no saldo, a quantidade aparece sem sufixo. A diferença com o Corte usa só a parte em metros (${formatMeters(metrosSignusComPedido)}).`}
           tone="indigo"
         />
         <KpiCard
           label="Diferença Corte − Signus"
           value={formatMeters(deltaReal)}
           hint={`${formatNumber(coberturaReal, 1)}% do Corte c/ aproveitamento já baixado`}
-          detail={`Cálculo: consumo do Corte c/ aproveitamento (${formatMeters(metrosCorteAproveitado)}) − baixa Signus com nº de pedido (${formatMeters(metrosSignusComPedido)}).\n\nUsa o consumo após economia (total − economia), não o total bruto do Corte.\n\nNão inclui baixas sem pedido nem retorno do corte. Ainda não é fechamento pedido a pedido: datas e tipos (Produção + canal) podem divergir.`}
+          detail={`Cálculo em metros: consumo do Corte c/ aproveitamento (${formatMeters(metrosCorteAproveitado)}) − baixa Signus com nº de pedido em metros (${formatMeters(metrosSignusComPedido)}).\n\nPeça, quilo e folha ficam de fora dessa conta. Usa o consumo após economia (total − economia).`}
           tone="amber"
         />
         <KpiCard
           label="Baixa Signus sem pedido"
-          value={formatMeters(metrosSignusSemPedido)}
-          hint={`${formatInt(tecidos.baixasSemPedido)} movimentos · fora da diferença com o Corte`}
-          detail={`Baixas oficiais no Signus sem nº de pedido em Orig. Mov. (${formatInt(tecidos.baixasSemPedido)} movimentos · ${formatMeters(metrosSignusSemPedido)}).\n\nNão entram na diferença Corte − Signus. Somadas à baixa c/ pedido dão o total oficial: ${formatMeters(metrosSignus)} (${formatInt(tecidos.movimentosBaixa)} movimentos).\n\nCostumam ser lançamentos auxiliares, canal ou códigos fora da programação.`}
+          value={valorPrincipal(tecidos.signusSemPedido)}
+          hint={comHint(
+            complementoQuebra(tecidos.signusSemPedido),
+            `${formatInt(tecidos.baixasSemPedido)} movimentos · fora da diferença com o Corte`,
+          )}
+          detail={`Baixas oficiais no Signus sem nº de pedido em Orig. Mov. (${formatInt(tecidos.baixasSemPedido)} movimentos · ${formatQuebra(tecidos.signusSemPedido)}).\n\nNão entram na diferença Corte − Signus. A parte em metros, somada à baixa c/ pedido, dá ${formatMeters(metrosSignus)} (${formatInt(tecidos.movimentosBaixa)} movimentos).`}
           tone="magenta"
         />
         <KpiCard
           label="Baixa por tipo de movimentação"
-          value={`${formatMeters(metrosProducao)} · ${formatMeters(metrosCanal)}`}
-          hint={`${formatInt(movProducao)} mov. Produção · ${formatInt(movCanal)} mov. Canal`}
-          detail={`Split da baixa oficial no Signus (almox ${ALMOX_PRINCIPAIS_LABEL}) — c/ e s/ pedido:\n• Produção (insumos): ${formatMeters(metrosProducao)} · ${formatInt(movProducao)} movimentos · ${formatInt(pedidosProducao)} pedidos\n• SAÍDA FF/AC/TC (canal): ${formatMeters(metrosCanal)} · ${formatInt(movCanal)} movimentos · ${formatInt(pedidosCanal)} pedidos\n\nOutros tipos (retorno, transferência, etc.) ficam na tabela “Baixa Signus por tipo”.`}
+          value={valorPrincipal(metrosProducao)}
+          hint={comHint(
+            [
+              `Canal ${valorPrincipal(metrosCanal)}`,
+              complementoQuebra(metrosProducao),
+              complementoQuebra(metrosCanal),
+            ]
+              .filter(Boolean)
+              .join(' · '),
+            `${formatInt(movProducao)} mov. Produção · ${formatInt(movCanal)} mov. Canal`,
+          )}
+          detail={`Split da baixa oficial no Signus (almox ${ALMOX_PRINCIPAIS_LABEL}, categoria ${categoria}) — c/ e s/ pedido:\n• Produção (insumos): ${formatQuebra(metrosProducao)} · ${formatInt(movProducao)} movimentos · ${formatInt(pedidosProducao)} pedidos\n• SAÍDA FF/AC/TC (canal): ${formatQuebra(metrosCanal)} · ${formatInt(movCanal)} movimentos · ${formatInt(pedidosCanal)} pedidos\n\nOutros tipos ficam na tabela “Baixa Signus por tipo”.`}
           tone="indigo"
         />
         <KpiCard
           label="Saldo atual em estoque"
-          value={formatMeters(tecidos.saldoAtualMetros)}
-          hint={`${formatInt(tecidos.estoqueCodigos)} códigos · só unidade metro`}
-          detail={`Estoque Signus · soma do saldo atual (metros) só nos almox ${ALMOX_PRINCIPAIS_LABEL}.\n\nSnapshot da última carga — não filtra por mês nem por ano do dashboard. Use o filtro Categoria para isolar MATÉRIA PRIMA, etc.`}
+          value={valorPrincipal(tecidos.saldoAtualQuebra)}
+          hint={comHint(
+            complementoQuebra(tecidos.saldoAtualQuebra),
+            textoCodigos(tecidos.estoqueCodigosQuebra) ||
+              `${formatInt(tecidos.estoqueCodigos)} códigos`,
+          )}
+          detail={`Estoque Signus da categoria ${categoria}, almox ${ALMOX_PRINCIPAIS_LABEL}.\n\nCada unidade fica na própria conta: ${formatQuebra(tecidos.saldoAtualQuebra)}. Snapshot da última carga — não filtra por mês nem por ano.`}
           tone="teal"
         />
         <KpiCard
           label="Saldo reservado"
-          value={formatMeters(tecidos.saldoReservadoMetros)}
-          hint="Metros reservados no estoque"
-          detail={`Estoque Signus · soma do Saldo reservado (metros) só nos almox ${ALMOX_PRINCIPAIS_LABEL}.\n\nTambém é snapshot da carga, sem filtro de mês/ano.`}
+          value={valorPrincipal(tecidos.saldoReservadoQuebra)}
+          hint={comHint(
+            complementoQuebra(tecidos.saldoReservadoQuebra),
+            'Reserva do estoque, na unidade de cada código',
+          )}
+          detail={`Estoque Signus da categoria ${categoria}, almox ${ALMOX_PRINCIPAIS_LABEL}: ${formatQuebra(tecidos.saldoReservadoQuebra)}.\n\nTambém é snapshot da carga, sem filtro de mês/ano.`}
           tone="magenta"
         />
         <KpiCard
@@ -166,9 +204,12 @@ export default async function TecidosPage({
         />
         <KpiCard
           label="Retorno de tecido do corte"
-          value={formatMeters(tecidos.retornoCorte)}
-          hint="Tipo “Retorno do corte” · fora da baixa oficial"
-          detail={`Movimentos Signus do tipo “Retorno do corte” em ${YEAR}.\n\nNão entram no KPI de baixa oficial nem na diferença com o Corte.`}
+          value={valorPrincipal(tecidos.retornoQuebra)}
+          hint={comHint(
+            complementoQuebra(tecidos.retornoQuebra),
+            'Tipo “Retorno do corte” · fora da baixa oficial',
+          )}
+          detail={`Movimentos Signus do tipo “Retorno do corte” em ${YEAR}, categoria ${categoria}: ${formatQuebra(tecidos.retornoQuebra)}.\n\nNão entram no KPI de baixa oficial nem na diferença com o Corte.`}
           tone="magenta"
         />
       </KpiGrid>
@@ -176,7 +217,7 @@ export default async function TecidosPage({
       <div className="grid min-w-0 gap-[var(--page-gap)] lg:grid-cols-2">
         <MonthlyAreaChart
           title="Corte"
-          description="Metros apontados no Corte, mês a mês."
+          description={`Metros do Corte na categoria ${categoria}, mês a mês.`}
           labels={tecidos.porMes.map((row) => MONTH_LABELS[row.mes - 1])}
           series={[
             {
@@ -189,7 +230,7 @@ export default async function TecidosPage({
         />
         <MonthlyAreaChart
           title="Baixa Signus"
-          description="Metros baixados no Signus (produção + canal), mês a mês."
+          description="Só a parte em metros da baixa. Peça, quilo e folha ficam na tabela do mês."
           labels={tecidos.porMes.map((row) => MONTH_LABELS[row.mes - 1])}
           series={[
             {
@@ -203,9 +244,12 @@ export default async function TecidosPage({
       </div>
 
       <section className="flex min-w-0 flex-col gap-2">
-        <h2 className="text-sm font-medium">Tecidos mais usados</h2>
+        <h2 className="text-sm font-medium">
+          {categoria === 'MATÉRIA PRIMA' ? 'Tecidos mais usados' : `Itens de ${categoria}`}
+        </h2>
         <p className="text-xs text-muted-foreground">
-          Ranking do Corte 2026. Signus = baixa nos almox principais; Saldo = mesmos almox.
+          Lista nasce da baixa Signus da categoria {categoria}. Corte entra só quando o
+          mesmo código foi cortado; senão o Corte fica em zero.
         </p>
         <SimpleTable
           columns={[
@@ -225,9 +269,9 @@ export default async function TecidosPage({
               metrosCorte > 0
                 ? `${formatNumber((row.metros / metrosCorte) * 100, 1)}%`
                 : '—',
-            signus: formatMeters(row.signusMetros),
-            saldo: formatMeters(row.saldoAtual),
-            reservado: formatMeters(row.saldoReservado),
+            signus: formatClasse(row.signusMetros, normalizarClasse(row.classe)),
+            saldo: formatClasse(row.saldoAtual, normalizarClasse(row.saldoClasse)),
+            reservado: formatClasse(row.saldoReservado, normalizarClasse(row.saldoClasse)),
             economia: formatMeters(row.economia, row.economia >= 10 ? 0 : 1),
             pedidos: formatInt(row.pedidos),
             hint: explainTecidoRanking({
@@ -257,7 +301,7 @@ export default async function TecidosPage({
             rows={tecidos.porMes.map((row) => ({
               mes: MONTH_LABELS[row.mes - 1],
               corte: formatMeters(row.corte),
-              signus: formatMeters(row.signus),
+              signus: formatQuebra(row.signusQuebra),
               hint: explainTecidoMes({
                 mes: MONTH_LABELS[row.mes - 1],
                 corte: row.corte,
@@ -276,13 +320,13 @@ export default async function TecidosPage({
           <SimpleTable
             columns={[
               { key: 'tipo', label: 'Tipo' },
-              { key: 'metros', label: 'Metros', numeric: true },
+              { key: 'metros', label: tecidos.porTipo.some((row) => row.quebra && temOutraUnidade(row.quebra)) ? 'Qtd' : 'Metros', numeric: true },
               { key: 'movimentos', label: 'Movimentos', numeric: true },
               { key: 'pedidos', label: 'Pedidos', numeric: true },
             ]}
             rows={tecidos.porTipo.map((row) => ({
               tipo: TIPO_TECIDO_LABEL[row.tipoNorm] ?? row.tipoNorm,
-              metros: formatMeters(row.metros),
+              metros: row.quebra ? formatQuebra(row.quebra) : formatMeters(row.metros),
               movimentos: formatInt(row.movimentos),
               pedidos: formatInt(row.pedidos),
               hint: explainTecidoTipo({
@@ -315,10 +359,13 @@ export default async function TecidosPage({
           rows={tecidos.cruzados.map((row) => ({
             tecido: formatTecido(row.cod, row.nome),
             corte: formatMeters(row.corteMetros),
-            signus: formatMeters(row.signusMetros),
-            saldo: formatMeters(row.saldoAtual),
-            reservado: formatMeters(row.saldoReservado),
-            delta: formatMeters(row.corteMetros - row.signusMetros),
+            signus: formatClasse(row.signusMetros, normalizarClasse(row.classe)),
+            saldo: formatClasse(row.saldoAtual, normalizarClasse(row.saldoClasse)),
+            reservado: formatClasse(row.saldoReservado, normalizarClasse(row.saldoClasse)),
+            delta:
+              normalizarClasse(row.classe) === 'metro'
+                ? formatMeters(row.corteMetros - row.signusMetros)
+                : '—',
             hint: explainTecidoCruzado({
               tecido: formatTecido(row.cod, row.nome),
               corteMetros: row.corteMetros,
@@ -338,12 +385,12 @@ export default async function TecidosPage({
           <SimpleTable
             columns={[
               { key: 'nome', label: 'Canal' },
-              { key: 'metros', label: 'Metros', numeric: true },
+              { key: 'metros', label: tecidos.porCanalSignus.some((row) => temOutraUnidade(row.quebra)) ? 'Qtd' : 'Metros', numeric: true },
               { key: 'movimentos', label: 'Movimentos', numeric: true },
             ]}
             rows={tecidos.porCanalSignus.map((row) => ({
               nome: row.nome === '(sem canal)' ? 'Produção (insumos)' : row.nome,
-              metros: formatMeters(row.metros),
+              metros: formatQuebra(row.quebra),
               movimentos: formatInt(row.movimentos),
               hint: explainTecidoCanal({
                 nome: row.nome === '(sem canal)' ? 'Produção (insumos)' : row.nome,
@@ -363,7 +410,7 @@ export default async function TecidosPage({
             ]}
             rows={tecidos.signusSemCorte.map((row) => ({
               tecido: formatTecido(row.cod, row.nome),
-              signus: formatMeters(row.signusMetros),
+              signus: formatClasse(row.signusMetros, normalizarClasse(row.classe)),
               pedidos: formatInt(row.signusPedidos),
               hint: explainSignusSemCorte({
                 tecido: formatTecido(row.cod, row.nome),
@@ -377,9 +424,79 @@ export default async function TecidosPage({
       </div>
 
       <section className="flex min-w-0 flex-col gap-2">
+        <h2 className="text-sm font-medium">Baixa Signus sem pedido</h2>
+        <p className="text-xs text-muted-foreground">
+          Cada linha é baixa oficial (Produção insumos ou SAÍDA FF/AC/TC) sem nº de
+          pedido. Orig. Mov. é o texto da planilha: INV, AJUSTE, ESTOQUE, AMOSTRA ou
+          outro. Movimento cujo tipo já é Inventário ou Ajuste não entra neste card.
+        </p>
+        <SimpleTable
+          columns={[
+            { key: 'tecido', label: 'Tecido', wrap: true },
+            { key: 'tipo', label: 'Tipo', wrap: true },
+            { key: 'origem', label: 'Orig. Mov.', wrap: true },
+            { key: 'qtd', label: 'Qtd', numeric: true },
+            { key: 'movimentos', label: 'Movimentos', numeric: true },
+          ]}
+          rows={tecidos.baixasSemPedidoLista.map((row) => {
+            const tipo =
+              row.tipoNorm === 'baixa_canal'
+                ? row.tipoMovimento
+                : (TIPO_TECIDO_LABEL[row.tipoNorm] ?? row.tipoMovimento)
+            const origem = row.origemMov || '—'
+            const qtd = formatQuebra(row.quebra)
+            return {
+              tecido: formatTecido(row.cod, row.nome),
+              tipo,
+              origem,
+              qtd,
+              movimentos: formatInt(row.movimentos),
+              hint: explainBaixaSemPedido({
+                tecido: formatTecido(row.cod, row.nome),
+                tipo,
+                origemMov: origem,
+                qtd,
+                movimentos: row.movimentos,
+              }),
+            }
+          })}
+          empty="Nenhuma baixa oficial sem pedido"
+        />
+      </section>
+
+      <section className="flex min-w-0 flex-col gap-2">
+        <h2 className="text-sm font-medium">Retorno de tecido do corte</h2>
+        <p className="text-xs text-muted-foreground">
+          Tipo “Retorno do corte” na movimentação Signus, uma linha por código.
+          Não entra na baixa oficial nem na diferença com o Corte.
+        </p>
+        <SimpleTable
+          columns={[
+            { key: 'tecido', label: 'Tecido', wrap: true },
+            { key: 'qtd', label: 'Qtd', numeric: true },
+            { key: 'movimentos', label: 'Movimentos', numeric: true },
+          ]}
+          rows={tecidos.retornoLista.map((row) => {
+            const qtd = formatQuebra(row.quebra)
+            return {
+              tecido: formatTecido(row.cod, row.nome),
+              qtd,
+              movimentos: formatInt(row.movimentos),
+              hint: explainRetornoCorteLista({
+                tecido: formatTecido(row.cod, row.nome),
+                qtd,
+                movimentos: row.movimentos,
+              }),
+            }
+          })}
+          empty="Nenhum retorno de tecido do corte"
+        />
+      </section>
+
+      <section className="flex min-w-0 flex-col gap-2">
         <h2 className="text-sm font-medium">Estoque com saldo e sem código no Corte</h2>
         <p className="text-xs text-muted-foreground">
-          Códigos em metro com saldo atual ≠ 0 nos almox principais e sem COD TECIDO no Corte.
+          Códigos da categoria {categoria} com saldo atual ≠ 0 nos almox principais e sem COD TECIDO no Corte.
         </p>
         <SimpleTable
           columns={[
@@ -389,15 +506,15 @@ export default async function TecidosPage({
           ]}
           rows={tecidos.estoqueSemCorte.map((row) => ({
             tecido: formatTecido(row.cod, row.nome),
-            saldo: formatMeters(row.saldoAtual),
-            reservado: formatMeters(row.saldoReservado),
+            saldo: formatClasse(row.saldoAtual, normalizarClasse(row.classe)),
+            reservado: formatClasse(row.saldoReservado, normalizarClasse(row.classe)),
             hint: explainEstoqueSemCorte({
               tecido: formatTecido(row.cod, row.nome),
               saldoAtual: row.saldoAtual,
               saldoReservado: row.saldoReservado,
             }),
           }))}
-          empty="Todo saldo em metro tem código no Corte"
+          empty="Todo saldo da categoria tem código no Corte"
         />
       </section>
 
@@ -422,8 +539,8 @@ export default async function TecidosPage({
             cliente: row.cliente,
             tecido: formatTecido(row.codTecido, row.tecido),
             metros: formatNumber(row.metros, row.metros >= 100 ? 0 : 1),
-            saldo: formatMeters(row.saldoAtual),
-            reservado: formatMeters(row.saldoReservado),
+            saldo: formatClasse(row.saldoAtual, normalizarClasse(row.saldoClasse)),
+            reservado: formatClasse(row.saldoReservado, normalizarClasse(row.saldoClasse)),
             pecas: formatInt(row.pecas),
             status: row.statusVigente ?? 'AGUARDANDO TECIDO',
             hint: explainAguardandoTecido({

@@ -278,6 +278,33 @@ export function explainSignusSemCorte(row: {
   ])
 }
 
+export function explainBaixaSemPedido(row: {
+  tecido: string
+  tipo: string
+  origemMov: string
+  qtd: string
+  movimentos: number
+}) {
+  return hintLines([
+    `${row.tecido}: ${row.qtd} · ${row.tipo}.`,
+    row.origemMov === '—'
+      ? 'Orig. Mov. vazio — por isso não entrou como pedido.'
+      : `Orig. Mov. “${row.origemMov}” não virou nº de pedido.`,
+    `${formatInt(row.movimentos)} movimento${row.movimentos === 1 ? '' : 's'}. Entra na baixa oficial sem pedido.`,
+  ])
+}
+
+export function explainRetornoCorteLista(row: {
+  tecido: string
+  qtd: string
+  movimentos: number
+}) {
+  return hintLines([
+    `${row.tecido}: ${row.qtd} de retorno do corte.`,
+    `${formatInt(row.movimentos)} movimento${row.movimentos === 1 ? '' : 's'}. Fora da baixa oficial e da diferença com o Corte.`,
+  ])
+}
+
 export function explainEstoqueSemCorte(row: {
   tecido: string
   saldoAtual: number

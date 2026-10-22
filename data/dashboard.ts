@@ -16,6 +16,13 @@ import { TIPO_TECIDO_LABEL } from '@/lib/format'
 import { sqlAlmoxPrincipais } from '@/lib/almox-principais'
 import { sqlCategoriaFilter } from '@/lib/tecido-categoria'
 import {
+  normalizarClasse,
+  quebraVazia,
+  somarCampo,
+  sqlClasseUnidade,
+  type QuebraUnidade,
+} from '@/lib/tecido-unidade'
+import {
   sqlCosturaProducaoUnion,
   sqlCosturaUnion,
   sqlRevisaoUnion,
@@ -762,6 +769,7 @@ export type TecidoMesRow = {
   mes: number
   corte: number
   signus: number
+  signusQuebra: QuebraUnidade
 }
 
 export type TecidoTipoRow = {
@@ -769,6 +777,7 @@ export type TecidoTipoRow = {
   movimentos: number
   metros: number
   pedidos: number
+  quebra?: QuebraUnidade
 }
 
 export type TecidoProdutoAggRow = {
@@ -788,6 +797,51 @@ export type TecidoCruzadoRow = {
   saldoReservado: number
   cortePedidos: number
   signusPedidos: number
+}
+
+export type TecidoSemPedidoRow = {
+  cod: string
+  nome: string | null
+  tipoNorm: string
+  tipoMovimento: string
+  origemMov: string
+  movimentos: number
+  quebra: QuebraUnidade
+}
+
+export type TecidoRetornoRow = {
+  cod: string
+  nome: string | null
+  movimentos: number
+  quebra: QuebraUnidade
+}
+
+function agruparQuebraMovimento<
+  T extends { classe: string; qtd: number; movimentos: number },
+>(rows: T[], keyOf: (row: T) => string) {
+  const groups = new Map<string, T[]>()
+  for (const row of rows) {
+    const key = keyOf(row)
+    const list = groups.get(key)
+    if (list) list.push(row)
+    else groups.set(key, [row])
+  }
+  return [...groups.values()].map((linhas) => ({
+    ...linhas[0],
+    quebra: somarCampo(linhas, 'qtd'),
+    movimentos: linhas.reduce((sum, row) => sum + row.movimentos, 0),
+  }))
+}
+
+function qtdOrdenacao(quebra: QuebraUnidade) {
+  return (
+    quebra.metro ||
+    quebra.peca ||
+    quebra.quilo ||
+    quebra.folha ||
+    quebra.sem ||
+    quebra.outra
+  )
 }
 
 export const getTecidos = cache(async (filters: DashFilters = {}) => {
@@ -827,24 +881,74 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
       )
       .get(),
   )
-  const estoqueJoin = (codExpr: string) =>
-    `replace(trim(e.cod_produto), ' ', '') = replace(trim(COALESCE(${codExpr}, '')), ' ', '')
-     AND ${estoqueCategoriaWhere}`
-  const metrosCorte = runGet<{ v: number }>(
-    `SELECT COALESCE(SUM(p.metros), 0) as v FROM fato_corte_pedido p WHERE ${corteWhere}`,
+  const codKey = (expr: string) => `replace(trim(COALESCE(${expr}, '')), ' ', '')`
+  const categoriaCodigos = filters.categoria
+    ? `(
+        SELECT ${codKey('cs.cod_produto')} AS cod
+        FROM fato_tecido_signus cs
+        WHERE cs.categoria = @categoria
+        UNION
+        SELECT ${codKey('ce.cod_produto')}
+        FROM fato_tecido_estoque ce
+        WHERE ce.categoria = @categoria
+      )`
+    : null
+  const naCategoria = (codExpr: string) =>
+    categoriaCodigos ? `${codKey(codExpr)} IN ${categoriaCodigos}` : '1=1'
+  const classeDe = (unidade: string, emMetros: string) =>
+    sqlClasseUnidade(unidade, emMetros)
+  const corteLinhaWhere = `${corteWhere}
+    AND l.cod_tecido IS NOT NULL AND trim(l.cod_tecido) != ''
+    AND ${naCategoria('l.cod_tecido')}`
+  const corteLinhas = runGet<{ metros: number; economia: number }>(
+    `SELECT COALESCE(SUM(l.metros), 0) as metros,
+            COALESCE(SUM(l.economia), 0) as economia
+     FROM fato_corte_linha l
+     LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
+     WHERE ${corteLinhaWhere}`,
     params,
-  ).v
-  const metrosEconomia = runGet<{ v: number }>(
-    `SELECT COALESCE(SUM(p.economia), 0) as v FROM fato_corte_pedido p WHERE ${corteWhere}`,
-    params,
-  ).v
-  const metrosSignus = hasSignus
-    ? runGet<{ v: number }>(
-        `SELECT COALESCE(SUM(s.metros), 0) as v FROM fato_tecido_signus s
-         WHERE ${signusWhere} AND s.is_baixa = 1`,
+  )
+  const metrosCorte = corteLinhas.metros
+  const metrosEconomia = corteLinhas.economia
+  const signusPorClasse = hasSignus
+    ? runAll<{
+        classe: string
+        comPedido: number
+        semPedido: number
+        producao: number
+        canal: number
+        retorno: number
+      }>(
+        `SELECT ${classeDe('eu.unidade', 'eu.em_metros')} as classe,
+                SUM(CASE
+                  WHEN s.is_baixa = 1
+                    AND s.pedido_norm IS NOT NULL AND trim(s.pedido_norm) != ''
+                  THEN s.qtd ELSE 0 END) as comPedido,
+                SUM(CASE
+                  WHEN s.is_baixa = 1
+                    AND (s.pedido_norm IS NULL OR trim(s.pedido_norm) = '')
+                  THEN s.qtd ELSE 0 END) as semPedido,
+                SUM(CASE
+                  WHEN s.is_baixa = 1 AND s.tipo_norm = 'baixa_producao'
+                  THEN s.qtd ELSE 0 END) as producao,
+                SUM(CASE
+                  WHEN s.is_baixa = 1 AND s.tipo_norm = 'baixa_canal'
+                  THEN s.qtd ELSE 0 END) as canal,
+                SUM(CASE WHEN s.tipo_norm = 'retorno_corte' THEN s.qtd ELSE 0 END) as retorno
+         FROM fato_tecido_signus s
+         LEFT JOIN fato_tecido_estoque eu
+           ON ${codKey('eu.cod_produto')} = ${codKey('s.cod_produto')}
+         WHERE ${signusWhere}
+         GROUP BY classe`,
         params,
-      ).v
-    : 0
+      )
+    : []
+  const signusComPedido = somarCampo(signusPorClasse, 'comPedido')
+  const signusSemPedido = somarCampo(signusPorClasse, 'semPedido')
+  const signusProducao = somarCampo(signusPorClasse, 'producao')
+  const signusCanal = somarCampo(signusPorClasse, 'canal')
+  const retornoQuebra = somarCampo(signusPorClasse, 'retorno')
+  const metrosSignus = signusComPedido.metro + signusSemPedido.metro
   const movimentosBaixa = hasSignus
     ? runGet<{ v: number }>(
         `SELECT COUNT(*) as v FROM fato_tecido_signus s
@@ -852,14 +956,7 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
         params,
       ).v
     : 0
-  const metrosSignusComPedido = hasSignus
-    ? runGet<{ v: number }>(
-        `SELECT COALESCE(SUM(s.metros), 0) as v FROM fato_tecido_signus s
-         WHERE ${signusWhere} AND s.is_baixa = 1
-           AND s.pedido_norm IS NOT NULL AND trim(s.pedido_norm) != ''`,
-        params,
-      ).v
-    : 0
+  const metrosSignusComPedido = signusComPedido.metro
   const movimentosBaixaComPedido = hasSignus
     ? runGet<{ v: number }>(
         `SELECT COUNT(*) as v FROM fato_tecido_signus s
@@ -883,63 +980,76 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
         params,
       ).v
     : 0
-  const baixaPorTipoOficial = hasSignus
+  const baixaTipoClasse = hasSignus
     ? runAll<{
         tipoNorm: string
-        metros: number
+        classe: string
+        qtd: number
         movimentos: number
         pedidos: number
       }>(
         `SELECT s.tipo_norm as tipoNorm,
-              COALESCE(SUM(s.metros), 0) as metros,
-              COUNT(*) as movimentos,
-              COUNT(DISTINCT s.pedido_norm) as pedidos
+                ${classeDe('eu.unidade', 'eu.em_metros')} as classe,
+                COALESCE(SUM(s.qtd), 0) as qtd,
+                COUNT(*) as movimentos,
+                COUNT(DISTINCT s.pedido_norm) as pedidos
          FROM fato_tecido_signus s
+         LEFT JOIN fato_tecido_estoque eu
+           ON ${codKey('eu.cod_produto')} = ${codKey('s.cod_produto')}
          WHERE ${signusWhere} AND s.is_baixa = 1
-         GROUP BY s.tipo_norm
-         ORDER BY metros DESC`,
+         GROUP BY s.tipo_norm, classe`,
         params,
       )
     : []
-  const retornoCorte = hasSignus
-    ? runGet<{ v: number }>(
-        `SELECT COALESCE(SUM(s.metros), 0) as v FROM fato_tecido_signus s
-         WHERE ${signusWhere} AND s.tipo_norm = 'retorno_corte'`,
+  const baixaPorTipoOficial = [...new Set(baixaTipoClasse.map((row) => row.tipoNorm))]
+    .map((tipoNorm) => {
+      const linhas = baixaTipoClasse.filter((row) => row.tipoNorm === tipoNorm)
+      return {
+        tipoNorm,
+        metros: somarCampo(linhas, 'qtd').metro,
+        quebra: somarCampo(linhas, 'qtd'),
+        movimentos: linhas.reduce((sum, row) => sum + row.movimentos, 0),
+        pedidos: linhas.reduce((sum, row) => sum + row.pedidos, 0),
+      }
+    })
+    .sort((a, b) => b.metros - a.metros || b.movimentos - a.movimentos)
+  const retornoCorte = retornoQuebra.metro
+  const estoquePorClasse = hasEstoque
+    ? runAll<{ classe: string; saldoAtual: number; saldoReservado: number; codigos: number }>(
+        `SELECT ${classeDe('e.unidade', 'e.em_metros')} as classe,
+                COALESCE(SUM(e.saldo_atual), 0) as saldoAtual,
+                COALESCE(SUM(e.saldo_reservado), 0) as saldoReservado,
+                COUNT(*) as codigos
+         FROM fato_tecido_estoque e
+         WHERE ${estoqueCategoriaWhere}
+         GROUP BY classe`,
         params,
-      ).v
-    : 0
-  const saldoAtualMetros = hasEstoque
-    ? runGet<{ v: number }>(
-        `SELECT COALESCE(SUM(e.saldo_atual), 0) as v FROM fato_tecido_estoque e
-         WHERE e.em_metros = 1 AND ${estoqueCategoriaWhere}`,
-        params,
-      ).v
-    : 0
-  const saldoReservadoMetros = hasEstoque
-    ? runGet<{ v: number }>(
-        `SELECT COALESCE(SUM(e.saldo_reservado), 0) as v FROM fato_tecido_estoque e
-         WHERE e.em_metros = 1 AND ${estoqueCategoriaWhere}`,
-        params,
-      ).v
-    : 0
-  const estoqueCodigos = hasEstoque
-    ? runGet<{ v: number }>(
-        `SELECT COUNT(*) as v FROM fato_tecido_estoque e
-         WHERE ${estoqueCategoriaWhere}`,
-        params,
-      ).v
-    : 0
+      )
+    : []
+  const saldoAtualQuebra = somarCampo(estoquePorClasse, 'saldoAtual')
+  const saldoReservadoQuebra = somarCampo(estoquePorClasse, 'saldoReservado')
+  const estoqueCodigosQuebra = somarCampo(estoquePorClasse, 'codigos')
+  const saldoAtualMetros = saldoAtualQuebra.metro
+  const saldoReservadoMetros = saldoReservadoQuebra.metro
+  const estoqueCodigos = Object.values(estoqueCodigosQuebra).reduce((sum, n) => sum + n, 0)
   const aguardando = runGet<{ pedidos: number; pecas: number; metros: number }>(
     `SELECT (
-              SELECT COUNT(*) FROM fato_corte_linha h
+              SELECT COUNT(DISTINCT h.pedido_norm) FROM fato_corte_linha h
               LEFT JOIN fato_corte_pedido p ON p.pedido_norm = h.pedido_norm
               WHERE ${corteWhere} AND h.is_header = 1 AND h.status = 'AGUARDANDO TECIDO'
+                AND EXISTS (
+                  SELECT 1 FROM fato_corte_linha l2
+                  WHERE l2.pedido_norm = h.pedido_norm
+                    AND l2.status = 'AGUARDANDO TECIDO'
+                    AND ${naCategoria('l2.cod_tecido')}
+                )
             ) as pedidos,
             COALESCE(SUM(l.qtd_pecas), 0) as pecas,
             COALESCE(SUM(l.metros), 0) as metros
      FROM fato_corte_linha l
      LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
-     WHERE ${corteWhere} AND l.status = 'AGUARDANDO TECIDO'`,
+     WHERE ${corteWhere} AND l.status = 'AGUARDANDO TECIDO'
+       AND ${naCategoria('l.cod_tecido')}`,
     params,
   )
 
@@ -947,16 +1057,20 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
     `SELECT CAST(substr(p.data, 6, 2) as INTEGER) as mes, COALESCE(SUM(l.metros), 0) as metros
      FROM fato_corte_linha l
      LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
-     WHERE ${corteWhere} AND p.data IS NOT NULL
+     WHERE ${corteLinhaWhere} AND p.data IS NOT NULL
      GROUP BY mes`,
     params,
   )
-  const signusMes = hasSignus
-    ? runAll<{ mes: number; metros: number }>(
-        `SELECT CAST(substr(s.data, 6, 2) as INTEGER) as mes, COALESCE(SUM(s.metros), 0) as metros
+  const signusMesClasse = hasSignus
+    ? runAll<{ mes: number; classe: string; qtd: number }>(
+        `SELECT CAST(substr(s.data, 6, 2) as INTEGER) as mes,
+                ${classeDe('eu.unidade', 'eu.em_metros')} as classe,
+                COALESCE(SUM(s.qtd), 0) as qtd
          FROM fato_tecido_signus s
+         LEFT JOIN fato_tecido_estoque eu
+           ON ${codKey('eu.cod_produto')} = ${codKey('s.cod_produto')}
          WHERE ${signusWhere} AND s.is_baixa = 1
-         GROUP BY mes`,
+         GROUP BY mes, classe`,
         params,
       )
     : []
@@ -965,110 +1079,179 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
     mes: index + 1,
     corte: 0,
     signus: 0,
+    signusQuebra: quebraVazia(),
   }))
   for (const row of corteMes) months[row.mes - 1].corte = row.metros
-  for (const row of signusMes) months[row.mes - 1].signus = row.metros
-  const porMes = months.filter((row) => row.corte || row.signus)
-
-  const estoqueSelect = hasEstoque
-    ? `COALESCE((
-                SELECT e.saldo_atual FROM fato_tecido_estoque e
-                WHERE ${estoqueJoin('l.cod_tecido')}
-              ), 0) as saldoAtual,
-              COALESCE((
-                SELECT e.saldo_reservado FROM fato_tecido_estoque e
-                WHERE ${estoqueJoin('l.cod_tecido')}
-              ), 0) as saldoReservado`
-    : `0 as saldoAtual, 0 as saldoReservado`
+  for (const row of signusMesClasse) {
+    const month = months[row.mes - 1]
+    if (!month) continue
+    const classe = normalizarClasse(row.classe)
+    month.signusQuebra[classe] += row.qtd
+    if (classe === 'metro') month.signus += row.qtd
+  }
+  const porMes = months.filter(
+    (row) => row.corte || Object.values(row.signusQuebra).some((valor) => valor !== 0),
+  )
 
   const porTecido = runAll<
-    TecidoUsoRow & { signusMetros: number; saldoAtual: number; saldoReservado: number }
+    TecidoUsoRow & {
+      signusMetros: number
+      saldoAtual: number
+      saldoReservado: number
+      classe: string
+      saldoClasse: string
+    }
   >(
     hasSignus
-      ? `SELECT COALESCE(NULLIF(trim(l.cod_tecido), ''), '(sem código)') as cod,
-              MAX(l.tecido) as nome,
-              COALESCE(SUM(l.metros), 0) as metros,
-              COALESCE(SUM(l.economia), 0) as economia,
-              COUNT(DISTINCT l.pedido_norm) as pedidos,
-              COALESCE((
-                SELECT SUM(s.metros) FROM fato_tecido_signus s
-                WHERE ${signusWhere} AND s.is_baixa = 1
-                  AND replace(trim(s.cod_produto), ' ', '') = replace(trim(COALESCE(l.cod_tecido, '')), ' ', '')
-              ), 0) as signusMetros,
-              ${estoqueSelect}
-       FROM fato_corte_linha l
-       LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
-       WHERE ${corteWhere} AND l.tecido IS NOT NULL AND trim(l.tecido) != ''
-       GROUP BY COALESCE(NULLIF(trim(l.cod_tecido), ''), trim(l.tecido))
-       ORDER BY metros DESC
+      ? `SELECT b.cod as cod,
+              COALESCE(b.nome, c.nome, '(sem nome)') as nome,
+              COALESCE(c.metros, 0) as metros,
+              COALESCE(c.economia, 0) as economia,
+              COALESCE(c.pedidos, 0) as pedidos,
+              b.qtd as signusMetros,
+              b.classe as classe,
+              COALESCE(e.saldo_atual, 0) as saldoAtual,
+              COALESCE(e.saldo_reservado, 0) as saldoReservado,
+              CASE WHEN e.cod_produto IS NULL THEN 'sem'
+                   ELSE ${classeDe('e.unidade', 'e.em_metros')} END as saldoClasse
+       FROM (
+         SELECT ${codKey('s.cod_produto')} as cod,
+                MAX(s.nome_produto) as nome,
+                SUM(s.qtd) as qtd,
+                MAX(${classeDe('eu.unidade', 'eu.em_metros')}) as classe
+         FROM fato_tecido_signus s
+         LEFT JOIN fato_tecido_estoque eu
+           ON ${codKey('eu.cod_produto')} = ${codKey('s.cod_produto')}
+         WHERE ${signusWhere} AND s.is_baixa = 1
+         GROUP BY ${codKey('s.cod_produto')}
+       ) b
+       LEFT JOIN (
+         SELECT ${codKey('l.cod_tecido')} as cod,
+                MAX(l.tecido) as nome,
+                SUM(l.metros) as metros,
+                SUM(l.economia) as economia,
+                COUNT(DISTINCT l.pedido_norm) as pedidos
+         FROM fato_corte_linha l
+         LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
+         WHERE ${corteLinhaWhere}
+         GROUP BY ${codKey('l.cod_tecido')}
+       ) c ON c.cod = b.cod
+       LEFT JOIN fato_tecido_estoque e
+         ON ${codKey('e.cod_produto')} = b.cod
+         AND ${estoqueCategoriaWhere}
+       ORDER BY b.qtd DESC
        LIMIT 15`
-      : `SELECT COALESCE(NULLIF(trim(l.cod_tecido), ''), '(sem código)') as cod,
+      : `SELECT ${codKey('l.cod_tecido')} as cod,
               MAX(l.tecido) as nome,
               COALESCE(SUM(l.metros), 0) as metros,
               COALESCE(SUM(l.economia), 0) as economia,
               COUNT(DISTINCT l.pedido_norm) as pedidos,
               0 as signusMetros,
-              ${estoqueSelect}
+              'metro' as classe,
+              0 as saldoAtual,
+              0 as saldoReservado,
+              'metro' as saldoClasse
        FROM fato_corte_linha l
        LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
-       WHERE ${corteWhere} AND l.tecido IS NOT NULL AND trim(l.tecido) != ''
-       GROUP BY COALESCE(NULLIF(trim(l.cod_tecido), ''), trim(l.tecido))
+       WHERE ${corteLinhaWhere}
+       GROUP BY ${codKey('l.cod_tecido')}
        ORDER BY metros DESC
        LIMIT 15`,
     params,
   )
 
-  const porTipo = hasSignus
-    ? runAll<TecidoTipoRow>(
-        `SELECT s.tipo_norm as tipoNorm, COUNT(*) as movimentos,
-              COALESCE(SUM(s.metros), 0) as metros,
-              COUNT(DISTINCT s.pedido_norm) as pedidos
+  const porTipoClasse = hasSignus
+    ? runAll<{
+        tipoNorm: string
+        classe: string
+        qtd: number
+        movimentos: number
+        pedidos: number
+      }>(
+        `SELECT s.tipo_norm as tipoNorm,
+                ${classeDe('eu.unidade', 'eu.em_metros')} as classe,
+                COALESCE(SUM(s.qtd), 0) as qtd,
+                COUNT(*) as movimentos,
+                COUNT(DISTINCT s.pedido_norm) as pedidos
          FROM fato_tecido_signus s
+         LEFT JOIN fato_tecido_estoque eu
+           ON ${codKey('eu.cod_produto')} = ${codKey('s.cod_produto')}
          WHERE ${signusWhere}
-         GROUP BY s.tipo_norm
-         ORDER BY metros DESC`,
+         GROUP BY s.tipo_norm, classe`,
         params,
       )
     : []
+  const porTipo: TecidoTipoRow[] = [...new Set(porTipoClasse.map((row) => row.tipoNorm))]
+    .map((tipoNorm) => {
+      const linhas = porTipoClasse.filter((row) => row.tipoNorm === tipoNorm)
+      const quebra = somarCampo(linhas, 'qtd')
+      return {
+        tipoNorm,
+        metros: quebra.metro,
+        quebra,
+        movimentos: linhas.reduce((sum, row) => sum + row.movimentos, 0),
+        pedidos: linhas.reduce((sum, row) => sum + row.pedidos, 0),
+      }
+    })
+    .sort((a, b) => b.metros - a.metros || b.movimentos - a.movimentos)
 
-  const cruzados = runAll<TecidoCruzadoRow>(
-    hasSignus
-      ? `SELECT COALESCE(NULLIF(trim(l.cod_tecido), ''), '(sem código)') as cod,
+  const cruzados = hasSignus
+    ? runAll<TecidoCruzadoRow & { classe: string; saldoClasse: string }>(
+    `WITH codigos AS (
+       SELECT cod, MAX(nome) as nome FROM (
+         SELECT ${codKey('s.cod_produto')} as cod, s.nome_produto as nome
+         FROM fato_tecido_signus s
+         WHERE ${signusWhere}
+         UNION ALL
+         SELECT ${codKey('e.cod_produto')}, e.nome_produto
+         FROM fato_tecido_estoque e
+         WHERE ${estoqueCategoriaWhere}
+       )
+       GROUP BY cod
+     )
+     SELECT c.cod as cod,
+            COALESCE(c.nome, corte.nome, '(sem nome)') as nome,
+            COALESCE(corte.metros, 0) as corteMetros,
+            COALESCE(corte.pedidos, 0) as cortePedidos,
+            COALESCE(baixa.qtd, 0) as signusMetros,
+            COALESCE(baixa.pedidos, 0) as signusPedidos,
+            COALESCE(baixa.classe, CASE WHEN e.cod_produto IS NULL THEN 'sem' ELSE ${classeDe('e.unidade', 'e.em_metros')} END) as classe,
+            COALESCE(e.saldo_atual, 0) as saldoAtual,
+            COALESCE(e.saldo_reservado, 0) as saldoReservado,
+            CASE WHEN e.cod_produto IS NULL THEN 'sem' ELSE ${classeDe('e.unidade', 'e.em_metros')} END as saldoClasse
+     FROM codigos c
+     LEFT JOIN (
+       SELECT ${codKey('l.cod_tecido')} as cod,
               MAX(l.tecido) as nome,
-              COALESCE(SUM(l.metros), 0) as corteMetros,
-              COUNT(DISTINCT l.pedido_norm) as cortePedidos,
-              COALESCE((
-                SELECT SUM(s.metros) FROM fato_tecido_signus s
-                WHERE ${signusWhere} AND s.is_baixa = 1
-                  AND replace(trim(s.cod_produto), ' ', '') = replace(trim(COALESCE(l.cod_tecido, '')), ' ', '')
-              ), 0) as signusMetros,
-              COALESCE((
-                SELECT COUNT(DISTINCT s.pedido_norm) FROM fato_tecido_signus s
-                WHERE ${signusWhere} AND s.is_baixa = 1
-                  AND replace(trim(s.cod_produto), ' ', '') = replace(trim(COALESCE(l.cod_tecido, '')), ' ', '')
-              ), 0) as signusPedidos,
-              ${estoqueSelect}
+              SUM(l.metros) as metros,
+              COUNT(DISTINCT l.pedido_norm) as pedidos
        FROM fato_corte_linha l
        LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
-       WHERE ${corteWhere} AND l.tecido IS NOT NULL AND trim(l.tecido) != ''
-       GROUP BY COALESCE(NULLIF(trim(l.cod_tecido), ''), trim(l.tecido))
-       ORDER BY corteMetros DESC
-       LIMIT 20`
-      : `SELECT COALESCE(NULLIF(trim(l.cod_tecido), ''), '(sem código)') as cod,
-              MAX(l.tecido) as nome,
-              COALESCE(SUM(l.metros), 0) as corteMetros,
-              COUNT(DISTINCT l.pedido_norm) as cortePedidos,
-              0 as signusMetros,
-              0 as signusPedidos,
-              ${estoqueSelect}
-       FROM fato_corte_linha l
-       LEFT JOIN fato_corte_pedido p ON p.pedido_norm = l.pedido_norm
-       WHERE ${corteWhere} AND l.tecido IS NOT NULL AND trim(l.tecido) != ''
-       GROUP BY COALESCE(NULLIF(trim(l.cod_tecido), ''), trim(l.tecido))
-       ORDER BY corteMetros DESC
-       LIMIT 20`,
-    params,
-  )
+       WHERE ${corteLinhaWhere}
+       GROUP BY ${codKey('l.cod_tecido')}
+     ) corte ON corte.cod = c.cod
+     LEFT JOIN (
+       SELECT ${codKey('s.cod_produto')} as cod,
+              SUM(s.qtd) as qtd,
+              COUNT(DISTINCT s.pedido_norm) as pedidos,
+              MAX(${classeDe('eu.unidade', 'eu.em_metros')}) as classe
+       FROM fato_tecido_signus s
+       LEFT JOIN fato_tecido_estoque eu
+         ON ${codKey('eu.cod_produto')} = ${codKey('s.cod_produto')}
+       WHERE ${signusWhere} AND s.is_baixa = 1
+       GROUP BY ${codKey('s.cod_produto')}
+     ) baixa ON baixa.cod = c.cod
+     LEFT JOIN fato_tecido_estoque e
+       ON ${codKey('e.cod_produto')} = c.cod
+       AND ${estoqueCategoriaWhere}
+     WHERE COALESCE(corte.metros, 0) != 0
+        OR COALESCE(baixa.qtd, 0) != 0
+        OR COALESCE(e.saldo_atual, 0) != 0
+     ORDER BY COALESCE(corte.metros, 0) DESC, COALESCE(baixa.qtd, 0) DESC
+     LIMIT 20`,
+        params,
+      )
+    : []
 
   const signusSemCorte = hasSignus
     ? runAll<{
@@ -1076,17 +1259,21 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
         nome: string | null
         signusMetros: number
         signusPedidos: number
+        classe: string
       }>(
         `SELECT s.cod_produto as cod, MAX(s.nome_produto) as nome,
-              COALESCE(SUM(s.metros), 0) as signusMetros,
-              COUNT(DISTINCT s.pedido_norm) as signusPedidos
+              COALESCE(SUM(s.qtd), 0) as signusMetros,
+              COUNT(DISTINCT s.pedido_norm) as signusPedidos,
+              MAX(${classeDe('eu.unidade', 'eu.em_metros')}) as classe
          FROM fato_tecido_signus s
+         LEFT JOIN fato_tecido_estoque eu
+           ON ${codKey('eu.cod_produto')} = ${codKey('s.cod_produto')}
          WHERE ${signusWhere} AND s.is_baixa = 1
            AND NOT EXISTS (
              SELECT 1 FROM fato_corte_linha l
-             WHERE replace(trim(l.cod_tecido), ' ', '') = replace(trim(s.cod_produto), ' ', '')
+             WHERE ${codKey('l.cod_tecido')} = ${codKey('s.cod_produto')}
            )
-         GROUP BY s.cod_produto
+         GROUP BY ${codKey('s.cod_produto')}
          ORDER BY signusMetros DESC
          LIMIT 12`,
         params,
@@ -1099,15 +1286,17 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
         nome: string | null
         saldoAtual: number
         saldoReservado: number
+        classe: string
       }>(
         `SELECT e.cod_produto as cod, e.nome_produto as nome,
-              e.saldo_atual as saldoAtual, e.saldo_reservado as saldoReservado
+              e.saldo_atual as saldoAtual, e.saldo_reservado as saldoReservado,
+              ${classeDe('e.unidade', 'e.em_metros')} as classe
          FROM fato_tecido_estoque e
-         WHERE e.em_metros = 1 AND e.saldo_atual != 0
+         WHERE e.saldo_atual != 0
            AND ${estoqueCategoriaWhere}
            AND NOT EXISTS (
              SELECT 1 FROM fato_corte_linha l
-             WHERE replace(trim(l.cod_tecido), ' ', '') = replace(trim(e.cod_produto), ' ', '')
+             WHERE ${codKey('l.cod_tecido')} = ${codKey('e.cod_produto')}
            )
          ORDER BY e.saldo_atual DESC
          LIMIT 12`,
@@ -1115,7 +1304,9 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
       )
     : []
 
-  const tecido = runAll<TecidoPendenteRow & { saldoAtual: number; saldoReservado: number }>(
+  const tecido = runAll<
+    TecidoPendenteRow & { saldoAtual: number; saldoReservado: number; saldoClasse: string }
+  >(
     `SELECT h.pedido_norm as pedidoNorm, h.data, h.cliente,
             h.status as statusVigente,
             COALESCE(SUM(l.qtd_pecas), 0) as pecas,
@@ -1126,7 +1317,8 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
             ${hasObservacaoColumn() ? 'MAX(p.observacao)' : 'NULL'} as observacao,
             h.excel_row as excelRow,
             ${hasEstoque ? 'COALESCE(MAX(e.saldo_atual), 0)' : '0'} as saldoAtual,
-            ${hasEstoque ? 'COALESCE(MAX(e.saldo_reservado), 0)' : '0'} as saldoReservado
+            ${hasEstoque ? 'COALESCE(MAX(e.saldo_reservado), 0)' : '0'} as saldoReservado,
+            ${hasEstoque ? `COALESCE(MAX(${classeDe('e.unidade', 'e.em_metros')}), 'sem')` : `'sem'`} as saldoClasse
      FROM fato_corte_linha h
      JOIN fato_corte_linha l ON ${ocJoinLinhas('h', 'l')}
      LEFT JOIN fato_corte_pedido p ON p.pedido_norm = h.pedido_norm
@@ -1138,23 +1330,123 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
          : ''
      }
      WHERE ${corteWhere} AND h.is_header = 1 AND h.status = 'AGUARDANDO TECIDO'
+       AND ${naCategoria('l.cod_tecido')}
      GROUP BY h.excel_row, COALESCE(l.cod_tecido, l.tecido)
      ORDER BY metros DESC`,
     params,
   )
 
-  const porCanalSignus = hasSignus
-    ? runAll<{ nome: string; metros: number; movimentos: number }>(
+  const porCanalClasse = hasSignus
+    ? runAll<{ nome: string; classe: string; qtd: number; movimentos: number }>(
         `SELECT COALESCE(s.canal_norm, '(sem canal)') as nome,
-              COALESCE(SUM(s.metros), 0) as metros,
-              COUNT(*) as movimentos
+                ${classeDe('eu.unidade', 'eu.em_metros')} as classe,
+                COALESCE(SUM(s.qtd), 0) as qtd,
+                COUNT(*) as movimentos
          FROM fato_tecido_signus s
+         LEFT JOIN fato_tecido_estoque eu
+           ON ${codKey('eu.cod_produto')} = ${codKey('s.cod_produto')}
          WHERE ${signusWhere} AND s.is_baixa = 1
-         GROUP BY s.canal_norm
-         ORDER BY metros DESC`,
+         GROUP BY s.canal_norm, classe`,
         params,
       )
     : []
+  const porCanalSignus = [...new Set(porCanalClasse.map((row) => row.nome))]
+    .map((nome) => {
+      const linhas = porCanalClasse.filter((row) => row.nome === nome)
+      const quebra = somarCampo(linhas, 'qtd')
+      return {
+        nome,
+        metros: quebra.metro,
+        quebra,
+        movimentos: linhas.reduce((sum, row) => sum + row.movimentos, 0),
+      }
+    })
+    .sort((a, b) => b.metros - a.metros || b.movimentos - a.movimentos)
+
+  const semPedidoClasse = hasSignus
+    ? runAll<{
+        cod: string
+        nome: string | null
+        tipoNorm: string
+        tipoMovimento: string
+        origemMov: string
+        classe: string
+        qtd: number
+        movimentos: number
+      }>(
+        `SELECT ${codKey('s.cod_produto')} as cod,
+                MAX(s.nome_produto) as nome,
+                s.tipo_norm as tipoNorm,
+                s.tipo_movimento as tipoMovimento,
+                COALESCE(NULLIF(trim(s.origem_mov), ''), '') as origemMov,
+                ${classeDe('eu.unidade', 'eu.em_metros')} as classe,
+                COALESCE(SUM(s.qtd), 0) as qtd,
+                COUNT(*) as movimentos
+         FROM fato_tecido_signus s
+         LEFT JOIN fato_tecido_estoque eu
+           ON ${codKey('eu.cod_produto')} = ${codKey('s.cod_produto')}
+         WHERE ${signusWhere} AND s.is_baixa = 1
+           AND (s.pedido_norm IS NULL OR trim(s.pedido_norm) = '')
+         GROUP BY ${codKey('s.cod_produto')}, s.tipo_norm, s.tipo_movimento,
+                  COALESCE(NULLIF(trim(s.origem_mov), ''), ''), classe`,
+        params,
+      )
+    : []
+  const baixasSemPedidoLista: TecidoSemPedidoRow[] = agruparQuebraMovimento(
+    semPedidoClasse,
+    (row) => `${row.cod}|${row.tipoNorm}|${row.tipoMovimento}|${row.origemMov}`,
+  )
+    .map((row) => ({
+      cod: row.cod,
+      nome: row.nome,
+      tipoNorm: row.tipoNorm,
+      tipoMovimento: row.tipoMovimento,
+      origemMov: row.origemMov,
+      movimentos: row.movimentos,
+      quebra: row.quebra,
+    }))
+    .sort(
+      (a, b) =>
+        qtdOrdenacao(b.quebra) - qtdOrdenacao(a.quebra) ||
+        b.movimentos - a.movimentos,
+    )
+
+  const retornoClasse = hasSignus
+    ? runAll<{
+        cod: string
+        nome: string | null
+        classe: string
+        qtd: number
+        movimentos: number
+      }>(
+        `SELECT ${codKey('s.cod_produto')} as cod,
+                MAX(s.nome_produto) as nome,
+                ${classeDe('eu.unidade', 'eu.em_metros')} as classe,
+                COALESCE(SUM(s.qtd), 0) as qtd,
+                COUNT(*) as movimentos
+         FROM fato_tecido_signus s
+         LEFT JOIN fato_tecido_estoque eu
+           ON ${codKey('eu.cod_produto')} = ${codKey('s.cod_produto')}
+         WHERE ${signusWhere} AND s.tipo_norm = 'retorno_corte'
+         GROUP BY ${codKey('s.cod_produto')}, classe`,
+        params,
+      )
+    : []
+  const retornoLista: TecidoRetornoRow[] = agruparQuebraMovimento(
+    retornoClasse,
+    (row) => row.cod,
+  )
+    .map((row) => ({
+      cod: row.cod,
+      nome: row.nome,
+      movimentos: row.movimentos,
+      quebra: row.quebra,
+    }))
+    .sort(
+      (a, b) =>
+        qtdOrdenacao(b.quebra) - qtdOrdenacao(a.quebra) ||
+        b.movimentos - a.movimentos,
+    )
 
   return {
     metrosCorte,
@@ -1169,7 +1461,15 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
     retornoCorte,
     saldoAtualMetros,
     saldoReservadoMetros,
+    saldoAtualQuebra,
+    saldoReservadoQuebra,
     estoqueCodigos,
+    estoqueCodigosQuebra,
+    signusComPedido,
+    signusSemPedido,
+    signusProducao,
+    signusCanal,
+    retornoQuebra,
     tecidoPedidos: aguardando.pedidos,
     tecidoPecas: aguardando.pecas,
     tecidoMetros: aguardando.metros,
@@ -1179,6 +1479,8 @@ export const getTecidos = cache(async (filters: DashFilters = {}) => {
     cruzados,
     signusSemCorte,
     estoqueSemCorte,
+    baixasSemPedidoLista,
+    retornoLista,
     tecido,
     porCanalSignus,
   }
