@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { SlidersHorizontal, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -267,11 +267,15 @@ function FilterSelect({
   required?: boolean
   onChange: (value: string | undefined) => void
 }) {
+  const id = useId()
   return (
-    <label className="flex min-w-0 flex-col gap-1">
-      <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+    <div className="flex min-w-0 flex-col gap-1">
+      <label
+        htmlFor={id}
+        className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+      >
         {label}
-      </span>
+      </label>
       <Select
         value={value ?? (required ? undefined : ALL)}
         onValueChange={(next) => {
@@ -282,7 +286,7 @@ function FilterSelect({
           onChange(String(next))
         }}
       >
-        <SelectTrigger className="h-8 w-full min-w-0 bg-background/70">
+        <SelectTrigger id={id} className="h-8 w-full min-w-0 bg-background/70">
           <SelectValue>
             {(selected) => (
               <span className="truncate">
@@ -302,6 +306,6 @@ function FilterSelect({
           ))}
         </SelectContent>
       </Select>
-    </label>
+    </div>
   )
 }

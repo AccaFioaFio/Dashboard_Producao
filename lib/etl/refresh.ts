@@ -47,7 +47,7 @@ export type RefreshResult =
 
 export async function applySnapshotPayload(
   payload: SnapshotPayload,
-  options?: { changed?: string[] | 'all'; skipped?: boolean },
+  options?: { changed?: string[] | 'all'; skipped?: boolean; syncNuvem?: boolean },
 ): Promise<RefreshResult> {
   const invariantErrors = checkInvariants(payload.snapshot)
   if (invariantErrors.length) {
@@ -79,9 +79,12 @@ export async function applySnapshotPayload(
     header,
   })
 
-  // Tela grava na nuvem; recoloca no SQLite e republica o que só estava local.
-  await ensureApontamentosNuvemNoSqlite({ force: true })
-  await publicarApontamentosLocaisNaNuvem({ force: true })
+  // Lançamentos manuais (JSON na nuvem) não entram na automação do ETL.
+  // O dashboard puxa esses arquivos ao abrir. syncNuvem fica para o botão Atualizar.
+  if (options?.syncNuvem !== false) {
+    await ensureApontamentosNuvemNoSqlite({ force: true })
+    await publicarApontamentosLocaisNaNuvem({ force: true })
+  }
 
   // KPIs ao vivo: planilha + lançamentos do dash (corte segue só planilha).
   const headerComLancamentos: HeaderKpis = {
@@ -110,6 +113,7 @@ export async function applySnapshotPayload(
 
 export async function refreshFromExcel(
   paths: SourceFilePaths = sourceFilePaths(),
+  options?: { syncNuvem?: boolean },
 ): Promise<RefreshResult> {
   const cortePath = paths.corte
   const oficinasPath = paths.oficinas
@@ -190,7 +194,7 @@ export async function refreshFromExcel(
         parceirosPath,
         parceirosLastWrite: copied.parceirosLastWrite,
       },
-      { changed },
+      { changed, syncNuvem: options?.syncNuvem },
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

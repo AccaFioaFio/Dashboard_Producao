@@ -9,6 +9,7 @@ import {
   pedidosXlsxPath,
   signusXlsPath,
   parceirosXlsxPath,
+  sourceFilePaths,
 } from '../lib/paths'
 import { computeFunil, computeHeaderKpis, computeSerieMensal, checkInvariants } from '../lib/etl/kpis'
 import { diffGolden } from '../lib/etl/golden'
@@ -52,7 +53,7 @@ async function main() {
     return
   }
 
-  const result = await refreshFromExcel()
+  const result = await refreshFromExcel(sourceFilePaths(), { syncNuvem: false })
   if (!result.ok) {
     console.log(JSON.stringify(result, null, 2))
     process.exitCode = 1

@@ -84,7 +84,8 @@ export function isRetryablePublishError(error: string) {
 
 /** Relê planilhas, grava SQLite local e publica no Supabase (como Orçamentos → banco na nuvem). */
 export async function publishCargaFromExcel(): Promise<RefreshResult> {
-  const result = await refreshFromExcel()
+  // Sem baixar os JSON de costura/revisão: isso é sync do dashboard, não da carga.
+  const result = await refreshFromExcel(sourceFilePaths(), { syncNuvem: false })
   if (!result.ok) return result
   if (!isSupabaseWriteConfigured()) {
     return {
